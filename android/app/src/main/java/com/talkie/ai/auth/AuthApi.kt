@@ -46,7 +46,6 @@ class AuthApi(
     suspend fun sendMagicLink(email: String, flowId: String? = null) {
         val body = JSONObject().put("email", email)
         if (flowId != null) {
-            body.put("flowId", flowId)
             body.put("callbackURL", "/auth/verify?flowId=$flowId")
         }
         execute(post("/sign-in/magic-link", body)) { }

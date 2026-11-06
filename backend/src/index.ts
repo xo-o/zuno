@@ -48,7 +48,7 @@ app.get("/api/auth/magic-link/poll", (c) => {
 });
 
 // 2. Better Auth routes (Google OAuth, Magic Links, Sessions)
-app.on(["POST", "GET"], "/api/auth/**", (c) => {
+app.all("/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
