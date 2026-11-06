@@ -23,7 +23,31 @@ app.use(
   })
 );
 
-// 1. Better Auth routes (Google OAuth, Magic Links, Sessions)
+// 1. Polling endpoint for Cross-Device Magic Link verification
+app.get("/api/auth/magic-link/poll", (c) => {
+  const flowId = c.req.query("flowId");
+  if (!flowId) {
+    return c.json({ error: "Missing flowId" }, 400);
+  }
+
+  const flow = getFlow(flowId);
+  if (!flow) {
+    return c.json({ status: "expired" }, 404);
+  }
+
+  if (flow.status === "verified" && flow.sessionToken) {
+    consumeFlow(flowId);
+    return c.json({
+      status: "verified",
+      token: flow.sessionToken,
+      user: flow.user,
+    });
+  }
+
+  return c.json({ status: "pending" });
+});
+
+// 2. Better Auth routes (Google OAuth, Magic Links, Sessions)
 app.on(["POST", "GET"], "/api/auth/**", (c) => {
   return auth.handler(c.req.raw);
 });
@@ -108,31 +132,7 @@ app.get("/.well-known/assetlinks.json", (c) => {
   ]);
 });
 
-// 5. Polling endpoint for Cross-Device Magic Link verification
-app.get("/api/auth/magic-link/poll", (c) => {
-  const flowId = c.req.query("flowId");
-  if (!flowId) {
-    return c.json({ error: "Missing flowId" }, 400);
-  }
-
-  const flow = getFlow(flowId);
-  if (!flow) {
-    return c.json({ status: "expired" }, 404);
-  }
-
-  if (flow.status === "verified" && flow.sessionToken) {
-    consumeFlow(flowId);
-    return c.json({
-      status: "verified",
-      token: flow.sessionToken,
-      user: flow.user,
-    });
-  }
-
-  return c.json({ status: "pending" });
-});
-
-// 6. Cross-Device & Mobile verify endpoint for Magic Links
+// 5. Cross-Device & Mobile verify endpoint for Magic Links
 app.get("/auth/verify", async (c) => {
   const token = c.req.query("token");
   const flowId = c.req.query("flowId");
