@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TalkieAI" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#171717</item>
+        <item name="android:navigationBarColor">#171717</item>
+        <item name="android:windowBackground">@drawable/bg_splash_window</item>
+    </style>
+</resources>

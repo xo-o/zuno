@@ -1,0 +1,33 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --out-dir dist --clean",
+    "start": "node dist/index.js",
+    "auth:generate": "npx @better-auth/cli generate --config src/lib/auth.ts --output src/db/auth-schema.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.8",
+    "better-auth": "^1.7.18",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.7.4",
+    "livekit-server-sdk": "^2.19.2",
+    "pg": "^8.23.1",
+    "resend": "^6.37.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

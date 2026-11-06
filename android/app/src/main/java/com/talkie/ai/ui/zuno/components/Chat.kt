@@ -1,0 +1,216 @@
+package com.talkie.ai.ui.zuno.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import com.talkie.ai.R
+import com.talkie.ai.ui.zuno.theme.ZunoColors
+import com.talkie.ai.ui.zuno.theme.ZunoRadius
+import com.talkie.ai.ui.zuno.theme.ZunoSpace
+import com.talkie.ai.ui.zuno.theme.ZunoType
+
+/** User message — right-aligned, tail bottom-right. */
+@Composable
+fun ZunoUserBubble(
+    message: String,
+    modifier: Modifier = Modifier,
+    showSender: Boolean = true,
+) {
+    val shape = RoundedCornerShape(
+        topStart = ZunoRadius.xl,
+        topEnd = ZunoRadius.xl,
+        bottomEnd = ZunoRadius.xs,
+        bottomStart = ZunoRadius.xl,
+    )
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+    ) {
+        if (showSender) {
+            Text("You", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+        }
+        Box(
+            modifier = Modifier
+                .clip(shape)
+                .background(ZunoColors.SurfaceStrong)
+                .border(1.dp, ZunoColors.BorderSubtle, shape)
+                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
+        ) {
+            Text(
+                message,
+                style = ZunoType.BodyMedium,
+                color = ZunoColors.TextPrimary,
+                modifier = Modifier.widthIn(max = 264.dp),
+            )
+        }
+    }
+}
+
+/** Assistant message — full-width card with optional translation, glossary and quick actions. */
+@Composable
+fun ZunoAssistantBubble(
+    message: String,
+    modifier: Modifier = Modifier,
+    translation: String? = null,
+    glossary: List<String> = emptyList(),
+    showSender: Boolean = true,
+    onListen: (() -> Unit)? = null,
+    onExplain: (() -> Unit)? = null,
+) {
+    val shape = RoundedCornerShape(
+        topStart = ZunoRadius.xs,
+        topEnd = ZunoRadius.xl,
+        bottomEnd = ZunoRadius.xl,
+        bottomStart = ZunoRadius.xl,
+    )
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+    ) {
+        if (showSender) {
+            Text("AI Tutor", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(ZunoColors.SurfaceSubtle)
+                .border(1.dp, ZunoColors.BorderDefault, shape)
+                .padding(ZunoSpace.s16),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+        ) {
+            Text(message, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
+            if (!translation.isNullOrBlank()) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                Text(translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary)
+            }
+            if (glossary.isNotEmpty()) {
+                val glossaryShape = RoundedCornerShape(ZunoRadius.md)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(glossaryShape)
+                        .background(ZunoColors.SurfaceSubtle)
+                        .border(1.dp, ZunoColors.BorderSubtle, glossaryShape)
+                        .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+                ) {
+                    glossary.forEach { entry ->
+                        Text(entry, style = ZunoType.FootnoteStrong, color = ZunoColors.TextSecondary)
+                    }
+                }
+            }
+        }
+        if (onListen != null || onExplain != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
+                onListen?.let { ZunoChip("Listen", it, leadingIcon = R.drawable.zuno_ic_volume) }
+                onExplain?.let { ZunoChip("Explain grammar", it, leadingIcon = R.drawable.zuno_ic_sparkles) }
+            }
+        }
+    }
+}
+
+/** Inline AI feedback under a user message (grammar, pronunciation). */
+@Composable
+fun ZunoFeedbackPill(text: String, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(ZunoRadius.md)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(ZunoColors.SurfaceSubtle)
+            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .padding(start = ZunoSpace.s10, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+        verticalAlignment = Alignment.Top,
+    ) {
+        ZunoIcon(R.drawable.zuno_ic_check_feedback, 14.dp, Modifier.padding(top = 1.dp))
+        Text(
+            text,
+            style = ZunoType.FootnoteStrong,
+            color = ZunoColors.TextSecondary,
+            modifier = Modifier.widthIn(max = 306.dp),
+        )
+    }
+}
+
+/** Bottom input: attach, text prompt, voice. */
+@Composable
+fun ZunoComposer(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onAttach: () -> Unit,
+    onVoice: () -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Ask me anything",
+    focusRequester: FocusRequester? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(CircleShape)
+            .background(ZunoColors.SurfaceDefault)
+            .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+            .padding(ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ZunoIconButton(
+            icon = R.drawable.zuno_ic_plus,
+            onClick = onAttach,
+            style = ZunoIconButtonStyle.Subtle,
+            contentDescription = "Attach",
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
+            cursorBrush = SolidColor(ZunoColors.TextPrimary),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            modifier = Modifier
+                .weight(1f)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        EllipsizedText(placeholder, ZunoType.BodyMedium, ZunoColors.TextPlaceholder)
+                    }
+                    inner()
+                }
+            },
+        )
+        ZunoIconButton(
+            icon = R.drawable.zuno_ic_composer_voice,
+            onClick = onVoice,
+            style = ZunoIconButtonStyle.Strong,
+            contentDescription = "Voice mode",
+        )
+    }
+}

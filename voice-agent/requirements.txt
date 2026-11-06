@@ -1,0 +1,11 @@
+livekit-agents>=1.8.0
+livekit-plugins-deepgram>=1.8.0
+livekit-plugins-google>=1.8.0
+livekit-plugins-silero>=1.8.0
+livekit-plugins-cartesia>=1.8.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-dotenv>=1.0.0
+pyjwt>=2.8.0
+aiohttp>=3.9.0
+certifi>=2024.0.0

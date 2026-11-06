@@ -1,0 +1,75 @@
+# ===================================================
+# 1. Secretos, Credenciales y Variables de Entorno
+# ===================================================
+*.env
+*.env.*
+!.env.example
+!*.env.example
+
+# Service account keys, GCP credentials, certificados
+*credentials*.json
+!*credentials*.example.json
+*service_account*.json
+designcombo-*.json
+*.pem
+*.key
+*.p12
+
+# ===================================================
+# 2. Android & Gradle
+# ===================================================
+.gradle/
+**/build/
+*/build/
+build/
+*.apk
+*.ap_
+*.aab
+local.properties
+.cxx/
+captures/
+.externalNativeBuild/
+android/.idea/
+**/.idea/
+*.iml
+.idea/caches/
+.idea/libraries/
+
+# ===================================================
+# 3. Node.js & TypeScript (Backend)
+# ===================================================
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.next/
+**/out/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===================================================
+# 4. Python (Voice Agent)
+# ===================================================
+venv/
+.venv/
+**/venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.log
+agent.log
+.pytest_cache/
+
+# ===================================================
+# 5. Sistema Operativo & Editores
+# ===================================================
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+*.bak
+*~

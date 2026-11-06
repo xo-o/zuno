@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.log
+*credentials*.json
+!*credentials*.example.json
+!*credentials*.sample.json
+*service_account*.json
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/

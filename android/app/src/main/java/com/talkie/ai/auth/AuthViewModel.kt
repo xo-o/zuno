@@ -1,0 +1,129 @@
+package com.talkie.ai.auth
+
+import android.app.Application
+import android.content.Context
+import android.net.Uri
+import android.util.Patterns
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+sealed interface AuthState {
+    data object SignedOut : AuthState
+
+    /** [user] is null until the stored session has been refreshed from the server. */
+    data class SignedIn(val user: AuthUser?) : AuthState
+}
+
+data class AuthFormState(
+    val isBusy: Boolean = false,
+    val linkSentTo: String? = null,
+    val error: String? = null,
+)
+
+class AuthViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val api = AuthApi()
+    private val tokenStore = SessionTokenStore(application)
+
+    private val _authState = MutableStateFlow<AuthState>(
+        if (tokenStore.read() != null) AuthState.SignedIn(user = null) else AuthState.SignedOut
+    )
+    val authState: StateFlow<AuthState> = _authState.asStateFlow()
+
+    private val _form = MutableStateFlow(AuthFormState())
+    val form: StateFlow<AuthFormState> = _form.asStateFlow()
+
+    /** Bearer token for authenticated calls to the backend, or null when signed out. */
+    val sessionToken: String? get() = tokenStore.read()
+
+    init {
+        refreshSession()
+    }
+
+    fun sendMagicLink(rawEmail: String) {
+        val email = rawEmail.trim()
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            _form.update { it.copy(error = "Enter a valid email address.") }
+            return
+        }
+        runFormAction {
+            api.sendMagicLink(email)
+            _form.update { it.copy(linkSentTo = email) }
+        }
+    }
+
+    /** Handles https://<host>/auth/verify?token=… and zuno://auth/verify?token=… links. */
+    fun handleMagicLink(uri: Uri?): Boolean {
+        val token = uri?.takeIf { it.path?.endsWith("/verify") == true }?.getQueryParameter("token")
+        if (token.isNullOrBlank()) return false
+        runFormAction(allowWhileBusy = true) { completeSignIn(api.verifyMagicLink(token)) }
+        return true
+    }
+
+    fun signInWithGoogle(activityContext: Context) {
+        runFormAction {
+            val idToken = try {
+                requestGoogleIdToken(activityContext)
+            } catch (_: GoogleSignInCancelledException) {
+                return@runFormAction
+            }
+            completeSignIn(api.signInWithGoogle(idToken))
+        }
+    }
+
+    fun clearMagicLinkSent() = _form.update { it.copy(linkSentTo = null, error = null) }
+
+    fun clearError() = _form.update { it.copy(error = null) }
+
+    fun signOut() {
+        val token = tokenStore.read()
+        tokenStore.clear()
+        _authState.value = AuthState.SignedOut
+        _form.value = AuthFormState()
+        if (token != null) {
+            viewModelScope.launch { runCatching { api.signOut(token) } }
+        }
+    }
+
+    private fun refreshSession() {
+        val token = tokenStore.read() ?: return
+        viewModelScope.launch {
+            try {
+                val user = api.getSession(token)
+                if (user == null) {
+                    tokenStore.clear()
+                    _authState.value = AuthState.SignedOut
+                } else if (tokenStore.read() == token) {
+                    _authState.value = AuthState.SignedIn(user)
+                }
+            } catch (_: AuthException) {
+                // Offline or server error: keep the stored session and retry on next launch.
+            }
+        }
+    }
+
+    private fun completeSignIn(session: AuthSession) {
+        tokenStore.write(session.token)
+        _form.value = AuthFormState()
+        _authState.value = AuthState.SignedIn(session.user)
+    }
+
+    private fun runFormAction(allowWhileBusy: Boolean = false, action: suspend () -> Unit) {
+        if (_form.value.isBusy && !allowWhileBusy) return
+        _form.update { it.copy(isBusy = true, error = null) }
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (e: AuthException) {
+                _form.update { it.copy(error = e.message) }
+            } finally {
+                _form.update { it.copy(isBusy = false) }
+            }
+        }
+    }
+}

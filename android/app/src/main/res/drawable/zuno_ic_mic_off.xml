@@ -1,0 +1,44 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <group>
+        <path
+            android:strokeColor="#EBFFFFFF"
+            android:strokeWidth="1.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M1.833 1.833L20.167 20.167"/>
+        <path
+            android:strokeColor="#EBFFFFFF"
+            android:strokeWidth="1.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M17.316 12.127C17.382 11.755 17.416 11.378 17.417 11V9.167"/>
+        <path
+            android:strokeColor="#EBFFFFFF"
+            android:strokeWidth="1.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M4.583 9.167V11C4.565 12.283 4.931 13.541 5.635 14.614 6.338 15.686 7.347 16.523 8.531 17.016 9.715 17.51 11.02 17.637 12.277 17.381 13.534 17.126 14.686 16.5 15.583 15.583"/>
+        <path
+            android:strokeColor="#EBFFFFFF"
+            android:strokeWidth="1.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M13.75 8.562V4.583C13.746 3.966 13.535 3.368 13.15 2.885 12.765 2.402 12.228 2.063 11.627 1.922 11.026 1.782 10.395 1.847 9.835 2.109 9.276 2.37 8.821 2.813 8.543 3.364"/>
+        <path
+            android:strokeColor="#EBFFFFFF"
+            android:strokeWidth="1.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M8.25 8.25V11C8.25 11.543 8.412 12.075 8.714 12.527 9.016 12.978 9.446 13.33 9.948 13.538 10.45 13.746 11.003 13.801 11.536 13.695 12.069 13.589 12.559 13.327 12.943 12.943"/>
+        <path
+            android:strokeColor="#EBFFFFFF"
+            android:strokeWidth="1.75"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M11 17.417V20.167"/>
+    </group>
+</vector>

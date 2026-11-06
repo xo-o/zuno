@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  # 1. PostgreSQL Database for Better Auth & app data
+  postgres:
+    image: postgres:16-alpine
+    container_name: talkie-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zuno
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Node.js + TypeScript Backend (Hono + Better Auth)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: talkie-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      DATABASE_URL: "postgres://postgres:postgrespassword@postgres:5432/zuno"
+      BETTER_AUTH_URL: "http://localhost:3000"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 3. Voice AI Agent Worker (Python + LiveKit)
+  voice-agent:
+    build:
+      context: ./voice-agent
+      dockerfile: Dockerfile
+    container_name: talkie-voice-agent
+    restart: unless-stopped
+    env_file:
+      - ./voice-agent/.env
+
+volumes:
+  postgres_data:

@@ -1,0 +1,13 @@
+venv
+.venv
+__pycache__
+*.py[cod]
+*$py.class
+.env
+.env.*
+!.env.example
+*.log
+*credentials*.json
+!*credentials*.example.json
+.DS_Store
+.git
