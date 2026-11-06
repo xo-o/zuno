@@ -6,10 +6,12 @@ import android.net.Uri
 import android.util.Patterns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 sealed interface AuthState {
@@ -29,6 +31,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val api = AuthApi()
     private val tokenStore = SessionTokenStore(application)
+    private var pollingJob: kotlinx.coroutines.Job? = null
 
     private val _authState = MutableStateFlow<AuthState>(
         if (tokenStore.read() != null) AuthState.SignedIn(user = null) else AuthState.SignedOut
@@ -51,9 +54,34 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             _form.update { it.copy(error = "Enter a valid email address.") }
             return
         }
+        val flowId = java.util.UUID.randomUUID().toString()
         runFormAction {
-            api.sendMagicLink(email)
+            api.sendMagicLink(email, flowId)
             _form.update { it.copy(linkSentTo = email) }
+            startMagicLinkPolling(flowId)
+        }
+    }
+
+    private fun startMagicLinkPolling(flowId: String) {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
+            val timeoutMs = 5 * 60 * 1000L // 5 minutes timeout
+            while (isActive && (System.currentTimeMillis() - startTime) < timeoutMs) {
+                delay(2000L)
+                try {
+                    when (val result = api.pollMagicLink(flowId)) {
+                        is MagicLinkPollResult.Verified -> {
+                            completeSignIn(result.session)
+                            break
+                        }
+                        is MagicLinkPollResult.Expired -> break
+                        is MagicLinkPollResult.Pending -> { /* keep waiting */ }
+                    }
+                } catch (_: Exception) {
+                    // Ignore transient network errors, keep polling
+                }
+            }
         }
     }
 
@@ -61,6 +89,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun handleMagicLink(uri: Uri?): Boolean {
         val token = uri?.takeIf { it.path?.endsWith("/verify") == true }?.getQueryParameter("token")
         if (token.isNullOrBlank()) return false
+        pollingJob?.cancel()
+        pollingJob = null
         runFormAction(allowWhileBusy = true) { completeSignIn(api.verifyMagicLink(token)) }
         return true
     }
@@ -76,11 +106,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearMagicLinkSent() = _form.update { it.copy(linkSentTo = null, error = null) }
+    fun clearMagicLinkSent() {
+        pollingJob?.cancel()
+        pollingJob = null
+        _form.update { it.copy(linkSentTo = null, error = null) }
+    }
 
     fun clearError() = _form.update { it.copy(error = null) }
 
     fun signOut() {
+        pollingJob?.cancel()
+        pollingJob = null
         val token = tokenStore.read()
         tokenStore.clear()
         _authState.value = AuthState.SignedOut

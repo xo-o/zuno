@@ -6,6 +6,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { AccessToken } from "livekit-server-sdk";
 import { auth } from "./lib/auth.js";
+import { completeFlow, consumeFlow, getFlow, isFlowVerified } from "./lib/magic-link-flows.js";
 
 const app = new Hono();
 
@@ -107,9 +108,35 @@ app.get("/.well-known/assetlinks.json", (c) => {
   ]);
 });
 
-// 5. Fallback verify page for Magic Links
-app.get("/auth/verify", (c) => {
+// 5. Polling endpoint for Cross-Device Magic Link verification
+app.get("/api/auth/magic-link/poll", (c) => {
+  const flowId = c.req.query("flowId");
+  if (!flowId) {
+    return c.json({ error: "Missing flowId" }, 400);
+  }
+
+  const flow = getFlow(flowId);
+  if (!flow) {
+    return c.json({ status: "expired" }, 404);
+  }
+
+  if (flow.status === "verified" && flow.sessionToken) {
+    consumeFlow(flowId);
+    return c.json({
+      status: "verified",
+      token: flow.sessionToken,
+      user: flow.user,
+    });
+  }
+
+  return c.json({ status: "pending" });
+});
+
+// 6. Cross-Device & Mobile verify endpoint for Magic Links
+app.get("/auth/verify", async (c) => {
   const token = c.req.query("token");
+  const flowId = c.req.query("flowId");
+
   if (!token) {
     return c.html(
       `<!DOCTYPE html>
@@ -118,7 +145,7 @@ app.get("/auth/verify", (c) => {
   <meta charset="utf-8">
   <title>Sign in to Zuno</title>
   <style>
-    body { margin: 0; background: #0b0b0c; color: #fff; font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    body { margin: 0; background: #0b0b0c; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
     p { color: #a1a1aa; font-size: 16px; }
   </style>
 </head>
@@ -130,7 +157,109 @@ app.get("/auth/verify", (c) => {
     );
   }
 
+  // Attempt to redeem the magic link token server-side
+  let sessionResult: any = null;
+  try {
+    sessionResult = await auth.api.magicLinkVerify({
+      query: { token, callbackURL: "" },
+      headers: c.req.raw.headers,
+    });
+  } catch (err: any) {
+    // If token was already consumed or invalid, check if the flow was already verified
+    if (!flowId || !isFlowVerified(flowId)) {
+      console.warn("Magic link token redemption failed:", err?.message || err);
+    }
+  }
+
+  const sessionToken = sessionResult?.token || sessionResult?.session?.token;
+  if (sessionToken && flowId) {
+    completeFlow(flowId, sessionToken, sessionResult?.user);
+  }
+
+  const verified = Boolean(sessionToken || (flowId && isFlowVerified(flowId)));
   const appUrl = `zuno://auth/verify?token=${encodeURIComponent(token)}`;
+
+  if (verified) {
+    return c.html(
+      `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signed In · Zuno</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0b0b0c;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 90vh;
+    }
+    .card {
+      background: #161618;
+      border: 1px solid #2a2a2d;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    }
+    .badge {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #22c55e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 28px;
+    }
+    h1 { margin: 0 0 12px; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+    p { color: #a1a1aa; font-size: 15px; line-height: 1.6; margin: 0 0 28px; }
+    .highlight { color: #ffffff; font-weight: 600; }
+    a.button {
+      display: inline-block;
+      background: #ffffff;
+      color: #000000;
+      font-weight: 600;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 9999px;
+      text-decoration: none;
+      transition: opacity 0.15s ease;
+    }
+    a.button:hover { opacity: 0.9; }
+    .hint { font-size: 12px; color: #71717a; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">✓</div>
+    <h1>You're signed in!</h1>
+    <p>Your identity has been verified. The <span class="highlight">Zuno app on your phone</span> is signing in automatically.</p>
+    <a class="button" href="${appUrl}">Open Zuno</a>
+    <div class="hint">You can safely close this browser window.</div>
+  </div>
+  <script>
+    // Auto-forward if opened in mobile browser
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      window.location.href = "${appUrl}";
+    }
+  </script>
+</body>
+</html>`
+    );
+  }
+
+  // Fallback for invalid or expired tokens
   return c.html(
     `<!DOCTYPE html>
 <html lang="en">
@@ -158,10 +287,9 @@ app.get("/auth/verify", (c) => {
       max-width: 420px;
       width: 100%;
       text-align: center;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
     }
     h1 { margin-top: 0; font-size: 22px; font-weight: 600; }
-    p { color: #a1a1aa; font-size: 15px; line-height: 1.5; margin-bottom: 28px; }
+    p { color: #a1a1aa; font-size: 15px; line-height: 1.5; margin-bottom: 24px; }
     a.button {
       display: inline-block;
       background: #ffffff;
@@ -171,9 +299,7 @@ app.get("/auth/verify", (c) => {
       padding: 14px 28px;
       border-radius: 9999px;
       text-decoration: none;
-      transition: opacity 0.15s ease;
     }
-    a.button:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
@@ -182,6 +308,11 @@ app.get("/auth/verify", (c) => {
     <p>Open this link on the phone where Zuno is installed to finish signing in.</p>
     <a class="button" href="${appUrl}">Open Zuno</a>
   </div>
+  <script>
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      window.location.href = "${appUrl}";
+    }
+  </script>
 </body>
 </html>`
   );

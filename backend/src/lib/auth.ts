@@ -4,6 +4,7 @@ import { bearer } from "better-auth/plugins/bearer";
 import { magicLink } from "better-auth/plugins/magic-link";
 import { db } from "../db/index.js";
 import { sendMagicLinkEmail } from "./email.js";
+import { registerFlow } from "./magic-link-flows.js";
 
 const MAGIC_LINK_TTL_SECONDS = 60 * 15;
 
@@ -11,9 +12,12 @@ const MAGIC_LINK_TTL_SECONDS = 60 * 15;
  * Public URL the magic link points to. Android App Links intercept this path and
  * hand the token to the app; browsers without the app land on the fallback page.
  */
-function magicLinkUrl(token: string) {
-  const url = new URL("/auth/verify", process.env.BETTER_AUTH_URL);
+function magicLinkUrl(token: string, flowId?: string) {
+  const url = new URL("/auth/verify", process.env.BETTER_AUTH_URL || "http://localhost:3000");
   url.searchParams.set("token", token);
+  if (flowId) {
+    url.searchParams.set("flowId", flowId);
+  }
   return url.toString();
 }
 
@@ -59,8 +63,22 @@ export const auth = betterAuth({
     magicLink({
       expiresIn: MAGIC_LINK_TTL_SECONDS,
       storeToken: "hashed",
-      sendMagicLink: async ({ email, token }) => {
-        await sendMagicLinkEmail({ to: email, url: magicLinkUrl(token) });
+      sendMagicLink: async ({ email, token }, ctx) => {
+        const body = (ctx?.body || {}) as Record<string, any>;
+        let flowId = body.flowId as string | undefined;
+
+        if (!flowId && body.callbackURL) {
+          try {
+            const parsed = new URL(body.callbackURL, "http://dummy");
+            flowId = parsed.searchParams.get("flowId") || undefined;
+          } catch {}
+        }
+
+        if (flowId) {
+          registerFlow(flowId, email);
+        }
+
+        await sendMagicLinkEmail({ to: email, url: magicLinkUrl(token, flowId) });
       },
     }),
   ],

@@ -197,7 +197,7 @@ private fun MagicLinkSent(
         ) {
             Text("Check your email", style = ZunoType.TitleLarge, color = ZunoColors.TextPrimary)
             Text(
-                "We sent a sign-in link to $email. Open it on this phone to continue. The link expires in 15 minutes.",
+                "We sent a sign-in link to $email. Open it on this phone, your laptop, or any browser to continue. This screen will update automatically.",
                 style = ZunoType.BodySmall,
                 color = ZunoColors.TextSecondary,
             )

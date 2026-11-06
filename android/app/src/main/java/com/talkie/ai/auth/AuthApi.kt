@@ -23,6 +23,12 @@ data class AuthUser(
 /** A signed Better Auth session token plus the user it belongs to. */
 data class AuthSession(val token: String, val user: AuthUser)
 
+sealed class MagicLinkPollResult {
+    data class Verified(val session: AuthSession) : MagicLinkPollResult()
+    data object Pending : MagicLinkPollResult()
+    data object Expired : MagicLinkPollResult()
+}
+
 class AuthException(message: String) : Exception(message)
 
 /**
@@ -37,9 +43,54 @@ class AuthApi(
     private val authUrl = "${baseUrl.trimEnd('/')}/api/auth"
 
     /** Emails a magic link to [email]. Unknown emails get an account on first sign-in. */
-    suspend fun sendMagicLink(email: String) {
+    suspend fun sendMagicLink(email: String, flowId: String? = null) {
         val body = JSONObject().put("email", email)
+        if (flowId != null) {
+            body.put("flowId", flowId)
+            body.put("callbackURL", "/auth/verify?flowId=$flowId")
+        }
         execute(post("/sign-in/magic-link", body)) { }
+    }
+
+    /** Polls to check if the magic link was verified on another device or browser. */
+    suspend fun pollMagicLink(flowId: String): MagicLinkPollResult = withContext(Dispatchers.IO) {
+        val url = "$authUrl/magic-link/poll".toHttpUrl().newBuilder()
+            .addQueryParameter("flowId", flowId)
+            .build()
+        val request = Request.Builder().url(url).get().build()
+        try {
+            client.newCall(request).execute().use { response ->
+                if (response.code == 404) return@withContext MagicLinkPollResult.Expired
+                if (!response.isSuccessful) return@withContext MagicLinkPollResult.Pending
+                val raw = response.body?.string().orEmpty()
+                val json = JSONObject(raw)
+                when (json.optString("status")) {
+                    "verified" -> {
+                        val token = json.optString("token")
+                        val userJson = json.optJSONObject("user")
+                        val user = if (userJson != null) {
+                            AuthUser(
+                                id = userJson.optString("id"),
+                                email = userJson.optString("email"),
+                                name = userJson.optString("name"),
+                                image = userJson.optString("image").takeIf { it.isNotEmpty() }
+                            )
+                        } else {
+                            AuthUser("", "", "", null)
+                        }
+                        if (token.isNotEmpty()) {
+                            MagicLinkPollResult.Verified(AuthSession(token, user))
+                        } else {
+                            MagicLinkPollResult.Pending
+                        }
+                    }
+                    "expired" -> MagicLinkPollResult.Expired
+                    else -> MagicLinkPollResult.Pending
+                }
+            }
+        } catch (_: Exception) {
+            MagicLinkPollResult.Pending
+        }
     }
 
     /** Redeems the single-use token from a magic link. */
