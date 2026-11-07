@@ -34,7 +34,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.pointerInput
@@ -49,9 +48,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.talkie.ai.data.TargetLanguage
-import com.talkie.ai.ui.zuno.components.AgentHorizonState
+import com.talkie.ai.ui.zuno.components.AgentGlowState
 import com.talkie.ai.ui.zuno.components.ZunoActionTopBar
-import com.talkie.ai.ui.zuno.components.ZunoAgentHorizon
+import com.talkie.ai.ui.zuno.components.ZunoAgentGlow
 import com.talkie.ai.ui.zuno.components.ZunoButton
 import com.talkie.ai.ui.zuno.components.ZunoButtonSize
 import com.talkie.ai.ui.zuno.components.ZunoComposer
@@ -89,6 +88,7 @@ fun HomeScreen(
     copy: HomeCopy,
     voiceState: HomeVoiceState,
     liveTranscript: String,
+    audioLevel: () -> Float,
     micBlocked: Boolean,
     busy: Boolean,
     typingHint: String?,
@@ -133,6 +133,7 @@ fun HomeScreen(
                     copy = copy,
                     voiceState = voiceState,
                     liveTranscript = liveTranscript,
+                    audioLevel = audioLevel,
                     micBlocked = micBlocked,
                     busy = busy,
                     onHoldStart = onHoldStart,
@@ -151,6 +152,7 @@ private fun GlowMode(
     copy: HomeCopy,
     voiceState: HomeVoiceState,
     liveTranscript: String,
+    audioLevel: () -> Float,
     micBlocked: Boolean,
     busy: Boolean,
     onHoldStart: () -> Unit,
@@ -207,11 +209,16 @@ private fun GlowMode(
                         }
                     ),
             ) {
-                ZunoAgentHorizon(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(if (micBlocked) 0.45f else 1f),
-                    state = if (holding) AgentHorizonState.Active else AgentHorizonState.Idle,
+                ZunoAgentGlow(
+                    state = when {
+                        micBlocked -> AgentGlowState.Disabled
+                        voiceState == HomeVoiceState.Sending || busy -> AgentGlowState.Thinking
+                        voiceState == HomeVoiceState.Cancelling -> AgentGlowState.Cancelling
+                        voiceState == HomeVoiceState.Listening -> AgentGlowState.Listening
+                        else -> AgentGlowState.Idle
+                    },
+                    audioLevel = audioLevel,
+                    modifier = Modifier.fillMaxSize(),
                 )
                 Column(
                     modifier = Modifier
@@ -330,11 +337,11 @@ private fun TypeMode(
             .imePadding()
             .padding(horizontal = ZunoSpace.s8),
     ) {
-        ZunoAgentHorizon(
+        ZunoAgentGlow(
+            state = if (busy) AgentGlowState.Thinking else AgentGlowState.Idle,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = ZunoSpace.s4)
-                .clip(RoundedCornerShape(ZunoRadius.xxxl)),
+                .padding(bottom = ZunoSpace.s4),
         )
         Column(
             modifier = Modifier

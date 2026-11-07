@@ -1,7 +1,9 @@
 package com.talkie.ai.ui.zuno.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,7 +25,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -41,21 +42,6 @@ fun ZunoLogoMark(size: Dp, modifier: Modifier = Modifier) {
         painter = painterResource(R.drawable.zuno_logo_mark),
         contentDescription = "Zuno",
         modifier = modifier.size(size),
-    )
-}
-
-enum class AgentHorizonState { Idle, Active }
-
-/** Agent Horizon glow card (386×372 idle, 386×600 active). */
-@Composable
-fun ZunoAgentHorizon(modifier: Modifier = Modifier, state: AgentHorizonState = AgentHorizonState.Idle) {
-    Image(
-        painter = painterResource(
-            if (state == AgentHorizonState.Active) R.drawable.zuno_horizon_active else R.drawable.zuno_horizon_idle
-        ),
-        contentDescription = null,
-        contentScale = ContentScale.FillBounds,
-        modifier = modifier,
     )
 }
 
@@ -179,13 +165,63 @@ fun ZunoCallControl(
     }
 }
 
-/** Center of the live voice dock — glowing pill. */
+private class LiveLook(
+    val stops: List<Color>,
+    val height: Float,
+    val speed: Float,
+    val brightness: Float,
+    val label: String,
+)
+
+private val MonoStops = listOf(Color(0xFFFFFFFF), Color(0xFF9AA0AD), Color(0xFFFFFFFF))
+private val TutorStops = listOf(Color(0xFF1EFFA0), Color(0xFF14C8B4), Color(0xFF3A7BFF))
+
+/** Mono while the user has the floor, blue/green while the tutor speaks; voice pushes it higher and faster. */
+private fun liveLookFor(state: AgentGlowState): LiveLook = when (state) {
+    AgentGlowState.Speaking -> LiveLook(TutorStops, 0.45f, 1f, 1f, "Zuno is speaking")
+    AgentGlowState.Listening -> LiveLook(MonoStops, 0.52f, 1f, 0.8f, "Listening")
+    AgentGlowState.Thinking -> LiveLook(MonoStops, 0.36f, 0.6f, 0.55f, "Thinking")
+    AgentGlowState.Idle, AgentGlowState.Cancelling, AgentGlowState.Disabled ->
+        LiveLook(MonoStops, 0.24f, 0.3f, 0.35f, "Microphone off")
+}
+
+/**
+ * Center of the live voice dock — a pill with an aurora rising from the bottom.
+ * [audioLevel] (0..1, polled per frame) is the level of whoever is currently speaking.
+ */
 @Composable
-fun ZunoLiveIndicator(modifier: Modifier = Modifier) {
-    Image(
-        painter = painterResource(R.drawable.zuno_live_indicator),
-        contentDescription = "Live",
-        contentScale = ContentScale.FillBounds,
-        modifier = modifier.height(56.dp),
-    )
+fun ZunoLiveIndicator(
+    state: AgentGlowState,
+    modifier: Modifier = Modifier,
+    audioLevel: () -> Float = { 0f },
+) {
+    val look = liveLookFor(state)
+    val colorSpec = tween<Color>(durationMillis = 600)
+    val floatSpec = tween<Float>(durationMillis = 600)
+    val stops = look.stops.mapIndexed { index, color ->
+        animateColorAsState(color, colorSpec, label = "liveStop$index").value
+    }
+    val height by animateFloatAsState(look.height, floatSpec, label = "liveHeight")
+    val speed by animateFloatAsState(look.speed, floatSpec, label = "liveSpeed")
+    val brightness by animateFloatAsState(look.brightness, floatSpec, label = "liveBrightness")
+    val reactive = state.reactsToVoice
+
+    Box(
+        modifier = modifier
+            .height(56.dp)
+            .clip(CircleShape)
+            .background(ZunoColors.BgCanvas)
+            .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+            .semantics { contentDescription = look.label },
+    ) {
+        ZunoAurora(
+            colorStops = stops,
+            height = height,
+            speed = speed,
+            brightness = brightness,
+            direction = AuroraDirection.Bottom,
+            energy = { if (reactive) audioLevel() else 0f },
+            modifier = Modifier.matchParentSize(),
+        )
+    }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -32,8 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
 import com.talkie.ai.data.Message
+import com.talkie.ai.ui.zuno.components.AgentGlowState
 import com.talkie.ai.ui.zuno.components.CallControlState
 import com.talkie.ai.ui.zuno.components.ZunoAssistantBubble
 import com.talkie.ai.ui.zuno.components.ZunoCallControl
@@ -66,6 +69,8 @@ fun ChatScreen(
     liveLines: List<LiveLine>,
     voiceMode: Boolean,
     voiceConnecting: Boolean,
+    glowState: AgentGlowState,
+    glowLevel: () -> Float,
     isMuted: Boolean,
     placeholder: String,
     typingHint: String?,
@@ -93,97 +98,100 @@ fun ChatScreen(
         if (lastIndex > 0) listState.animateScrollToItem(lastIndex)
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .imePadding(),
-    ) {
-        ZunoTitleTopBar(
-            title = title,
-            onMenu = onOpenDrawer,
-            onMore = {},
-            trailing = { ZunoOverflowMenu(menu) },
-        )
-        if (messages == null) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                ZunoLoadState(error = error, onRetry = onRetryLoad)
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
-            ) {
-                item(key = "start") { ZunoSessionStart(sessionLabel) }
-                items(messages, key = { it.id }) { message ->
-                    if (message.isUser) {
-                        UserTurn(message.text, message.feedback)
-                    } else {
-                        ZunoAssistantBubble(
-                            message = message.text,
-                            translation = message.translation,
-                            glossary = message.glossary,
-                            onListen = { onListen(message.text) },
-                            onExplain = { onExplain(message) },
-                        )
-                    }
+    Box(modifier.fillMaxSize().background(ZunoColors.BgCanvas)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding(),
+        ) {
+            ZunoTitleTopBar(
+                title = title,
+                onMenu = onOpenDrawer,
+                onMore = {},
+                trailing = { ZunoOverflowMenu(menu) },
+            )
+            if (messages == null) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    ZunoLoadState(error = error, onRetry = onRetryLoad)
                 }
-                items(liveLines.size, key = { "live-$it" }) { index ->
-                    val line = liveLines[index]
-                    if (line.isUser) UserTurn(line.text, null) else ZunoAssistantBubble(message = line.text)
-                }
-                if (pendingText != null) {
-                    item(key = "pending-user") { UserTurn(pendingText, null) }
-                    item(key = "pending-reply") { ZunoTypingBubble() }
-                }
-                if (error != null && pendingText == null) {
-                    item(key = "error") {
-                        Text(
-                            error,
-                            style = ZunoType.CaptionRegular,
-                            color = ZunoColors.TextSecondary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-        }
-
-        AnimatedContent(
-            targetState = voiceMode,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "chatFooter",
-        ) { voice ->
-            if (voice) {
-                VoiceFooter(
-                    isMuted = isMuted,
-                    connecting = voiceConnecting,
-                    liveCaption = liveLines.lastOrNull { !it.isUser }?.text,
-                    onType = {
-                        focusComposer = true
-                        onSwitchToText()
-                    },
-                    onToggleMute = onToggleMute,
-                    onEnd = onEndVoice,
-                )
             } else {
-                ComposerFooter(
-                    autoFocus = focusComposer,
-                    enabled = messages != null && pendingText == null,
-                    placeholder = placeholder,
-                    typingHint = typingHint,
-                    onDraftChanged = onDraftChanged,
-                    onSend = onSend,
-                    onVoice = {
-                        focusComposer = false
-                        onStartVoice()
-                    },
-                )
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
+                ) {
+                    item(key = "start") { ZunoSessionStart(sessionLabel) }
+                    items(messages, key = { it.id }) { message ->
+                        if (message.isUser) {
+                            UserTurn(message.text, message.feedback)
+                        } else {
+                            ZunoAssistantBubble(
+                                message = message.text,
+                                translation = message.translation,
+                                glossary = message.glossary,
+                                onListen = { onListen(message.text) },
+                                onExplain = { onExplain(message) },
+                            )
+                        }
+                    }
+                    items(liveLines.size, key = { "live-$it" }) { index ->
+                        val line = liveLines[index]
+                        if (line.isUser) UserTurn(line.text, null) else ZunoAssistantBubble(message = line.text)
+                    }
+                    if (pendingText != null) {
+                        item(key = "pending-user") { UserTurn(pendingText, null) }
+                        item(key = "pending-reply") { ZunoTypingBubble() }
+                    }
+                    if (error != null && pendingText == null) {
+                        item(key = "error") {
+                            Text(
+                                error,
+                                style = ZunoType.CaptionRegular,
+                                color = ZunoColors.TextSecondary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+
+            AnimatedContent(
+                targetState = voiceMode,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "chatFooter",
+            ) { voice ->
+                if (voice) {
+                    VoiceFooter(
+                        glowState = glowState,
+                        glowLevel = glowLevel,
+                        isMuted = isMuted,
+                        connecting = voiceConnecting,
+                        liveCaption = liveLines.lastOrNull { !it.isUser }?.text,
+                        onType = {
+                            focusComposer = true
+                            onSwitchToText()
+                        },
+                        onToggleMute = onToggleMute,
+                        onEnd = onEndVoice,
+                    )
+                } else {
+                    ComposerFooter(
+                        autoFocus = focusComposer,
+                        enabled = messages != null && pendingText == null,
+                        placeholder = placeholder,
+                        typingHint = typingHint,
+                        onDraftChanged = onDraftChanged,
+                        onSend = onSend,
+                        onVoice = {
+                            focusComposer = false
+                            onStartVoice()
+                        },
+                    )
+                }
             }
         }
     }
@@ -248,6 +256,8 @@ private fun ComposerFooter(
 
 @Composable
 private fun VoiceFooter(
+    glowState: AgentGlowState,
+    glowLevel: () -> Float,
     isMuted: Boolean,
     connecting: Boolean,
     liveCaption: String?,
@@ -284,7 +294,7 @@ private fun VoiceFooter(
                 contentDescription = if (captionsOn) "Hide captions" else "Show captions",
                 state = if (captionsOn) CallControlState.Active else CallControlState.Default,
             )
-            ZunoLiveIndicator(Modifier.weight(1f))
+            ZunoLiveIndicator(state = glowState, audioLevel = glowLevel, modifier = Modifier.weight(1f))
             ZunoCallControl(
                 icon = R.drawable.zuno_ic_mic_off,
                 onClick = onToggleMute,

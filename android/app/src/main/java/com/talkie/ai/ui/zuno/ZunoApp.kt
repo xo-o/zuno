@@ -58,6 +58,7 @@ import com.talkie.ai.data.TargetLanguage
 import com.talkie.ai.model.AgentState
 import com.talkie.ai.model.Speaker
 import com.talkie.ai.model.VoiceCatalog
+import com.talkie.ai.ui.zuno.components.AgentGlowState
 import com.talkie.ai.ui.zuno.components.ZunoMenuAction
 import com.talkie.ai.ui.zuno.screens.AccountSheet
 import com.talkie.ai.ui.zuno.screens.AppDrawer
@@ -474,6 +475,7 @@ fun ZunoApp(
                     copy = HomeCopy.forLanguage(language, profile?.firstName.orEmpty()),
                     voiceState = homeVoiceState,
                     liveTranscript = speech.partial,
+                    audioLevel = { speech.level },
                     micBlocked = micBlocked,
                     busy = busy,
                     typingHint = typingHint,
@@ -622,6 +624,11 @@ fun ZunoApp(
                         voiceMode = inVoice,
                         voiceConnecting = inVoice &&
                             (agentState == AgentState.CONNECTING || agentState == AgentState.DISCONNECTED),
+                        glowState = voiceGlowState(agentState, isMuted),
+                        glowLevel = {
+                            if (agentState == AgentState.SPEAKING) viewModel.agentAudioLevel.value
+                            else viewModel.userAudioLevel.value
+                        },
                         isMuted = isMuted,
                         placeholder = HomeCopy.forLanguage(language, "").placeholder,
                         typingHint = typingHint,
@@ -683,6 +690,13 @@ fun ZunoApp(
 }
 
 /** "New Free Talk · Just now", "Roleplay · 3 hours ago", … */
+/** Live call → glow. The mic stays open between turns, so an idle call still listens to the user. */
+private fun voiceGlowState(agentState: AgentState, isMuted: Boolean): AgentGlowState = when (agentState) {
+    AgentState.DISCONNECTED, AgentState.CONNECTING, AgentState.THINKING -> AgentGlowState.Thinking
+    AgentState.SPEAKING -> AgentGlowState.Speaking
+    AgentState.IDLE, AgentState.LISTENING -> if (isMuted) AgentGlowState.Disabled else AgentGlowState.Listening
+}
+
 private fun sessionLabel(conversation: Conversation): String {
     val age = System.currentTimeMillis() - conversation.createdAtMillis
     val kind = when (conversation.kind) {

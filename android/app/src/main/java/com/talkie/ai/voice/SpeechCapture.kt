@@ -31,6 +31,11 @@ class SpeechCapture(context: Context) {
     var audioLevel by mutableStateOf(0f)
         private set
 
+    /** Normalized mic loudness (0..1) while listening. Plain field: polled per frame, never recomposes. */
+    @Volatile
+    var level: Float = 0f
+        private set
+
     val isAvailable: Boolean get() = SpeechRecognizer.isRecognitionAvailable(appContext)
 
     fun start(languageTag: String, onResult: (String?) -> Unit) {
@@ -70,6 +75,7 @@ class SpeechCapture(context: Context) {
         ended = false
         heldResult = null
         partial = ""
+        level = 0f
     }
 
     private fun finish(text: String?) {
@@ -84,6 +90,7 @@ class SpeechCapture(context: Context) {
         heldResult = text?.takeIf { it.isNotBlank() } ?: partial.takeIf { it.isNotBlank() }
         heldResult?.let { partial = it }
         ended = true
+        level = 0f
         recognizer?.destroy()
         recognizer = null
     }
@@ -108,7 +115,10 @@ class SpeechCapture(context: Context) {
 
         override fun onReadyForSpeech(params: Bundle?) = Unit
         override fun onBeginningOfSpeech() = Unit
-        override fun onRmsChanged(rmsdB: Float) = Unit
+        // Platform RMS is roughly -2 dB (silence) to 10 dB (loud speech).
+        override fun onRmsChanged(rmsdB: Float) {
+            level = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+        }
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit

@@ -16,12 +16,14 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 class TalkieViewModel(application: Application) : AndroidViewModel(application) {
@@ -50,9 +52,16 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
     private val _latencyMs = MutableStateFlow<Int?>(null)
     val latencyMs: StateFlow<Int?> = _latencyMs.asStateFlow()
 
+    /** Normalized (0..1) loudness of the user's mic and the agent's voice. Poll `.value`; updated ~20×/s. */
+    private val _userAudioLevel = MutableStateFlow(0f)
+    val userAudioLevel: StateFlow<Float> = _userAudioLevel.asStateFlow()
+    private val _agentAudioLevel = MutableStateFlow(0f)
+    val agentAudioLevel: StateFlow<Float> = _agentAudioLevel.asStateFlow()
+
     private var currentRoom: Room? = null
     private var eventJob: Job? = null
     private var connectJob: Job? = null
+    private var levelJob: Job? = null
 
     fun selectVoice(voice: VoiceOption) {
         _selectedVoice.value = voice
@@ -120,6 +129,7 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
 
                 room.connect(tokenResult.url, tokenResult.token)
                 room.localParticipant.setMicrophoneEnabled(true)
+                levelJob = launch { pollAudioLevels(room) }
                 _isMuted.value = false
                 _agentState.value = AgentState.IDLE
             } catch (e: CancellationException) {
@@ -145,6 +155,10 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
         connectJob = null
         eventJob?.cancel()
         eventJob = null
+        levelJob?.cancel()
+        levelJob = null
+        _userAudioLevel.value = 0f
+        _agentAudioLevel.value = 0f
         currentRoom?.let { room ->
             try {
                 room.disconnect()
@@ -264,6 +278,19 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private suspend fun pollAudioLevels(room: Room) {
+        while (true) {
+            val user = if (_isMuted.value) 0f else room.localParticipant.audioLevel
+            val agent = room.remoteParticipants.values.maxOfOrNull { it.audioLevel } ?: 0f
+            _userAudioLevel.value = normalizeLevel(user)
+            _agentAudioLevel.value = normalizeLevel(agent)
+            delay(LEVEL_POLL_MS)
+        }
+    }
+
+    /** LiveKit levels sit mostly in 0..0.3 for speech; lift them into a usable 0..1 range. */
+    private fun normalizeLevel(raw: Float): Float = (sqrt(raw.coerceAtLeast(0f)) * 1.6f).coerceIn(0f, 1f)
+
     private fun addOrUpdateMessage(speaker: Speaker, text: String, isFinal: Boolean) {
         if (text.isBlank()) return
         _messages.update { currentList ->
@@ -295,5 +322,6 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TAG = "TalkieViewModel"
+        private const val LEVEL_POLL_MS = 50L
     }
 }
