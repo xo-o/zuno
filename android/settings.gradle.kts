@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TalkieAI"
+rootProject.name = "Zuno"
 include(":app")

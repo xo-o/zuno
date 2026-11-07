@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TalkieAI" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#171717</item>
-        <item name="android:navigationBarColor">#171717</item>
+    <style name="Theme.Zuno" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
         <item name="android:windowBackground">@drawable/bg_splash_window</item>
         <item name="android:windowSplashScreenBackground">@color/background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_orb_inset</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
     </style>
 </resources>
