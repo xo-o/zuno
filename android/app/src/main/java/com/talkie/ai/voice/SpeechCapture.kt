@@ -28,6 +28,8 @@ class SpeechCapture(context: Context) {
         private set
     var partial by mutableStateOf("")
         private set
+    var audioLevel by mutableStateOf(0f)
+        private set
 
     val isAvailable: Boolean get() = SpeechRecognizer.isRecognitionAvailable(appContext)
 

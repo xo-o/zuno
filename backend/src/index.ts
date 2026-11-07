@@ -89,6 +89,8 @@ type TokenRequest = {
   language?: string;
   /** When set, the voice agent follows this conversation's roleplay / lesson context. */
   conversationId?: string;
+  /** When the conversation ends with a tutor reply, the agent opens the call by speaking it. */
+  speakLastReply?: boolean;
 };
 
 const TOKEN_TTL = "6h";
@@ -117,6 +119,8 @@ app.post("/api/livekit/token", async (c) => {
   const instructions = transcript
     ? `${voiceInstructions(context, profile)}\n\nConversation so far (continue naturally from here):\n${transcript}`
     : voiceInstructions(context, profile);
+  const lastTurn = history.at(-1);
+  const opening = body.speakLastReply && lastTurn?.role !== "user" ? lastTurn?.text : undefined;
 
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
@@ -129,6 +133,7 @@ app.post("/api/livekit/token", async (c) => {
       instructions,
       // The agent stays quiet until the learner speaks when the conversation is already under way.
       resume: history.length > 0,
+      opening,
     }),
   });
 

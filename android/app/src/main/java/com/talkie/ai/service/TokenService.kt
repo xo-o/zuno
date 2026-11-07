@@ -35,12 +35,14 @@ object TokenService {
         sessionToken: String,
         selectedVoice: VoiceOption = VoiceCatalog.DEFAULT_VOICE,
         conversationId: String? = null,
+        speakLastReply: Boolean = false,
     ): TokenResult = withContext(Dispatchers.IO) {
         val bodyJson = JSONObject().apply {
             put("provider", selectedVoice.provider)
             put("voice", selectedVoice.id)
             put("language", selectedVoice.language)
             conversationId?.let { put("conversationId", it) }
+            if (speakLastReply) put("speakLastReply", true)
         }
         val request = Request.Builder()
             .url(tokenUrl)

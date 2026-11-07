@@ -3,7 +3,12 @@ import json
 import logging
 import os
 import time
+
+import certifi
 from dotenv import load_dotenv
+
+# Python builds on macOS often ship without a CA bundle, which breaks TLS to LiveKit Cloud.
+os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
 from google.cloud import texttospeech
 from livekit import rtc
@@ -150,15 +155,22 @@ class ConversationalAgent(Agent):
         language: str = "en",
         tutor_instructions: str | None = None,
         resume: bool = False,
+        opening: str | None = None,
     ) -> None:
         self.language = language
         self.tutor_instructions = tutor_instructions
         self.resume = resume
+        self.opening = opening
         # The backend sends tutor instructions (Free Talk / roleplay / lesson) in the participant metadata.
         instructions = f"{tutor_instructions}\n\n{INSTRUCTIONS}" if tutor_instructions else INSTRUCTIONS
         super().__init__(instructions=instructions, tts=tts, stt=stt)
 
     async def on_enter(self) -> None:
+        if self.opening:
+            # The learner's first turn was answered in the app; speak that reply to open the call.
+            # It is already in the instructions transcript and in the app's history, so keep it out of the chat context.
+            self.session.say(self.opening, add_to_chat_ctx=False)
+            return
         if self.resume:
             # The conversation is already under way in the app; wait for the learner to speak.
             return
@@ -191,6 +203,7 @@ async def entrypoint(ctx: JobContext) -> None:
     current_language = "en"
     tutor_instructions = None
     resume = False
+    opening = None
 
     # Inspect participant metadata if preset at connection time
     if participant.metadata:
@@ -204,6 +217,7 @@ async def entrypoint(ctx: JobContext) -> None:
                 current_language = meta["language"]
             tutor_instructions = meta.get("instructions") or None
             resume = bool(meta.get("resume", False))
+            opening = meta.get("opening") or None
             logger.info(
                 f"Initialized from participant metadata: provider={current_provider}, voice={current_voice}, lang={current_language}"
             )
@@ -217,7 +231,12 @@ async def entrypoint(ctx: JobContext) -> None:
     tts = create_tts(current_provider, current_voice, current_language)
 
     agent = ConversationalAgent(
-        tts=tts, stt=stt, language=current_language, tutor_instructions=tutor_instructions, resume=resume
+        tts=tts,
+        stt=stt,
+        language=current_language,
+        tutor_instructions=tutor_instructions,
+        resume=resume,
+        opening=opening,
     )
 
     session = AgentSession(

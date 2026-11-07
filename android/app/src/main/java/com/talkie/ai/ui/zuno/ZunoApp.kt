@@ -192,7 +192,6 @@ fun ZunoApp(
 
     LaunchedEffect(Unit) { zunoViewModel.messages.collect { toast(it) } }
     LaunchedEffect(Unit) { zunoViewModel.sessionExpired.collect { authViewModel.signOut() } }
-    LaunchedEffect(Unit) { zunoViewModel.speakReplies.collect { tts.speak(it) } }
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     fun openDrawer() = scope.launch { drawerState.open() }
@@ -217,7 +216,8 @@ fun ZunoApp(
         }
     }
 
-    fun startVoice(conversationId: String) {
+    /** Starts a live LiveKit voice call with the tutor for [conversationId]. */
+    fun startVoice(conversationId: String, speakLastReply: Boolean = false) {
         runWithVoicePermissions {
             tts.stop()
             voiceMessageStart = viewModel.messages.value.size
@@ -228,6 +228,7 @@ fun ZunoApp(
                     onSessionExpired = authViewModel::signOut,
                     conversationId = conversationId,
                     voice = VoiceCatalog.tutorVoiceFor(language.code),
+                    speakLastReply = speakLastReply,
                 )
             }
         }
@@ -243,6 +244,22 @@ fun ZunoApp(
         }
         viewModel.disconnect()
         voiceConversationId = null
+    }
+
+    // A call that drops after connecting (network, agent left) ends the voice session.
+    var callWasLive by remember { mutableStateOf(false) }
+    LaunchedEffect(agentState) {
+        when (agentState) {
+            AgentState.CONNECTING -> Unit
+            AgentState.DISCONNECTED -> {
+                if (callWasLive && voiceConversationId != null) {
+                    toast("Voice call ended")
+                    endVoice()
+                }
+                callWasLive = false
+            }
+            else -> callWasLive = true
+        }
     }
 
     // ── Auth transitions ────────────────────────────────────────────────────
@@ -314,7 +331,28 @@ fun ZunoApp(
 
     fun startFreeTalk(text: String?, viaVoice: Boolean = false) {
         if (voiceConversationId != null) endVoice()
-        zunoViewModel.startFreeTalk(text, viaVoice) { openChat(it.id) }
+        if (!viaVoice) {
+            zunoViewModel.startFreeTalk(text) { openChat(it.id) }
+            return
+        }
+        // Spoken from Home: the chat opens straight into the live call. The first turn goes through
+        // the API (for feedback), then the call connects and the tutor speaks its reply.
+        var conversationId: String? = null
+        zunoViewModel.startFreeTalk(
+            firstMessage = text,
+            viaVoice = true,
+            onReplied = { replied ->
+                val id = conversationId
+                if (id != null && voiceConversationId == id) {
+                    if (replied) startVoice(id, speakLastReply = true) else voiceConversationId = null
+                }
+            },
+        ) { conversation ->
+            conversationId = conversation.id
+            voiceMessageStart = viewModel.messages.value.size
+            voiceConversationId = conversation.id
+            openChat(conversation.id)
+        }
     }
 
     // ── Account sheet & grammar explanations ────────────────────────────────
@@ -582,7 +620,8 @@ fun ZunoApp(
                         error = chat?.error,
                         liveLines = liveLines,
                         voiceMode = inVoice,
-                        voiceConnecting = inVoice && agentState == AgentState.CONNECTING,
+                        voiceConnecting = inVoice &&
+                            (agentState == AgentState.CONNECTING || agentState == AgentState.DISCONNECTED),
                         isMuted = isMuted,
                         placeholder = HomeCopy.forLanguage(language, "").placeholder,
                         typingHint = typingHint,

@@ -72,10 +72,6 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     /** One-off user-facing messages (errors, confirmations). */
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    private val _speakReplies = MutableSharedFlow<String>(extraBufferCapacity = 2)
-    /** Tutor replies to spoken input, to be read aloud. */
-    val speakReplies: SharedFlow<String> = _speakReplies.asSharedFlow()
-
     private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val sessionExpired: SharedFlow<Unit> = _sessionExpired.asSharedFlow()
 
@@ -196,12 +192,20 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Conversations ───────────────────────────────────────────────────────
 
-    /** Creates a Free Talk thread; when [firstMessage] is given it is sent right away. */
-    fun startFreeTalk(firstMessage: String? = null, viaVoice: Boolean = false, onOpened: (Conversation) -> Unit) = runBusy {
+    /**
+     * Creates a Free Talk thread; when [firstMessage] is given it is sent right away and
+     * [onReplied] reports whether the tutor answered it.
+     */
+    fun startFreeTalk(
+        firstMessage: String? = null,
+        viaVoice: Boolean = false,
+        onReplied: ((Boolean) -> Unit)? = null,
+        onOpened: (Conversation) -> Unit,
+    ) = runBusy {
         val thread = api.createFreeTalk()
         cacheThread(thread)
         onOpened(thread.conversation)
-        if (!firstMessage.isNullOrBlank()) send(thread.conversation.id, firstMessage, viaVoice)
+        if (!firstMessage.isNullOrBlank()) send(thread.conversation.id, firstMessage, viaVoice, onReplied)
         refreshRecent()
     }
 
@@ -214,9 +218,17 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onDeleted()
     }
 
-    fun send(conversationId: String, text: String, viaVoice: Boolean = false) {
-        val current = _chats.value[conversationId] ?: return
-        if (current.pendingText != null) return
+    fun send(
+        conversationId: String,
+        text: String,
+        viaVoice: Boolean = false,
+        onReplied: ((Boolean) -> Unit)? = null,
+    ) {
+        val current = _chats.value[conversationId]
+        if (current == null || current.pendingText != null) {
+            onReplied?.invoke(false)
+            return
+        }
         updateChat(conversationId) { it.copy(pendingText = text, error = null) }
         _typingHint.value = null
         viewModelScope.launch {
@@ -229,7 +241,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                         pendingText = null,
                     )
                 }
-                if (viaVoice) _speakReplies.tryEmit(result.reply.text)
+                onReplied?.invoke(true)
                 if (result.lessonCompleted) {
                     result.conversation.topicId?.let { loadTopic(it) }
                     _messages.tryEmit("Lesson complete — nice work!")
@@ -238,6 +250,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: ApiException) {
                 handleAuth(e)
                 updateChat(conversationId) { it.copy(pendingText = null, error = e.message) }
+                onReplied?.invoke(false)
             }
         }
     }

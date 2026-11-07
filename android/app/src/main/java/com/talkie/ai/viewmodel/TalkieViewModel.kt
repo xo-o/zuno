@@ -78,13 +78,15 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * Joins a LiveKit room with the voice agent. [conversationId] lets the agent follow that
      * conversation's roleplay / lesson; [voice] overrides the selected voice (e.g. to match the
-     * language being learned).
+     * language being learned). With [speakLastReply] the agent opens the call by speaking the
+     * conversation's latest tutor reply.
      */
     fun connect(
         sessionToken: String? = null,
         onSessionExpired: () -> Unit = {},
         conversationId: String? = null,
         voice: VoiceOption? = null,
+        speakLastReply: Boolean = false,
     ) {
         if (_agentState.value != AgentState.DISCONNECTED) return
         if (sessionToken == null) {
@@ -101,6 +103,7 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
                     sessionToken,
                     selectedVoice = _selectedVoice.value,
                     conversationId = conversationId,
+                    speakLastReply = speakLastReply,
                 )
                 _roomName.value = tokenResult.room
 
