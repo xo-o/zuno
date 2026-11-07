@@ -23,11 +23,13 @@ import com.talkie.ai.auth.AuthViewModel
 import com.talkie.ai.ui.zuno.ZunoApp
 import com.talkie.ai.ui.zuno.theme.ZunoTheme
 import com.talkie.ai.viewmodel.TalkieViewModel
+import com.talkie.ai.viewmodel.ZunoViewModel
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: TalkieViewModel by viewModels()
     private val authViewModel: AuthViewModel by viewModels()
+    private val zunoViewModel: ZunoViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -83,6 +85,7 @@ class MainActivity : ComponentActivity() {
                 ZunoApp(
                     viewModel = viewModel,
                     authViewModel = authViewModel,
+                    zunoViewModel = zunoViewModel,
                     runWithVoicePermissions = ::runWithVoicePermissions,
                     modifier = Modifier.fillMaxSize()
                 )

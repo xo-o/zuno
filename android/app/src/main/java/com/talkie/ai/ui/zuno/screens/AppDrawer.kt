@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,7 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
-import com.talkie.ai.ui.zuno.SessionSummary
+import com.talkie.ai.data.RecentSession
 import com.talkie.ai.ui.zuno.components.ZunoButton
 import com.talkie.ai.ui.zuno.components.ZunoButtonSize
 import com.talkie.ai.ui.zuno.components.ZunoButtonVariant
@@ -38,12 +39,14 @@ import com.talkie.ai.ui.zuno.components.ZunoUpgradeBanner
 import com.talkie.ai.ui.zuno.theme.ZunoColors
 import com.talkie.ai.ui.zuno.theme.ZunoRadius
 import com.talkie.ai.ui.zuno.theme.ZunoSpace
+import com.talkie.ai.ui.zuno.theme.ZunoType
 
 enum class DrawerDestination(val label: String, val icon: Int) {
+    FreeTalk("Free Talk", R.drawable.zuno_ic_composer_voice),
+    Topics("Topics", R.drawable.zuno_ic_book_open),
+    Roleplays("Roleplays", R.drawable.zuno_ic_users),
     Progress("Progress", R.drawable.zuno_ic_trending_up),
     Vocabulary("Vocabulary", R.drawable.zuno_ic_bookmark),
-    Review("Review", R.drawable.zuno_ic_rotate_ccw),
-    Personalize("Personalize", R.drawable.zuno_ic_sliders_menu),
 }
 
 private val DrawerShape = RoundedCornerShape(topEnd = ZunoRadius.xxl, bottomEnd = ZunoRadius.xxl)
@@ -53,16 +56,17 @@ private val DrawerShape = RoundedCornerShape(topEnd = ZunoRadius.xxl, bottomEnd 
 fun AppDrawer(
     userName: String,
     userDetail: String,
-    sessions: List<SessionSummary>,
-    selectedSessionTitle: String?,
+    activeDestination: DrawerDestination?,
+    sessions: List<RecentSession>,
+    selectedSessionId: String?,
     onProfile: () -> Unit,
     onNotifications: () -> Unit,
     onDestination: (DrawerDestination) -> Unit,
     onSearchSessions: () -> Unit,
-    onSession: (SessionSummary) -> Unit,
+    onSession: (RecentSession) -> Unit,
     onUpgrade: () -> Unit,
     onSettings: () -> Unit,
-    onNewSession: () -> Unit,
+    onNewChat: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -111,6 +115,7 @@ fun AppDrawer(
                 ZunoMenuItem(
                     label = destination.label,
                     icon = destination.icon,
+                    active = destination == activeDestination,
                     onClick = { onDestination(destination) },
                 )
             }
@@ -127,16 +132,24 @@ fun AppDrawer(
             Box(Modifier.padding(start = ZunoSpace.s12)) {
                 ZunoSectionHeader(
                     title = "Recent sessions",
-                    actionIcon = R.drawable.zuno_ic_search,
+                    actionIcon = if (sessions.isNotEmpty()) R.drawable.zuno_ic_search else null,
                     onAction = onSearchSessions,
                     actionDescription = "Search sessions",
+                )
+            }
+            if (sessions.isEmpty()) {
+                Text(
+                    "Your conversations, topics and roleplays will show up here.",
+                    style = ZunoType.FootnoteRegular,
+                    color = ZunoColors.TextTertiary,
+                    modifier = Modifier.padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
                 )
             }
             sessions.forEach { session ->
                 ZunoSessionRow(
                     title = session.title,
                     meta = session.meta,
-                    selected = session.title == selectedSessionTitle,
+                    selected = session.id == selectedSessionId,
                     onClick = { onSession(session) },
                 )
             }
@@ -162,8 +175,8 @@ fun AppDrawer(
                 leadingIcon = R.drawable.zuno_ic_settings,
             )
             ZunoButton(
-                label = "New session",
-                onClick = onNewSession,
+                label = "New chat",
+                onClick = onNewChat,
                 size = ZunoButtonSize.Medium,
                 leadingIcon = R.drawable.zuno_ic_plus_inverse,
             )

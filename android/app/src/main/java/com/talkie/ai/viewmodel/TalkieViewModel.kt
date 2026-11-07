@@ -75,7 +75,17 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun connect(sessionToken: String? = null, onSessionExpired: () -> Unit = {}) {
+    /**
+     * Joins a LiveKit room with the voice agent. [conversationId] lets the agent follow that
+     * conversation's roleplay / lesson; [voice] overrides the selected voice (e.g. to match the
+     * language being learned).
+     */
+    fun connect(
+        sessionToken: String? = null,
+        onSessionExpired: () -> Unit = {},
+        conversationId: String? = null,
+        voice: VoiceOption? = null,
+    ) {
         if (_agentState.value != AgentState.DISCONNECTED) return
         if (sessionToken == null) {
             _errorMessage.value = "Please sign in to start a voice session."
@@ -83,10 +93,15 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
         }
         _errorMessage.value = null
         _agentState.value = AgentState.CONNECTING
+        voice?.let { _selectedVoice.value = it }
 
         viewModelScope.launch {
             try {
-                val tokenResult = TokenService.fetchToken(sessionToken, selectedVoice = _selectedVoice.value)
+                val tokenResult = TokenService.fetchToken(
+                    sessionToken,
+                    selectedVoice = _selectedVoice.value,
+                    conversationId = conversationId,
+                )
                 _roomName.value = tokenResult.room
 
                 val room = LiveKit.create(getApplication())
@@ -102,11 +117,6 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
                 room.localParticipant.setMicrophoneEnabled(true)
                 _isMuted.value = false
                 _agentState.value = AgentState.IDLE
-
-                // Sync current selected voice if not default
-                if (_selectedVoice.value != VoiceCatalog.DEFAULT_VOICE) {
-                    sendVoiceChange(_selectedVoice.value)
-                }
             } catch (e: SessionExpiredException) {
                 _errorMessage.value = e.message
                 disconnectInternal()

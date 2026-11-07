@@ -25,6 +25,12 @@ data class LanguageFilter(
 
 object VoiceCatalog {
 
+    /** Tutor voice for the language being learned. */
+    fun tutorVoiceFor(languageCode: String): VoiceOption =
+        VOICES.firstOrNull { it.language == languageCode && it.provider == "cartesia" }
+            ?.takeIf { languageCode != "en" }
+            ?: DEFAULT_VOICE
+
     val LANGUAGES = listOf(
         LanguageFilter("all", "All", "🌐"),
         LanguageFilter("en", "English", "🇺🇸"),

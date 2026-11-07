@@ -1,8 +1,14 @@
 package com.talkie.ai.ui.zuno.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,27 +18,38 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
 import com.talkie.ai.ui.zuno.components.ZunoBackTopBar
 import com.talkie.ai.ui.zuno.components.ZunoButton
 import com.talkie.ai.ui.zuno.components.ZunoButtonVariant
 import com.talkie.ai.ui.zuno.components.ZunoDivider
+import com.talkie.ai.ui.zuno.components.ZunoIcon
 import com.talkie.ai.ui.zuno.components.ZunoTextField
+import kotlinx.coroutines.delay
 import com.talkie.ai.ui.zuno.theme.ZunoColors
 import com.talkie.ai.ui.zuno.theme.ZunoSpace
 import com.talkie.ai.ui.zuno.theme.ZunoType
@@ -115,7 +132,7 @@ fun AuthScreen(
                     onValueChange = { email = it },
                     label = "Email address",
                     placeholder = "name@example.com",
-                    helper = "We'll email you a sign-in link — no password needed.",
+                    helper = if (isBusy) "We’ll send a magic link to this address." else null,
                     enabled = !isBusy,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
@@ -136,12 +153,13 @@ fun AuthScreen(
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoButton(
-                label = if (isBusy) "Please wait…" else mode.primaryLabel,
+                label = if (isBusy) "Sending link…" else mode.primaryLabel,
                 onClick = {
                     focusManager.clearFocus()
                     onSubmit(email.trim())
                 },
-                enabled = !isBusy && email.isNotBlank(),
+                enabled = email.isNotBlank(),
+                loading = isBusy,
                 modifier = Modifier.fillMaxWidth(),
             )
             ZunoDivider(label = "or")
@@ -155,6 +173,7 @@ fun AuthScreen(
             )
             Spacer(Modifier.height(ZunoSpace.s4))
             Row(
+                modifier = Modifier.alpha(if (isBusy) 0.4f else 1f),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -163,14 +182,16 @@ fun AuthScreen(
                     mode.footerAction,
                     style = ZunoType.LabelSmall,
                     color = ZunoColors.TextPrimary,
-                    modifier = Modifier.clickable(role = Role.Button, onClick = onSwitchMode),
+                    modifier = Modifier.clickable(enabled = !isBusy, role = Role.Button, onClick = onSwitchMode),
                 )
             }
         }
     }
 }
 
-/** Shown after a magic link was emailed; tapping the link on this phone finishes sign-in. */
+private const val RESEND_COOLDOWN_SECONDS = 30
+
+/** 4c · Check Your Email — the link can be opened on this phone or any browser; this screen polls. */
 @Composable
 private fun MagicLinkSent(
     email: String,
@@ -181,6 +202,15 @@ private fun MagicLinkSent(
     onUseDifferentEmail: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    var cooldown by rememberSaveable(email) { mutableIntStateOf(RESEND_COOLDOWN_SECONDS) }
+    LaunchedEffect(email, cooldown > 0) {
+        while (cooldown > 0) {
+            delay(1_000)
+            cooldown--
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -191,40 +221,86 @@ private fun MagicLinkSent(
         ZunoBackTopBar(onBack = onBack)
         Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                .padding(horizontal = ZunoSpace.s32),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Text("Check your email", style = ZunoType.TitleLarge, color = ZunoColors.TextPrimary)
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(ZunoColors.SurfaceDefault)
+                    .border(1.dp, ZunoColors.BorderDefault, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(R.drawable.ic_mail, 32.dp)
+            }
+            Spacer(Modifier.height(ZunoSpace.s24))
+            Text("Check your email", style = ZunoType.TitleLarge, color = ZunoColors.TextPrimary, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(ZunoSpace.s8))
+            Text("We sent a magic link to", style = ZunoType.BodySmall, color = ZunoColors.TextSecondary, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(ZunoSpace.s8))
+            Text(email, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(ZunoSpace.s12))
             Text(
-                "We sent a sign-in link to $email. Open it on this phone, your laptop, or any browser to continue. This screen will update automatically.",
-                style = ZunoType.BodySmall,
-                color = ZunoColors.TextSecondary,
+                "Tap the link to sign in. It expires in 15 min.",
+                style = ZunoType.CaptionRegular,
+                color = ZunoColors.TextTertiary,
+                textAlign = TextAlign.Center,
             )
-            errorMessage?.let { AuthError(it) }
+            errorMessage?.let {
+                Spacer(Modifier.height(ZunoSpace.s12))
+                AuthError(it)
+            }
         }
-        Spacer(Modifier.weight(1f))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoButton(
-                label = if (isBusy) "Please wait…" else "Resend link",
-                onClick = onResend,
-                variant = ZunoButtonVariant.Secondary,
-                enabled = !isBusy,
+                label = "Open email app",
+                onClick = { openEmailApp(context) },
                 modifier = Modifier.fillMaxWidth(),
             )
             ZunoButton(
-                label = "Use a different email",
-                onClick = onUseDifferentEmail,
+                label = if (cooldown > 0) "Resend link in ${cooldown}s" else "Resend link",
+                onClick = {
+                    onResend()
+                    cooldown = RESEND_COOLDOWN_SECONDS
+                },
                 variant = ZunoButtonVariant.Ghost,
-                enabled = !isBusy,
+                enabled = cooldown == 0 && !isBusy,
+                loading = isBusy,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Wrong email?", style = ZunoType.CaptionRegular, color = ZunoColors.TextTertiary)
+                Text(
+                    "Use a different one",
+                    style = ZunoType.LabelSmall,
+                    color = ZunoColors.TextPrimary,
+                    modifier = Modifier.clickable(role = Role.Button, onClick = onUseDifferentEmail),
+                )
+            }
         }
+    }
+}
+
+private fun openEmailApp(context: Context) {
+    val intent = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_EMAIL)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, "No email app found on this device.", Toast.LENGTH_SHORT).show()
     }
 }
 

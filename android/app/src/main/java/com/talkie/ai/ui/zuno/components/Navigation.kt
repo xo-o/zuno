@@ -60,6 +60,9 @@ fun ZunoTitleTopBar(
     onMenu: () -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    @DrawableRes leadingIcon: Int = R.drawable.zuno_ic_menu,
+    leadingDescription: String = "Menu",
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -69,14 +72,18 @@ fun ZunoTitleTopBar(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIconButton(R.drawable.zuno_ic_menu, onMenu, contentDescription = "Menu")
+        ZunoIconButton(leadingIcon, onMenu, contentDescription = leadingDescription)
         EllipsizedText(
             text = title,
             style = ZunoType.Headline.copy(textAlign = TextAlign.Center),
             color = ZunoColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
-        ZunoIconButton(R.drawable.zuno_ic_more_vertical, onMore, contentDescription = "More options")
+        if (trailing != null) {
+            trailing()
+        } else {
+            ZunoIconButton(R.drawable.zuno_ic_more_vertical, onMore, contentDescription = "More options")
+        }
     }
 }
 
@@ -184,7 +191,7 @@ fun ZunoSessionRow(
 
 enum class LessonStatus { Done, Current, Upcoming }
 
-/** Lesson in a topic path. */
+/** Lesson in a topic path; sits inside a [ZunoListGroup]. */
 @Composable
 fun ZunoLessonRow(
     number: Int,
@@ -198,10 +205,9 @@ fun ZunoLessonRow(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
-            .clip(RoundedCornerShape(ZunoRadius.lg))
-            .background(if (status == LessonStatus.Current) ZunoColors.SurfaceDefault else Color.Transparent)
+            .background(if (status == LessonStatus.Current) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s12, end = ZunoSpace.s16),
+            .padding(start = ZunoSpace.s16, end = ZunoSpace.s16),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
         verticalAlignment = Alignment.CenterVertically,
     ) {

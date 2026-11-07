@@ -10,6 +10,13 @@
 
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
+    <!-- Hold-to-talk on Home uses the platform speech recognizer (package visibility, Android 11+). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

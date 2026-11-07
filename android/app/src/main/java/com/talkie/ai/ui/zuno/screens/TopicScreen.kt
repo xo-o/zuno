@@ -1,46 +1,59 @@
 package com.talkie.ai.ui.zuno.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
-import com.talkie.ai.ui.zuno.Lesson
-import com.talkie.ai.ui.zuno.Topic
+import com.talkie.ai.data.LessonState
+import com.talkie.ai.data.TopicDetail
+import com.talkie.ai.data.TopicLesson
+import com.talkie.ai.data.TopicStatus
+import com.talkie.ai.ui.zuno.components.LessonStatus
+import com.talkie.ai.ui.zuno.components.ZunoBackTitleTopBar
 import com.talkie.ai.ui.zuno.components.ZunoButton
+import com.talkie.ai.ui.zuno.components.ZunoButtonSize
+import com.talkie.ai.ui.zuno.components.ZunoButtonVariant
+import com.talkie.ai.ui.zuno.components.ZunoIcon
 import com.talkie.ai.ui.zuno.components.ZunoLessonRow
-import com.talkie.ai.ui.zuno.components.ZunoProgressBar
+import com.talkie.ai.ui.zuno.components.ZunoListGroup
+import com.talkie.ai.ui.zuno.components.ZunoLoadState
+import com.talkie.ai.ui.zuno.components.ZunoMenuAction
+import com.talkie.ai.ui.zuno.components.ZunoOverflowMenu
 import com.talkie.ai.ui.zuno.components.ZunoSectionHeader
-import com.talkie.ai.ui.zuno.components.ZunoTitleTopBar
+import com.talkie.ai.ui.zuno.components.ZunoSegmentedProgress
 import com.talkie.ai.ui.zuno.theme.ZunoColors
 import com.talkie.ai.ui.zuno.theme.ZunoRadius
 import com.talkie.ai.ui.zuno.theme.ZunoSpace
 import com.talkie.ai.ui.zuno.theme.ZunoType
-import kotlin.math.roundToInt
 
-/** 6 · Topic — hero card with progress and the lesson path. */
+/** Topic — Not started / In progress / Completed. */
 @Composable
 fun TopicScreen(
-    topic: Topic,
-    onOpenDrawer: () -> Unit,
-    onMore: () -> Unit,
-    onContinue: () -> Unit,
-    onLesson: (Lesson) -> Unit,
+    topic: TopicDetail?,
+    busy: Boolean,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onOpenLesson: (TopicLesson) -> Unit,
+    onReset: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -49,33 +62,56 @@ fun TopicScreen(
             .background(ZunoColors.BgCanvas)
             .statusBarsPadding(),
     ) {
-        ZunoTitleTopBar(title = "", onMenu = onOpenDrawer, onMore = onMore)
+        Box {
+            ZunoBackTitleTopBar(title = "Topic", onBack = onBack)
+            if (topic != null) {
+                ZunoOverflowMenu(
+                    actions = listOf(
+                        ZunoMenuAction("Reset progress", onReset),
+                        ZunoMenuAction("Delete topic", onDelete),
+                    ),
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = ZunoSpace.s12),
+                )
+            }
+        }
+        if (topic == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ZunoLoadState(error = null, onRetry = onRetry)
+            }
+            return@Column
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
         ) {
-            Box(Modifier.padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8)) {
-                TopicHero(topic = topic, onContinue = onContinue)
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = ZunoSpace.s12, end = ZunoSpace.s12, top = ZunoSpace.s24, bottom = ZunoSpace.s24),
-            ) {
-                Box(Modifier.padding(start = ZunoSpace.s12, end = ZunoSpace.s12, bottom = ZunoSpace.s4)) {
-                    ZunoSectionHeader(title = "Lessons")
-                }
-                topic.lessons.forEach { lesson ->
-                    ZunoLessonRow(
-                        number = lesson.number,
-                        title = lesson.title,
-                        status = lesson.status,
-                        meta = lesson.meta,
-                        onClick = { onLesson(lesson) },
-                    )
+            TopicHeader(topic)
+            ProgressCard(topic, busy, onOpenLesson)
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4)) {
+                Box(Modifier.padding(horizontal = ZunoSpace.s16)) { ZunoSectionHeader(title = "Lessons") }
+                ZunoListGroup {
+                    topic.lessons.forEach { lesson ->
+                        ZunoLessonRow(
+                            number = lesson.position,
+                            title = lesson.title,
+                            status = when (lesson.state) {
+                                LessonState.Done -> LessonStatus.Done
+                                LessonState.Current -> LessonStatus.Current
+                                LessonState.Upcoming -> LessonStatus.Upcoming
+                            },
+                            meta = when (lesson.state) {
+                                LessonState.Done -> "Done"
+                                LessonState.Current ->
+                                    if (topic.summary.status == TopicStatus.NotStarted) "Start here" else "Up next"
+                                LessonState.Upcoming -> null
+                            },
+                            onClick = { if (!busy) onOpenLesson(lesson) },
+                        )
+                    }
                 }
             }
         }
@@ -83,44 +119,75 @@ fun TopicScreen(
 }
 
 @Composable
-private fun TopicHero(topic: Topic, onContinue: () -> Unit) {
-    val shape = RoundedCornerShape(ZunoRadius.xxl)
+private fun TopicHeader(topic: TopicDetail) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = ZunoSpace.s4, vertical = ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(ZunoRadius.lg)).background(ZunoColors.SurfaceStrong),
+            contentAlignment = Alignment.Center,
+        ) {
+            ZunoIcon(
+                if (topic.summary.status == TopicStatus.Completed) R.drawable.zuno_ic_check else R.drawable.zuno_ic_book_open,
+                28.dp,
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+            Text(topic.summary.title, style = ZunoType.TitleLarge, color = ZunoColors.TextPrimary)
+            Text(topic.summary.translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun ProgressCard(topic: TopicDetail, busy: Boolean, onOpenLesson: (TopicLesson) -> Unit) {
+    val summary = topic.summary
+    val next = topic.nextLesson
+    val (eyebrow, headline) = when {
+        next == null -> "TOPIC COMPLETE" to "All ${summary.totalLessons} lessons done"
+        summary.status == TopicStatus.NotStarted -> "START WITH · LESSON ${next.position}" to next.title
+        else -> "UP NEXT · LESSON ${next.position}" to next.title
+    }
+    val statusLabel = when (summary.status) {
+        TopicStatus.NotStarted -> "Not started"
+        TopicStatus.InProgress -> "${summary.progress}%"
+        TopicStatus.Completed -> "Completed"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
-            .padding(ZunoSpace.s24),
-        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
+            .clip(RoundedCornerShape(ZunoRadius.xxl))
+            .background(ZunoColors.SurfaceDefault)
+            .padding(ZunoSpace.s20),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
-            Text("Topic", style = ZunoType.FootnoteStrong, color = ZunoColors.TextTertiary)
-            Text(topic.title, style = ZunoType.TitleLarge, color = ZunoColors.TextPrimary)
-            Text(topic.translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                "${summary.completedLessons} of ${summary.totalLessons} lessons",
+                style = ZunoType.CaptionRegular,
+                color = ZunoColors.TextSecondary,
+            )
+            Text(statusLabel, style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    "${topic.completed} of ${topic.lessons.size} lessons",
-                    style = ZunoType.CaptionRegular,
-                    color = ZunoColors.TextSecondary,
-                )
-                Text(
-                    "${(topic.progress * 100).roundToInt()}%",
-                    style = ZunoType.LabelSmall,
-                    color = ZunoColors.TextPrimary,
-                )
-            }
-            ZunoProgressBar(progress = topic.progress)
+        ZunoSegmentedProgress(total = summary.totalLessons, completed = summary.completedLessons)
+        Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderDefault))
+        Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+            Text(eyebrow, style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+            Text(headline, style = ZunoType.Headline, color = ZunoColors.TextPrimary)
         }
         ZunoButton(
-            label = "Continue",
-            onClick = onContinue,
-            trailingIcon = R.drawable.zuno_ic_arrow_right,
+            label = when (summary.status) {
+                TopicStatus.NotStarted -> "Start topic"
+                TopicStatus.InProgress -> "Continue"
+                TopicStatus.Completed -> "Practice again"
+            },
+            onClick = { (next ?: topic.lessons.firstOrNull())?.let(onOpenLesson) },
+            variant = if (summary.status == TopicStatus.Completed) ZunoButtonVariant.Secondary else ZunoButtonVariant.Primary,
+            size = ZunoButtonSize.Medium,
+            loading = busy,
             modifier = Modifier.fillMaxWidth(),
         )
     }

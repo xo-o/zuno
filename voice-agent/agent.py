@@ -143,12 +143,30 @@ def create_stt(language: str = "en"):
 
 
 class ConversationalAgent(Agent):
-    def __init__(self, tts=None, stt=None, language: str = "en") -> None:
+    def __init__(
+        self,
+        tts=None,
+        stt=None,
+        language: str = "en",
+        tutor_instructions: str | None = None,
+        resume: bool = False,
+    ) -> None:
         self.language = language
-        super().__init__(instructions=INSTRUCTIONS, tts=tts, stt=stt)
+        self.tutor_instructions = tutor_instructions
+        self.resume = resume
+        # The backend sends tutor instructions (Free Talk / roleplay / lesson) in the participant metadata.
+        instructions = f"{tutor_instructions}\n\n{INSTRUCTIONS}" if tutor_instructions else INSTRUCTIONS
+        super().__init__(instructions=instructions, tts=tts, stt=stt)
 
     async def on_enter(self) -> None:
-        if self.language in LANGUAGE_CONFIRMATIONS:
+        if self.resume:
+            # The conversation is already under way in the app; wait for the learner to speak.
+            return
+        if self.tutor_instructions:
+            self.session.generate_reply(
+                instructions="Greet the learner in one short sentence and invite them to start, following your role."
+            )
+        elif self.language in LANGUAGE_CONFIRMATIONS:
             greeting = LANGUAGE_CONFIRMATIONS[self.language]
             self.session.generate_reply(
                 instructions=f"Say: '{greeting}' and ask in 1 short sentence how you can assist."
@@ -171,6 +189,8 @@ async def entrypoint(ctx: JobContext) -> None:
     current_provider = "breeze"
     current_voice = "voc_9f5gtax4x5ac"
     current_language = "en"
+    tutor_instructions = None
+    resume = False
 
     # Inspect participant metadata if preset at connection time
     if participant.metadata:
@@ -182,6 +202,8 @@ async def entrypoint(ctx: JobContext) -> None:
                 current_voice = meta["voice"]
             if "language" in meta:
                 current_language = meta["language"]
+            tutor_instructions = meta.get("instructions") or None
+            resume = bool(meta.get("resume", False))
             logger.info(
                 f"Initialized from participant metadata: provider={current_provider}, voice={current_voice}, lang={current_language}"
             )
@@ -194,7 +216,9 @@ async def entrypoint(ctx: JobContext) -> None:
     llm = gg.LLM(model="gemini-2.5-flash", temperature=0.4)
     tts = create_tts(current_provider, current_voice, current_language)
 
-    agent = ConversationalAgent(tts=tts, stt=stt, language=current_language)
+    agent = ConversationalAgent(
+        tts=tts, stt=stt, language=current_language, tutor_instructions=tutor_instructions, resume=resume
+    )
 
     session = AgentSession(
         stt=stt,
@@ -300,7 +324,15 @@ async def entrypoint(ctx: JobContext) -> None:
                     session._activity._update_models(new_tts=new_tts, new_stt=new_stt)
 
                 # 3. Update active agent
-                session.update_agent(ConversationalAgent(tts=new_tts, stt=new_stt, language=current_language))
+                session.update_agent(
+                    ConversationalAgent(
+                        tts=new_tts,
+                        stt=new_stt,
+                        language=current_language,
+                        tutor_instructions=tutor_instructions,
+                        resume=True,
+                    )
+                )
 
                 asyncio.create_task(
                     broadcast_event({

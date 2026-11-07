@@ -1,7 +1,13 @@
 package com.talkie.ai.ui.zuno.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,21 +15,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
 import com.talkie.ai.ui.zuno.theme.ZunoColors
@@ -92,7 +100,7 @@ fun ZunoAssistantBubble(
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
     ) {
         if (showSender) {
-            Text("AI Tutor", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+            Text("ZunoAI", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
         }
         Column(
             modifier = Modifier
@@ -168,31 +176,37 @@ fun ZunoComposer(
     modifier: Modifier = Modifier,
     placeholder: String = "Ask me anything",
     focusRequester: FocusRequester? = null,
+    showAttach: Boolean = true,
+    enabled: Boolean = true,
+    elevated: Boolean = false,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
             .clip(CircleShape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, CircleShape)
-            .padding(ZunoSpace.s8),
+            .background(if (elevated) ZunoColors.BgElevated else ZunoColors.SurfaceDefault)
+            .border(1.dp, if (elevated) ZunoColors.BorderFocus else ZunoColors.BorderDefault, CircleShape)
+            .padding(start = if (showAttach) ZunoSpace.s8 else ZunoSpace.s20, end = ZunoSpace.s8),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIconButton(
-            icon = R.drawable.zuno_ic_plus,
-            onClick = onAttach,
-            style = ZunoIconButtonStyle.Subtle,
-            contentDescription = "Attach",
-        )
+        if (showAttach) {
+            ZunoIconButton(
+                icon = R.drawable.zuno_ic_plus,
+                onClick = onAttach,
+                style = ZunoIconButtonStyle.Subtle,
+                contentDescription = "Attach",
+            )
+        }
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
+            enabled = enabled,
             singleLine = true,
             textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
             cursorBrush = SolidColor(ZunoColors.TextPrimary),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardOptions = LearnerKeyboard,
             keyboardActions = KeyboardActions(onSend = { onSend() }),
             modifier = Modifier
                 .weight(1f)
@@ -206,11 +220,70 @@ fun ZunoComposer(
                 }
             },
         )
-        ZunoIconButton(
-            icon = R.drawable.zuno_ic_composer_voice,
-            onClick = onVoice,
-            style = ZunoIconButtonStyle.Strong,
-            contentDescription = "Voice mode",
-        )
+        if (value.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(ZunoColors.SurfaceInverse)
+                    .clickable(enabled = enabled, role = Role.Button, onClick = onSend),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(R.drawable.zuno_ic_arrow_up_inverse, 20.dp, contentDescription = "Send")
+            }
+        } else {
+            ZunoIconButton(
+                icon = R.drawable.zuno_ic_composer_voice,
+                onClick = onVoice,
+                style = ZunoIconButtonStyle.Strong,
+                contentDescription = "Voice mode",
+            )
+        }
+    }
+}
+
+/** Assistant placeholder while the tutor is composing a reply. */
+@Composable
+fun ZunoTypingBubble(modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(
+        topStart = ZunoRadius.xs,
+        topEnd = ZunoRadius.xl,
+        bottomEnd = ZunoRadius.xl,
+        bottomStart = ZunoRadius.xl,
+    )
+    val transition = rememberInfiniteTransition(label = "typing")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "typingAlpha",
+    )
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
+        Text("ZunoAI", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+        Row(
+            modifier = Modifier
+                .clip(shape)
+                .background(ZunoColors.SurfaceSubtle)
+                .border(1.dp, ZunoColors.BorderDefault, shape)
+                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14)
+                .alpha(alpha),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+        ) {
+            repeat(3) { Box(Modifier.size(6.dp).clip(CircleShape).background(ZunoColors.TextSecondary)) }
+        }
+    }
+}
+
+/** "New Free Talk · Just now" divider at the top of a conversation. */
+@Composable
+fun ZunoSessionStart(label: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().height(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f).height(1.dp).background(ZunoColors.BorderDefault))
+        Text(label, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+        Box(Modifier.weight(1f).height(1.dp).background(ZunoColors.BorderDefault))
     }
 }

@@ -4,11 +4,33 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { HTTPException } from "hono/http-exception";
 import { AccessToken } from "livekit-server-sdk";
 import { auth } from "./lib/auth.js";
+import { contextFor, findConversation, listMessages } from "./lib/conversations.js";
+import { GeminiError } from "./lib/gemini.js";
 import { completeFlow, consumeFlow, getFlow, isFlowVerified } from "./lib/magic-link-flows.js";
+import { getProfile } from "./lib/profile.js";
+import { voiceInstructions } from "./lib/tutor.js";
+import { conversationRoutes, messageRoutes, tutorRoutes } from "./routes/conversations.js";
+import { profileRoutes } from "./routes/profile.js";
+import { roleplayRoutes } from "./routes/roleplays.js";
+import { topicRoutes } from "./routes/topics.js";
 
 const app = new Hono();
+
+app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message }, err.status);
+  }
+  if (err instanceof GeminiError) {
+    console.error("Gemini error:", err.message);
+    const status = err.status === 429 ? 503 : 502;
+    return c.json({ error: "Zuno is busy right now. Please try again in a moment." }, status);
+  }
+  console.error("Unhandled error:", err);
+  return c.json({ error: "Something went wrong. Please try again." }, 500);
+});
 
 // Middlewares
 app.use("*", logger());
@@ -52,23 +74,25 @@ app.all("/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
-// 2. Profile endpoint (Protected by session / bearer token)
-app.get("/api/me", async (c) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-  return c.json({ user: session.user });
-});
+// 2. App API (protected by session / bearer token)
+app.route("/api/me", profileRoutes);
+app.route("/api/topics", topicRoutes);
+app.route("/api/roleplays", roleplayRoutes);
+app.route("/api/conversations", conversationRoutes);
+app.route("/api/messages", messageRoutes);
+app.route("/api/tutor", tutorRoutes);
 
 // 3. LiveKit token generation
 type TokenRequest = {
   provider?: string;
   voice?: string;
   language?: string;
+  /** When set, the voice agent follows this conversation's roleplay / lesson context. */
+  conversationId?: string;
 };
 
 const TOKEN_TTL = "6h";
+const VOICE_HISTORY_TURNS = 12;
 
 app.post("/api/livekit/token", async (c) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -85,6 +109,15 @@ app.post("/api/livekit/token", async (c) => {
   const { user } = session;
   const room = `talkie-${randomUUID().slice(0, 8)}`;
 
+  const profile = await getProfile(user.id);
+  const thread = body.conversationId ? await findConversation(user.id, body.conversationId) : undefined;
+  const context = thread ? await contextFor(thread) : { kind: "freetalk" as const };
+  const history = thread ? (await listMessages(thread.id)).slice(-VOICE_HISTORY_TURNS) : [];
+  const transcript = history.map((m) => `${m.role === "user" ? "Learner" : "You"}: ${m.text}`).join("\n");
+  const instructions = transcript
+    ? `${voiceInstructions(context, profile)}\n\nConversation so far (continue naturally from here):\n${transcript}`
+    : voiceInstructions(context, profile);
+
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
     name: user.name || user.email,
@@ -92,7 +125,10 @@ app.post("/api/livekit/token", async (c) => {
     metadata: JSON.stringify({
       provider: body.provider ?? "breeze",
       voice: body.voice ?? "voc_9f5gtax4x5ac",
-      language: body.language ?? "en",
+      language: body.language ?? profile.targetLanguage,
+      instructions,
+      // The agent stays quiet until the learner speaks when the conversation is already under way.
+      resume: history.length > 0,
     }),
   });
 

@@ -70,6 +70,7 @@ fun ZunoButton(
     enabled: Boolean = true,
     @DrawableRes leadingIcon: Int? = null,
     @DrawableRes trailingIcon: Int? = null,
+    loading: Boolean = false,
 ) {
     val shape = CircleShape
     val container = when (variant) {
@@ -82,19 +83,23 @@ fun ZunoButton(
 
     Row(
         modifier = modifier
-            .alpha(if (enabled) 1f else 0.4f)
+            .alpha(if (enabled || loading) 1f else 0.4f)
             .height(size.height)
             .clip(shape)
             .background(container)
             .then(
                 if (variant == ZunoButtonVariant.Secondary) Modifier.border(1.dp, ZunoColors.BorderDefault, shape) else Modifier
             )
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled && !loading, role = Role.Button, onClick = onClick)
             .padding(horizontal = size.horizontalPadding),
         horizontalArrangement = Arrangement.spacedBy(size.gap, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        leadingIcon?.let { ZunoIcon(it, size.iconSize) }
+        if (loading) {
+            ZunoSpinner(size = size.iconSize, color = contentColor)
+        } else {
+            leadingIcon?.let { ZunoIcon(it, size.iconSize) }
+        }
         Text(text = label, style = textStyle, color = contentColor, maxLines = 1)
         trailingIcon?.let { ZunoIcon(it, size.iconSize) }
     }

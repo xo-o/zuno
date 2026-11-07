@@ -33,12 +33,14 @@ object TokenService {
 
     suspend fun fetchToken(
         sessionToken: String,
-        selectedVoice: VoiceOption = VoiceCatalog.DEFAULT_VOICE
+        selectedVoice: VoiceOption = VoiceCatalog.DEFAULT_VOICE,
+        conversationId: String? = null,
     ): TokenResult = withContext(Dispatchers.IO) {
         val bodyJson = JSONObject().apply {
             put("provider", selectedVoice.provider)
             put("voice", selectedVoice.id)
             put("language", selectedVoice.language)
+            conversationId?.let { put("conversationId", it) }
         }
         val request = Request.Builder()
             .url(tokenUrl)
