@@ -14,6 +14,7 @@ import com.talkie.ai.service.TokenService
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +52,7 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
 
     private var currentRoom: Room? = null
     private var eventJob: Job? = null
+    private var connectJob: Job? = null
 
     fun selectVoice(voice: VoiceOption) {
         _selectedVoice.value = voice
@@ -97,7 +99,7 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
         _agentState.value = AgentState.CONNECTING
         voice?.let { _selectedVoice.value = it }
 
-        viewModelScope.launch {
+        connectJob = viewModelScope.launch {
             try {
                 val tokenResult = TokenService.fetchToken(
                     sessionToken,
@@ -120,6 +122,9 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
                 room.localParticipant.setMicrophoneEnabled(true)
                 _isMuted.value = false
                 _agentState.value = AgentState.IDLE
+            } catch (e: CancellationException) {
+                // Hung up while connecting; disconnectInternal already reset the state.
+                throw e
             } catch (e: SessionExpiredException) {
                 _errorMessage.value = e.message
                 disconnectInternal()
@@ -132,19 +137,21 @@ class TalkieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun disconnect() {
-        viewModelScope.launch {
-            disconnectInternal()
-        }
-    }
+    /** Hangs up synchronously, so a new call can be started right away. */
+    fun disconnect() = disconnectInternal()
 
     private fun disconnectInternal() {
+        connectJob?.cancel()
+        connectJob = null
         eventJob?.cancel()
         eventJob = null
-        try {
-            currentRoom?.disconnect()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error disconnecting room", e)
+        currentRoom?.let { room ->
+            try {
+                room.disconnect()
+                room.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error disconnecting room", e)
+            }
         }
         currentRoom = null
         _agentState.value = AgentState.DISCONNECTED

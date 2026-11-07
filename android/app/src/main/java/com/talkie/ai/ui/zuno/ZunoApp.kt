@@ -630,7 +630,10 @@ fun ZunoApp(
                         onRetryLoad = { zunoViewModel.loadConversation(screen.conversationId) },
                         onSend = { text -> zunoViewModel.send(screen.conversationId, text) },
                         onDraftChanged = zunoViewModel::onDraftChanged,
-                        onStartVoice = { startVoice(screen.conversationId) },
+                        onStartVoice = {
+                            if (chat?.pendingText == null) startVoice(screen.conversationId)
+                            else toast("One moment — Zuno is still replying")
+                        },
                         onSwitchToText = { endVoice() },
                         onToggleMute = { viewModel.toggleMute() },
                         onEndVoice = { endVoice() },

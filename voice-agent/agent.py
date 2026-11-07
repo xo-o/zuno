@@ -6,6 +6,7 @@ import time
 
 import certifi
 from dotenv import load_dotenv
+from google.genai import types
 
 # Python builds on macOS often ship without a CA bundle, which breaks TLS to LiveKit Cloud.
 os.environ.setdefault("SSL_CERT_FILE", certifi.where())
@@ -156,23 +157,35 @@ class ConversationalAgent(Agent):
         tutor_instructions: str | None = None,
         resume: bool = False,
         opening: str | None = None,
+        silent_enter: bool = False,
     ) -> None:
         self.language = language
         self.tutor_instructions = tutor_instructions
         self.resume = resume
         self.opening = opening
+        self.silent_enter = silent_enter
         # The backend sends tutor instructions (Free Talk / roleplay / lesson) in the participant metadata.
         instructions = f"{tutor_instructions}\n\n{INSTRUCTIONS}" if tutor_instructions else INSTRUCTIONS
         super().__init__(instructions=instructions, tts=tts, stt=stt)
 
     async def on_enter(self) -> None:
+        if self.silent_enter:
+            return
         if self.opening:
             # The learner's first turn was answered in the app; speak that reply to open the call.
             # It is already in the instructions transcript and in the app's history, so keep it out of the chat context.
             self.session.say(self.opening, add_to_chat_ctx=False)
             return
         if self.resume:
-            # The conversation is already under way in the app; wait for the learner to speak.
+            # Voice was switched on mid-conversation: pick up where the chat left off so the
+            # learner hears that the call is live.
+            self.session.generate_reply(
+                instructions=(
+                    "The learner just switched to a live voice call in the middle of this conversation. "
+                    "If their last message has not been answered yet, answer it. Otherwise, continue "
+                    "naturally from where the conversation left off. One short sentence, in your role."
+                )
+            )
             return
         if self.tutor_instructions:
             self.session.generate_reply(
@@ -227,7 +240,11 @@ async def entrypoint(ctx: JobContext) -> None:
     # Fast VAD for instant barge-in cut-off
     vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
     stt = create_stt(current_language)
-    llm = gg.LLM(model="gemini-2.5-flash", temperature=0.4)
+    llm = gg.LLM(
+        model="gemini-2.5-flash",
+        temperature=0.4,
+        http_options=types.HttpOptions(api_version="v1beta"),
+    )
     tts = create_tts(current_provider, current_voice, current_language)
 
     agent = ConversationalAgent(
@@ -350,6 +367,7 @@ async def entrypoint(ctx: JobContext) -> None:
                         language=current_language,
                         tutor_instructions=tutor_instructions,
                         resume=True,
+                        silent_enter=True,
                     )
                 )
 
