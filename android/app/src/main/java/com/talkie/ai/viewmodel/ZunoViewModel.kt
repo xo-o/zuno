@@ -1,10 +1,19 @@
 package com.talkie.ai.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkie.ai.auth.SessionTokenStore
 import com.talkie.ai.data.ApiException
+import com.talkie.ai.data.Attachment
+import com.talkie.ai.data.AttachmentFiles
+import com.talkie.ai.data.AttachmentKind
+import com.talkie.ai.data.AttachmentStatus
+import com.talkie.ai.data.DraftStore
+import com.talkie.ai.data.MaterialPart
+import com.talkie.ai.data.PreparedFile
+import com.talkie.ai.data.SavedDraftAttachment
 import com.talkie.ai.data.Conversation
 import com.talkie.ai.data.ConversationThread
 import com.talkie.ai.data.Message
@@ -16,6 +25,7 @@ import com.talkie.ai.data.TopicDetail
 import com.talkie.ai.data.TopicSummary
 import com.talkie.ai.data.ZunoApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,13 +44,61 @@ data class ChatState(
     val messages: List<Message>,
     /** Learner text sent but not yet answered — rendered as an optimistic bubble. */
     val pendingText: String? = null,
+    /** Attachments sent with [pendingText], shown from their local previews until the reply lands. */
+    val pendingAttachments: List<DraftAttachment> = emptyList(),
     val error: String? = null,
+)
+
+sealed interface DraftUploadState {
+    data object Preparing : DraftUploadState
+    data class Uploading(val progress: Float) : DraftUploadState
+    /** Uploaded; the server is reading the file. */
+    data object Processing : DraftUploadState
+    data object Ready : DraftUploadState
+    data class Failed(val reason: String) : DraftUploadState
+}
+
+/** A file or link added in the composer (or as topic material), not yet sent. */
+data class DraftAttachment(
+    val localId: String,
+    val source: Uri,
+    val name: String,
+    val mimeType: String = "",
+    val sizeBytes: Long = 0,
+    val isImage: Boolean = false,
+    /** Thumbnail until the message is sent: the local file, or a signed URL for restored drafts. */
+    val preview: Uri? = null,
+    val state: DraftUploadState = DraftUploadState.Preparing,
+    val serverId: String? = null,
+    /** Pasted article or video link; [url] is its address. */
+    val isLink: Boolean = false,
+    val url: String? = null,
+    val pageCount: Int? = null,
+    val sectionCount: Int? = null,
+    /** Already sent in a chat and reused as topic material — never deleted from the server. */
+    val borrowed: Boolean = false,
+    internal val file: PreparedFile? = null,
+)
+
+/** Draft key for the Home composer, which has no conversation yet. */
+const val HOME_DRAFT_KEY = "home"
+
+/** Draft key for learning material on the New topic screen. */
+const val TOPIC_DRAFT_KEY = "topic-new"
+
+/** "Found in your material" for the New topic screen. [parts] is null until analysed. */
+data class MaterialAnalysis(
+    val attachmentIds: List<String> = emptyList(),
+    val parts: List<MaterialPart>? = null,
+    val selected: Set<String> = emptySet(),
+    val loading: Boolean = false,
 )
 
 class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val tokenStore = SessionTokenStore(application)
     private val api = ZunoApi(tokenProvider = tokenStore::read)
+    private val draftStore = DraftStore(application)
 
     private val _profile = MutableStateFlow<Profile?>(null)
     val profile: StateFlow<Profile?> = _profile.asStateFlow()
@@ -68,6 +126,31 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     val typingHint: StateFlow<String?> = _typingHint.asStateFlow()
     private var hintJob: Job? = null
 
+    /** Composer attachments per conversation id (or [HOME_DRAFT_KEY]). */
+    private val _drafts = MutableStateFlow<Map<String, List<DraftAttachment>>>(emptyMap())
+    val drafts: StateFlow<Map<String, List<DraftAttachment>>> = _drafts.asStateFlow()
+    private val uploadJobs = mutableMapOf<String, Job>()
+    private val restoredDrafts = mutableSetOf<String>()
+
+    private val _materialAnalysis = MutableStateFlow(MaterialAnalysis())
+    val materialAnalysis: StateFlow<MaterialAnalysis> = _materialAnalysis.asStateFlow()
+    private var analysisJob: Job? = null
+
+    init {
+        // Ready attachments are saved with the conversation's draft, so they survive the app being closed.
+        viewModelScope.launch {
+            var saved = emptyMap<String, List<SavedDraftAttachment>>()
+            _drafts.collect { drafts ->
+                val next = drafts
+                    .filterKeys { it != TOPIC_DRAFT_KEY }
+                    .mapValues { (_, list) -> list.mapNotNull { it.toSaved() } }
+                (saved.keys - next.keys).forEach { draftStore.saveAttachments(it, emptyList()) }
+                next.forEach { (key, list) -> if (saved[key] != list) draftStore.saveAttachments(key, list) }
+                saved = next
+            }
+        }
+    }
+
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     /** One-off user-facing messages (errors, confirmations). */
     val messages: SharedFlow<String> = _messages.asSharedFlow()
@@ -91,6 +174,14 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _roleplays.value = Loadable()
         _chats.value = emptyMap()
         _typingHint.value = null
+        uploadJobs.values.forEach { it.cancel() }
+        uploadJobs.clear()
+        _drafts.value.values.flatten().forEach { it.file?.file?.delete() }
+        _drafts.value = emptyMap()
+        restoredDrafts.clear()
+        draftStore.clear()
+        analysisJob?.cancel()
+        _materialAnalysis.value = MaterialAnalysis()
     }
 
     fun updateProfile(targetLanguage: TargetLanguage? = null, level: String? = null, name: String? = null) =
@@ -113,12 +204,81 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createTopic(prompt: String, onCreated: (TopicDetail) -> Unit) = runBusy {
-        val topic = api.createTopic(prompt)
-        cacheTopic(topic)
-        _topics.update { state -> state.copy(items = listOf(topic.summary) + state.items.orEmpty()) }
-        refreshRecent()
-        onCreated(topic)
+    /** Creates a topic from the goal plus any learning material on the New topic screen. */
+    fun createTopic(prompt: String, onCreated: (TopicDetail) -> Unit) {
+        val material = _drafts.value[TOPIC_DRAFT_KEY].orEmpty()
+        if (material.any { it.state != DraftUploadState.Ready }) {
+            _messages.tryEmit("Wait for your material to finish uploading")
+            return
+        }
+        val parts = _materialAnalysis.value.let { analysis ->
+            analysis.parts?.map { it.label }?.filter { it in analysis.selected }.orEmpty()
+        }
+        runBusy {
+            val topic = api.createTopic(prompt, material.mapNotNull { it.serverId }, parts)
+            // The material now belongs to the topic on the server; only the local copies go.
+            _drafts.update { it - TOPIC_DRAFT_KEY }
+            material.forEach { it.file?.file?.delete() }
+            analysisJob?.cancel()
+            _materialAnalysis.value = MaterialAnalysis()
+            cacheTopic(topic)
+            _topics.update { state -> state.copy(items = listOf(topic.summary) + state.items.orEmpty()) }
+            refreshRecent()
+            onCreated(topic)
+        }
+    }
+
+    /** Asks Zuno which sub-topics the (ready) learning material covers. No-op if already analysed. */
+    fun analyzeMaterial(prompt: String) {
+        val ids = _drafts.value[TOPIC_DRAFT_KEY].orEmpty()
+            .filter { it.state == DraftUploadState.Ready }
+            .mapNotNull { it.serverId }
+        val current = _materialAnalysis.value
+        if (ids.isEmpty()) {
+            analysisJob?.cancel()
+            _materialAnalysis.value = MaterialAnalysis()
+            return
+        }
+        if (ids == current.attachmentIds) return
+        analysisJob?.cancel()
+        _materialAnalysis.value = current.copy(attachmentIds = ids, loading = true)
+        analysisJob = viewModelScope.launch {
+            try {
+                val parts = api.analyzeMaterial(prompt, ids)
+                // Keep the learner's choices for parts that are still there.
+                val kept = current.selected.filter { label -> parts.any { it.label == label } }.toSet()
+                _materialAnalysis.value = MaterialAnalysis(
+                    attachmentIds = ids,
+                    parts = parts,
+                    selected = kept.ifEmpty { parts.filter { it.suggested }.map { it.label }.toSet() },
+                )
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _materialAnalysis.value = MaterialAnalysis(attachmentIds = ids, parts = current.parts, selected = current.selected)
+            }
+        }
+    }
+
+    fun toggleMaterialPart(label: String) = _materialAnalysis.update { state ->
+        state.copy(selected = if (label in state.selected) state.selected - label else state.selected + label)
+    }
+
+    /** Leaving New topic without creating it discards the material. */
+    fun discardTopicDraft() {
+        _drafts.value[TOPIC_DRAFT_KEY].orEmpty().forEach { removeAttachment(TOPIC_DRAFT_KEY, it.localId) }
+        analysisJob?.cancel()
+        _materialAnalysis.value = MaterialAnalysis()
+    }
+
+    /** "Turn into a topic": reuses the files and links shared in a chat as material. Returns a suggested goal. */
+    fun prefillTopicFromChat(conversationId: String): String {
+        discardTopicDraft()
+        val chat = _chats.value[conversationId] ?: return ""
+        val shared = chat.messages.flatMap { it.attachments }
+            .filter { it.status == AttachmentStatus.Ready }
+            .takeLast(MAX_TOPIC_MATERIAL)
+        if (shared.isNotEmpty()) _drafts.update { it + (TOPIC_DRAFT_KEY to shared.map { a -> a.toDraft(borrowed = true) }) }
+        return chat.conversation.title.takeUnless { it == "Free Talk" }.orEmpty()
     }
 
     fun loadTopic(id: String) = launchSafely { cacheTopic(api.topic(id)) }
@@ -203,9 +363,13 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onOpened: (Conversation) -> Unit,
     ) = runBusy {
         val thread = api.createFreeTalk()
+        val id = thread.conversation.id
         cacheThread(thread)
+        // Attachments added on Home travel with the first message.
+        val homeDrafts = if (viaVoice) emptyList() else _drafts.value[HOME_DRAFT_KEY].orEmpty()
+        if (homeDrafts.isNotEmpty()) _drafts.update { it - HOME_DRAFT_KEY + (id to homeDrafts) }
         onOpened(thread.conversation)
-        if (!firstMessage.isNullOrBlank()) send(thread.conversation.id, firstMessage, viaVoice, onReplied)
+        if (!firstMessage.isNullOrBlank() || homeDrafts.isNotEmpty()) send(id, firstMessage.orEmpty(), viaVoice, onReplied)
         refreshRecent()
     }
 
@@ -213,6 +377,8 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteConversation(id: String, onDeleted: () -> Unit) = launchSafely {
         api.deleteConversation(id)
+        _drafts.value[id].orEmpty().forEach { removeAttachment(id, it.localId) }
+        draftStore.remove(id)
         _chats.update { it - id }
         refreshRecent()
         onDeleted()
@@ -225,22 +391,31 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onReplied: ((Boolean) -> Unit)? = null,
     ) {
         val current = _chats.value[conversationId]
-        if (current == null || current.pendingText != null) {
+        val attachments = _drafts.value[conversationId].orEmpty()
+        if (current == null || current.pendingText != null || (text.isBlank() && attachments.isEmpty())) {
             onReplied?.invoke(false)
             return
         }
-        updateChat(conversationId) { it.copy(pendingText = text, error = null) }
+        if (attachments.any { it.state != DraftUploadState.Ready }) {
+            _messages.tryEmit("Wait for your files to finish uploading")
+            onReplied?.invoke(false)
+            return
+        }
+        _drafts.update { it - conversationId }
+        updateChat(conversationId) { it.copy(pendingText = text, pendingAttachments = attachments, error = null) }
         _typingHint.value = null
         viewModelScope.launch {
             try {
-                val result = api.sendMessage(conversationId, text, viaVoice)
+                val result = api.sendMessage(conversationId, text, viaVoice, attachments.mapNotNull { it.serverId })
                 updateChat(conversationId) {
                     it.copy(
                         conversation = result.conversation,
                         messages = it.messages + result.userMessage + result.reply,
                         pendingText = null,
+                        pendingAttachments = emptyList(),
                     )
                 }
+                attachments.forEach { it.file?.file?.delete() }
                 onReplied?.invoke(true)
                 if (result.lessonCompleted) {
                     result.conversation.topicId?.let { loadTopic(it) }
@@ -249,9 +424,209 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                 refreshRecent()
             } catch (e: ApiException) {
                 handleAuth(e)
-                updateChat(conversationId) { it.copy(pendingText = null, error = e.message) }
+                updateChat(conversationId) { it.copy(pendingText = null, pendingAttachments = emptyList(), error = e.message) }
+                // Unsent files stay valid on the server, so put them back in the composer.
+                if (attachments.isNotEmpty()) {
+                    _drafts.update { it + (conversationId to attachments + it[conversationId].orEmpty()) }
+                }
                 onReplied?.invoke(false)
             }
+        }
+    }
+
+    // ── Attachments ─────────────────────────────────────────────────────────
+
+    /** How many attachments the composer (or topic material) for [key] can hold. */
+    fun maxAttachments(key: String) = if (key == TOPIC_DRAFT_KEY) MAX_TOPIC_MATERIAL else AttachmentFiles.MAX_PER_MESSAGE
+
+    private fun limitMessage(key: String) =
+        if (key == TOPIC_DRAFT_KEY) "You can add up to $MAX_TOPIC_MATERIAL files"
+        else "You can attach up to ${AttachmentFiles.MAX_PER_MESSAGE} files per message"
+
+    /** Adds picked files to the composer for [key] and uploads them right away. */
+    fun addAttachments(key: String, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val room = maxAttachments(key) - _drafts.value[key].orEmpty().size
+        if (room <= 0 || uris.size > room) _messages.tryEmit(limitMessage(key))
+        uris.take(room.coerceAtLeast(0)).forEach { uri ->
+            val draft = DraftAttachment(localId = java.util.UUID.randomUUID().toString(), source = uri, name = "")
+            _drafts.update { it + (key to it[key].orEmpty() + draft) }
+            startUpload(key, draft.localId)
+        }
+    }
+
+    /** Adds a pasted article or video link; the server reads it before it can be sent. */
+    fun addLink(key: String, url: String) {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return
+        if (_drafts.value[key].orEmpty().size >= maxAttachments(key)) {
+            _messages.tryEmit(limitMessage(key))
+            return
+        }
+        val host = runCatching { Uri.parse(if ("://" in trimmed) trimmed else "https://$trimmed").host }.getOrNull()
+        val draft = DraftAttachment(
+            localId = java.util.UUID.randomUUID().toString(),
+            source = Uri.EMPTY,
+            name = host?.removePrefix("www.") ?: trimmed,
+            isLink = true,
+            url = trimmed,
+            state = DraftUploadState.Processing,
+        )
+        _drafts.update { it + (key to it[key].orEmpty() + draft) }
+        startUpload(key, draft.localId)
+    }
+
+    /** Unsent composer text for [key], saved across app restarts. */
+    fun draftText(key: String): String = draftStore.text(key)
+
+    fun saveDraftText(key: String, text: String) = draftStore.saveText(key, text)
+
+    /** Puts back the attachments saved with a conversation's draft (once per app session). */
+    fun restoreDraft(key: String) {
+        if (!restoredDrafts.add(key)) return
+        val saved = draftStore.read(key)?.attachments.orEmpty()
+        if (saved.isEmpty()) return
+        viewModelScope.launch {
+            val restored = saved.mapNotNull { item ->
+                try {
+                    // Re-fetch for a fresh signed URL and to drop files the server no longer has.
+                    api.attachment(item.serverId).takeIf { it.status == AttachmentStatus.Ready }?.toDraft()
+                } catch (e: ApiException) {
+                    handleAuth(e)
+                    null
+                }
+            }
+            _drafts.update { drafts ->
+                val current = drafts[key].orEmpty()
+                val merged = (restored.filter { r -> current.none { it.serverId == r.serverId } } + current)
+                    .take(maxAttachments(key))
+                if (merged.isEmpty()) drafts - key else drafts + (key to merged)
+            }
+        }
+    }
+
+    fun retryAttachment(key: String, localId: String) {
+        val draft = findDraft(key, localId) ?: return
+        if (draft.state !is DraftUploadState.Failed) return
+        draft.serverId?.let { id -> launchSafely(silent = true) { api.deleteAttachment(id) } }
+        updateDraft(key, localId) {
+            it.copy(serverId = null, state = if (it.isLink) DraftUploadState.Processing else DraftUploadState.Preparing)
+        }
+        startUpload(key, localId)
+    }
+
+    fun removeAttachment(key: String, localId: String) {
+        val draft = findDraft(key, localId) ?: return
+        uploadJobs.remove(localId)?.cancel()
+        _drafts.update { drafts ->
+            val remaining = drafts[key].orEmpty().filterNot { it.localId == localId }
+            if (remaining.isEmpty()) drafts - key else drafts + (key to remaining)
+        }
+        if (!draft.borrowed) draft.serverId?.let { id -> launchSafely(silent = true) { api.deleteAttachment(id) } }
+        draft.file?.file?.delete()
+    }
+
+    /** Signed links expire, so documents are opened with a freshly signed URL. */
+    suspend fun attachmentUrl(id: String): String? = try {
+        api.attachment(id).url
+    } catch (e: ApiException) {
+        handleAuth(e)
+        _messages.tryEmit(e.message ?: "Couldn't open this file")
+        null
+    }
+
+    private fun startUpload(key: String, localId: String) {
+        uploadJobs.remove(localId)?.cancel()
+        if (findDraft(key, localId)?.isLink == true) {
+            uploadJobs[localId] = viewModelScope.launch { readLink(key, localId) }
+            return
+        }
+        uploadJobs[localId] = viewModelScope.launch {
+            val prepared = findDraft(key, localId)?.file ?: try {
+                AttachmentFiles.prepare(getApplication(), findDraft(key, localId)?.source ?: return@launch)
+            } catch (e: ApiException) {
+                // Unsupported or unreadable files never make it into the composer.
+                removeAttachment(key, localId)
+                _messages.tryEmit(e.message ?: "Couldn't add this file")
+                return@launch
+            }
+            updateDraft(key, localId) {
+                it.copy(
+                    file = prepared,
+                    name = prepared.name,
+                    mimeType = prepared.mimeType,
+                    sizeBytes = prepared.file.length(),
+                    isImage = prepared.isImage,
+                    preview = if (prepared.isImage) Uri.fromFile(prepared.file) else null,
+                    state = DraftUploadState.Uploading(0f),
+                )
+            }
+            try {
+                val ticket = api.createUpload(prepared)
+                val id = ticket.attachment.id
+                updateDraft(key, localId) { it.copy(serverId = id) }
+                var lastShown = 0f
+                api.uploadToStorage(ticket, prepared) { progress ->
+                    if (progress - lastShown >= 0.02f || progress >= 1f) {
+                        lastShown = progress
+                        updateDraft(key, localId) { it.copy(state = DraftUploadState.Uploading(progress)) }
+                    }
+                }
+                val attachment = api.completeUpload(id)
+                updateDraft(key, localId) { it.copy(state = DraftUploadState.Processing) }
+                finishProcessing(key, localId, attachment)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                updateDraft(key, localId) { it.copy(state = DraftUploadState.Failed(e.message ?: "Upload failed")) }
+            } finally {
+                if (uploadJobs[localId] === coroutineContext[Job]) uploadJobs.remove(localId)
+            }
+        }
+    }
+
+    private suspend fun readLink(key: String, localId: String) {
+        val url = findDraft(key, localId)?.url ?: return
+        try {
+            val attachment = api.createLink(url)
+            updateDraft(key, localId) { it.copy(serverId = attachment.id, url = attachment.url ?: url) }
+            finishProcessing(key, localId, attachment)
+        } catch (e: ApiException) {
+            handleAuth(e)
+            updateDraft(key, localId) { it.copy(state = DraftUploadState.Failed(e.message ?: "Couldn't add this link")) }
+        } finally {
+            if (uploadJobs[localId] === currentCoroutineContext()[Job]) uploadJobs.remove(localId)
+        }
+    }
+
+    /** Polls while the server reads the file or link, then marks the draft ready (with its title) or failed. */
+    private suspend fun finishProcessing(key: String, localId: String, initial: Attachment) {
+        var attachment = initial
+        val deadline = System.currentTimeMillis() + PROCESSING_TIMEOUT_MS
+        while (attachment.status == AttachmentStatus.Processing && System.currentTimeMillis() < deadline) {
+            delay(PROCESSING_POLL_MS)
+            attachment = api.attachment(attachment.id)
+        }
+        val state = when (attachment.status) {
+            AttachmentStatus.Ready -> DraftUploadState.Ready
+            AttachmentStatus.Failed -> DraftUploadState.Failed(attachment.error ?: "Couldn't read this file")
+            else -> DraftUploadState.Failed("Taking too long")
+        }
+        updateDraft(key, localId) { draft ->
+            draft.copy(
+                state = state,
+                name = if (draft.isLink && attachment.status == AttachmentStatus.Ready) attachment.fileName else draft.name,
+                pageCount = attachment.pageCount,
+                sectionCount = attachment.sectionCount,
+            )
+        }
+    }
+
+    private fun findDraft(key: String, localId: String) = _drafts.value[key]?.firstOrNull { it.localId == localId }
+
+    private fun updateDraft(key: String, localId: String, transform: (DraftAttachment) -> DraftAttachment) {
+        _drafts.update { drafts ->
+            val list = drafts[key] ?: return@update drafts
+            drafts + (key to list.map { if (it.localId == localId) transform(it) else it })
         }
     }
 
@@ -337,5 +712,45 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val HINT_DEBOUNCE_MS = 700L
+        const val PROCESSING_POLL_MS = 1_000L
+        const val PROCESSING_TIMEOUT_MS = 120_000L
     }
+}
+
+/** Learning material for a new topic can hold more files than a single message (matches the backend). */
+const val MAX_TOPIC_MATERIAL = 8
+
+/** A server attachment shown as a ready draft (restored drafts, or chat files reused as topic material). */
+private fun Attachment.toDraft(borrowed: Boolean = false) = DraftAttachment(
+    localId = java.util.UUID.randomUUID().toString(),
+    source = Uri.EMPTY,
+    name = fileName,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    isImage = kind == AttachmentKind.Image,
+    preview = if (kind == AttachmentKind.Image) url?.let(Uri::parse) else null,
+    state = DraftUploadState.Ready,
+    serverId = id,
+    isLink = kind == AttachmentKind.Link,
+    url = if (kind == AttachmentKind.Link) url else null,
+    pageCount = pageCount,
+    sectionCount = sectionCount,
+    borrowed = borrowed,
+)
+
+private fun DraftAttachment.toSaved(): SavedDraftAttachment? {
+    val id = serverId ?: return null
+    if (state != DraftUploadState.Ready || borrowed) return null
+    return SavedDraftAttachment(
+        serverId = id,
+        name = name,
+        mimeType = mimeType,
+        sizeBytes = sizeBytes,
+        kind = when {
+            isLink -> AttachmentKind.Link
+            isImage -> AttachmentKind.Image
+            else -> AttachmentKind.Document
+        },
+        url = url,
+    )
 }

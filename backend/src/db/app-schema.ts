@@ -28,6 +28,8 @@ export const topic = pgTable(
     title: text("title").notNull(),
     translation: text("translation").notNull(),
     language: text("language").notNull(),
+    /** Digest of the learning material the topic was built from; lesson tutors use it as context. */
+    material: text("material"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -112,9 +114,60 @@ export const message = pgTable(
     glossary: jsonb("glossary").$type<string[]>(),
     explanation: text("explanation"),
     viaVoice: boolean("via_voice").default(false).notNull(),
+    /** Short "Read menu photo · 4 items found" line shown above replies to messages with attachments. */
+    contextNote: text("context_note"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("message_conversationId_createdAt_idx").on(table.conversationId, table.createdAt)],
+);
+
+/** What Zuno read from an attachment once, reused as text context on later turns. */
+export type AttachmentDigest = {
+  label: string;
+  summary: string;
+  items: string[];
+  text: string;
+  pageCount?: number;
+  sectionCount?: number;
+};
+
+/**
+ * A file the learner uploaded to R2 (or a pasted link). Created unbound while uploading, then
+ * linked to the user message (and its conversation) when sent, or to a topic as learning material.
+ */
+export const attachment = pgTable(
+  "attachment",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id").references(() => conversation.id, { onDelete: "cascade" }),
+    messageId: text("message_id").references(() => message.id, { onDelete: "cascade" }),
+    topicId: text("topic_id").references(() => topic.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["image", "document", "link"] }).notNull(),
+    mimeType: text("mime_type").notNull(),
+    /** Page title for links. */
+    fileName: text("file_name").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    /** Empty for links, which have nothing stored in R2. */
+    storageKey: text("storage_key").notNull(),
+    url: text("url"),
+    width: integer("width"),
+    height: integer("height"),
+    status: text("status", { enum: ["pending", "processing", "ready", "failed"] })
+      .default("pending")
+      .notNull(),
+    digest: jsonb("digest").$type<AttachmentDigest>(),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("attachment_messageId_idx").on(table.messageId),
+    index("attachment_conversationId_idx").on(table.conversationId),
+    index("attachment_topicId_idx").on(table.topicId),
+    index("attachment_userId_status_createdAt_idx").on(table.userId, table.status, table.createdAt),
+  ],
 );
 
 export const topicRelations = relations(topic, ({ many }) => ({
@@ -132,6 +185,11 @@ export const conversationRelations = relations(conversation, ({ many, one }) => 
   lesson: one(topicLesson, { fields: [conversation.lessonId], references: [topicLesson.id] }),
 }));
 
-export const messageRelations = relations(message, ({ one }) => ({
+export const messageRelations = relations(message, ({ one, many }) => ({
   conversation: one(conversation, { fields: [message.conversationId], references: [conversation.id] }),
+  attachments: many(attachment),
+}));
+
+export const attachmentRelations = relations(attachment, ({ one }) => ({
+  message: one(message, { fields: [attachment.messageId], references: [message.id] }),
 }));

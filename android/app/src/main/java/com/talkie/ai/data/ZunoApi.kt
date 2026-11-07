@@ -2,6 +2,8 @@ package com.talkie.ai.data
 
 import com.talkie.ai.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -39,8 +41,25 @@ class ZunoApi(
 
     suspend fun topics(): List<TopicSummary> = get("/topics").listOf("topics").map { it.toTopicSummary() }
 
-    suspend fun createTopic(prompt: String): TopicDetail =
-        send("POST", "/topics", JSONObject().put("prompt", prompt)).getJSONObject("topic").toTopicDetail()
+    suspend fun createTopic(
+        prompt: String,
+        attachmentIds: List<String> = emptyList(),
+        parts: List<String> = emptyList(),
+    ): TopicDetail {
+        val body = JSONObject()
+            .put("prompt", prompt)
+            .put("attachmentIds", JSONArray(attachmentIds))
+            .put("parts", JSONArray(parts))
+        return send("POST", "/topics", body).getJSONObject("topic").toTopicDetail()
+    }
+
+    /** Sub-topics found in learning material, for the learner to include or skip. */
+    suspend fun analyzeMaterial(prompt: String, attachmentIds: List<String>): List<MaterialPart> =
+        send(
+            "POST",
+            "/topics/analyze",
+            JSONObject().put("prompt", prompt).put("attachmentIds", JSONArray(attachmentIds)),
+        ).listOf("parts").map { MaterialPart(it.optString("label"), it.optBoolean("suggested")) }
 
     suspend fun topic(id: String): TopicDetail = get("/topics/$id").getJSONObject("topic").toTopicDetail()
 
@@ -86,12 +105,58 @@ class ZunoApi(
         send("DELETE", "/conversations/$id")
     }
 
-    suspend fun sendMessage(conversationId: String, text: String, viaVoice: Boolean = false): SendResult =
+    suspend fun sendMessage(
+        conversationId: String,
+        text: String,
+        viaVoice: Boolean = false,
+        attachmentIds: List<String> = emptyList(),
+    ): SendResult =
         send(
             "POST",
             "/conversations/$conversationId/messages",
-            JSONObject().put("text", text).put("viaVoice", viaVoice),
+            JSONObject().put("text", text).put("viaVoice", viaVoice).put("attachmentIds", JSONArray(attachmentIds)),
         ).toSendResult()
+
+    // Attachments: create → PUT bytes to R2 → complete → poll until ready
+
+    suspend fun createUpload(file: PreparedFile): UploadTicket {
+        val body = JSONObject()
+            .put("fileName", file.name)
+            .put("mimeType", file.mimeType)
+            .put("sizeBytes", file.file.length())
+        file.width?.let { body.put("width", it) }
+        file.height?.let { body.put("height", it) }
+        return send("POST", "/attachments", body).toUploadTicket()
+    }
+
+    /** Streams [file] straight to the presigned R2 URL, reporting progress in 0..1. */
+    suspend fun uploadToStorage(ticket: UploadTicket, file: PreparedFile, onProgress: (Float) -> Unit) =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(ticket.uploadUrl)
+                .put(ProgressRequestBody(file.file, file.mimeType.toMediaType(), onProgress))
+                .build()
+            val response = try {
+                uploadClient.newCall(request).execute()
+            } catch (e: IOException) {
+                if (e is java.io.InterruptedIOException && !currentCoroutineContext().isActive) throw e
+                throw ApiException("Upload failed. Check your connection.")
+            }
+            response.use { if (!it.isSuccessful) throw ApiException("Upload failed (${it.code}).") }
+        }
+
+    /** Shares an article or YouTube link; the server reads it in the background like a file. */
+    suspend fun createLink(url: String): Attachment =
+        send("POST", "/attachments/link", JSONObject().put("url", url)).getJSONObject("attachment").toAttachment()
+
+    suspend fun completeUpload(id: String): Attachment =
+        send("POST", "/attachments/$id/complete").getJSONObject("attachment").toAttachment()
+
+    suspend fun attachment(id: String): Attachment = get("/attachments/$id").getJSONObject("attachment").toAttachment()
+
+    suspend fun deleteAttachment(id: String) {
+        send("DELETE", "/attachments/$id")
+    }
 
     suspend fun saveTranscript(conversationId: String, turns: List<Pair<Boolean, String>>): List<Message> {
         val array = JSONArray()
@@ -145,11 +210,17 @@ class ZunoApi(
     private companion object {
         val JSON = "application/json".toMediaType()
 
-        // Tutor replies come from Gemini, so allow generous read timeouts.
+        // Tutor replies come from Gemini (and may read attached files), so allow generous read timeouts.
         val client: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        // Uploads of up to 20 MB on mobile networks.
+        val uploadClient: OkHttpClient = client.newBuilder()
+            .writeTimeout(5, TimeUnit.MINUTES)
+            .readTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 }

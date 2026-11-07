@@ -12,16 +12,23 @@ import {
   listMessages,
   sendUserMessage,
 } from "../lib/conversations.js";
+import { attachmentsForSend, collectConversationFiles, MAX_ATTACHMENTS_PER_MESSAGE } from "../lib/attachments.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
-import { serializeConversation, serializeMessage, topicProgressLabel } from "../lib/serializers.js";
+import { serializeConversation, serializeMessage, serializeMessages, topicProgressLabel } from "../lib/serializers.js";
 import { explainGrammar, generateTypingHint } from "../lib/tutor.js";
 
 const createSchema = z.object({ kind: z.literal("freetalk").default("freetalk") });
-const messageSchema = z.object({
-  text: z.string().trim().min(1).max(1000),
-  viaVoice: z.boolean().optional(),
-});
+const messageSchema = z
+  .object({
+    text: z.string().trim().max(1000).default(""),
+    viaVoice: z.boolean().optional(),
+    attachmentIds: z.array(z.string().min(1).max(64)).max(MAX_ATTACHMENTS_PER_MESSAGE).default([]),
+  })
+  .refine((body) => body.text.length > 0 || body.attachmentIds.length > 0, {
+    message: "Write a message or attach a file",
+    path: ["text"],
+  });
 const transcriptSchema = z.object({
   turns: z
     .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().trim().min(1).max(2000) }))
@@ -98,22 +105,25 @@ export const conversationRoutes = new Hono<AuthEnv>()
   .get("/:id", async (c) => {
     const row = await requireConversation(c.get("user").id, c.req.param("id"));
     const messages = await listMessages(row.id);
-    return c.json({ conversation: serializeConversation(row), messages: messages.map(serializeMessage) });
+    return c.json({ conversation: serializeConversation(row), messages: await serializeMessages(messages) });
   })
   .delete("/:id", async (c) => {
     const row = await requireConversation(c.get("user").id, c.req.param("id"));
+    const removeFiles = await collectConversationFiles([row.id]);
     await db.delete(conversation).where(eq(conversation.id, row.id));
+    await removeFiles();
     return c.body(null, 204);
   })
   .post("/:id/messages", chatLimit, async (c) => {
     const userId = c.get("user").id;
     const row = await requireConversation(userId, c.req.param("id"));
     const body = await parseBody(c, messageSchema);
-    const result = await sendUserMessage(row, await getProfile(userId), body.text, body.viaVoice ?? false);
+    const attachments = await attachmentsForSend(userId, body.attachmentIds);
+    const result = await sendUserMessage(row, await getProfile(userId), body.text, body.viaVoice ?? false, attachments);
     return c.json({
       conversation: serializeConversation(result.conversation),
-      userMessage: serializeMessage(result.userMessage),
-      reply: serializeMessage(result.assistantMessage),
+      userMessage: await serializeMessage(result.userMessage),
+      reply: await serializeMessage(result.assistantMessage),
       lessonCompleted: result.lessonCompleted,
     });
   })
@@ -121,7 +131,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
     const row = await requireConversation(c.get("user").id, c.req.param("id"));
     const { turns } = await parseBody(c, transcriptSchema);
     const saved = await appendTranscript(row, turns);
-    return c.json({ messages: saved.map(serializeMessage) });
+    return c.json({ messages: await serializeMessages(saved) });
   });
 
 export const messageRoutes = new Hono<AuthEnv>()

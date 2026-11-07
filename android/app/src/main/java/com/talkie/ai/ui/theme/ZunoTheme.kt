@@ -55,6 +55,7 @@ object ZunoColors {
     val TextTertiary = Color(0x70FFFFFF)
     val TextPlaceholder = Color(0x52FFFFFF)
     val TextOnInverse = Gray2
+    val TextOnInverseSecondary = Color(0xFF595959)
 
     // Border
     val BorderSubtle = Color(0x0FFFFFFF)

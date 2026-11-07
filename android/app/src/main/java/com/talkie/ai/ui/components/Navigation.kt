@@ -34,7 +34,7 @@ import com.talkie.ai.ui.theme.ZunoType
 
 private val TopBarHeight = 56.dp
 
-/** Top Bar — Type=Back. Outline 40dp back button. */
+/** Top Bar — Type=Back (auth flow). Outline back button. */
 @Composable
 fun ZunoBackTopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Row(
@@ -48,21 +48,19 @@ fun ZunoBackTopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
             icon = R.drawable.zuno_ic_chevron_left,
             onClick = onBack,
             style = ZunoIconButtonStyle.Outline,
+            size = ZunoIconButtonSize.Large,
             contentDescription = "Back",
         )
     }
 }
 
-/** Top Bar — Type=Menu + Title (title may be blank). */
+/** Top Bar — Type=Back + Compact Title. Chat & detail screens: back, centred title, trailing overflow. */
 @Composable
-fun ZunoTitleTopBar(
+fun ZunoCompactTitleTopBar(
     title: String,
-    onMenu: () -> Unit,
-    onMore: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    @DrawableRes leadingIcon: Int = R.drawable.zuno_ic_menu,
-    leadingDescription: String = "Menu",
-    trailing: (@Composable () -> Unit)? = null,
+    trailing: @Composable () -> Unit = {},
 ) {
     Row(
         modifier = modifier
@@ -72,29 +70,25 @@ fun ZunoTitleTopBar(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIconButton(leadingIcon, onMenu, contentDescription = leadingDescription)
+        ZunoIconButton(R.drawable.zuno_ic_arrow_left, onBack, size = ZunoIconButtonSize.Large, contentDescription = "Back")
         EllipsizedText(
             text = title,
             style = ZunoType.Headline.copy(textAlign = TextAlign.Center),
             color = ZunoColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
-        if (trailing != null) {
-            trailing()
-        } else {
-            ZunoIconButton(R.drawable.zuno_ic_more_vertical, onMore, contentDescription = "More options")
-        }
+        Box(Modifier.size(ZunoIconButtonSize.Large.button), contentAlignment = Alignment.Center) { trailing() }
     }
 }
 
-/** Top Bar — Type=Menu + Action. Transparent, no title. */
+/** Top Bar — Type=Menu + Action. Menu and a single action at opposite edges. */
 @Composable
 fun ZunoActionTopBar(
     onMenu: () -> Unit,
     onAction: () -> Unit,
+    @DrawableRes actionIcon: Int,
+    actionDescription: String,
     modifier: Modifier = Modifier,
-    @DrawableRes actionIcon: Int = R.drawable.zuno_ic_sliders,
-    actionDescription: String = "Personalize",
 ) {
     Row(
         modifier = modifier
@@ -104,8 +98,48 @@ fun ZunoActionTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIconButton(R.drawable.zuno_ic_menu, onMenu, contentDescription = "Menu")
-        ZunoIconButton(actionIcon, onAction, contentDescription = actionDescription)
+        ZunoIconButton(R.drawable.zuno_ic_menu, onMenu, size = ZunoIconButtonSize.Large, contentDescription = "Menu")
+        ZunoIconButton(actionIcon, onAction, size = ZunoIconButtonSize.Large, contentDescription = actionDescription)
+    }
+}
+
+/** Top Bar — Type=Menu + Selector. Home: menu plus the "Spanish · B1" pill that opens the learning sheet. */
+@Composable
+fun ZunoSelectorTopBar(
+    selector: String,
+    onMenu: () -> Unit,
+    onSelector: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(TopBarHeight)
+            .padding(horizontal = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ZunoIconButton(R.drawable.zuno_ic_menu, onMenu, size = ZunoIconButtonSize.Large, contentDescription = "Menu")
+        // The 36dp pill sits inside a 44dp-tall tap area.
+        Box(
+            modifier = Modifier
+                .height(ZunoIconButtonSize.Large.button)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClickLabel = "Change language and level", onClick = onSelector),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .height(36.dp)
+                    .clip(CircleShape)
+                    .background(ZunoColors.SurfaceSubtle)
+                    .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+                    .padding(horizontal = ZunoSpace.s14),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(selector, style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary, maxLines = 1)
+            }
+        }
     }
 }
 
@@ -125,7 +159,7 @@ fun ZunoSectionHeader(
     ) {
         Text(title, style = ZunoType.LabelSmall, color = ZunoColors.TextTertiary)
         actionIcon?.let {
-            ZunoIconButton(it, onAction, small = true, contentDescription = actionDescription)
+            ZunoIconButton(it, onAction, size = ZunoIconButtonSize.Small, contentDescription = actionDescription)
         }
     }
 }

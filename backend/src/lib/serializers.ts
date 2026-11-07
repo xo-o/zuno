@@ -1,4 +1,5 @@
 import type { conversation, message, roleplay, topic, topicLesson } from "../db/app-schema.js";
+import { serializeAttachment, type AttachmentRow } from "./attachments.js";
 
 type TopicRow = typeof topic.$inferSelect;
 type LessonRow = typeof topicLesson.$inferSelect;
@@ -76,7 +77,9 @@ export function serializeConversation(row: typeof conversation.$inferSelect) {
   };
 }
 
-export function serializeMessage(row: typeof message.$inferSelect) {
+type MessageRow = typeof message.$inferSelect & { attachments?: AttachmentRow[] };
+
+export async function serializeMessage(row: MessageRow) {
   return {
     id: row.id,
     role: row.role,
@@ -85,6 +88,12 @@ export function serializeMessage(row: typeof message.$inferSelect) {
     feedback: row.feedback,
     glossary: row.glossary ?? [],
     viaVoice: row.viaVoice,
+    contextNote: row.contextNote,
+    attachments: await Promise.all((row.attachments ?? []).map(serializeAttachment)),
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+export function serializeMessages(rows: MessageRow[]) {
+  return Promise.all(rows.map(serializeMessage));
 }

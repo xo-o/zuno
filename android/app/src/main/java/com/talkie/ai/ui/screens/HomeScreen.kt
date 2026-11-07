@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -49,17 +50,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.talkie.ai.data.TargetLanguage
 import com.talkie.ai.ui.components.AgentGlowState
-import com.talkie.ai.ui.components.ZunoActionTopBar
+import com.talkie.ai.ui.components.ZunoSelectorTopBar
 import com.talkie.ai.ui.components.ZunoAgentGlow
 import com.talkie.ai.ui.components.ZunoButton
 import com.talkie.ai.ui.components.ZunoButtonSize
 import com.talkie.ai.ui.components.ZunoComposer
+import com.talkie.ai.ui.components.ZunoDraftAttachment
 import com.talkie.ai.ui.components.ZunoSpinner
 import com.talkie.ai.ui.components.ZunoTutorHint
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoRadius
 import com.talkie.ai.ui.theme.ZunoSpace
 import com.talkie.ai.ui.theme.ZunoType
+import com.talkie.ai.viewmodel.DraftAttachment
+import com.talkie.ai.viewmodel.DraftUploadState
 
 /** Greeting copy per target language: the prompt in the target language, translation in the native one. */
 data class HomeCopy(val prompt: String, val translation: String, val placeholder: String) {
@@ -92,8 +96,10 @@ fun HomeScreen(
     micBlocked: Boolean,
     busy: Boolean,
     typingHint: String?,
+    /** "Spanish · B1" — active language and level. */
+    selector: String,
     onOpenDrawer: () -> Unit,
-    onPersonalize: () -> Unit,
+    onSelector: () -> Unit,
     onHoldStart: () -> Unit,
     onHoldMove: (cancelling: Boolean) -> Unit,
     onHoldEnd: () -> Unit,
@@ -101,6 +107,10 @@ fun HomeScreen(
     onDraftChanged: (String) -> Unit,
     onSendText: (String) -> Unit,
     onTypeModeChanged: (Boolean) -> Unit,
+    drafts: List<DraftAttachment>,
+    onAttach: () -> Unit,
+    onRemoveAttachment: (DraftAttachment) -> Unit,
+    onRetryAttachment: (DraftAttachment) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var typing by rememberSaveable { mutableStateOf(false) }
@@ -117,7 +127,7 @@ fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoActionTopBar(onMenu = onOpenDrawer, onAction = onPersonalize)
+        ZunoSelectorTopBar(selector = selector, onMenu = onOpenDrawer, onSelector = onSelector)
         Crossfade(targetState = typing, label = "homeMode", modifier = Modifier.weight(1f)) { isTyping ->
             if (isTyping) {
                 TypeMode(
@@ -127,6 +137,10 @@ fun HomeScreen(
                     onDraftChanged = onDraftChanged,
                     onSend = onSendText,
                     onVoice = { setTyping(false) },
+                    drafts = drafts,
+                    onAttach = onAttach,
+                    onRemoveAttachment = onRemoveAttachment,
+                    onRetryAttachment = onRetryAttachment,
                 )
             } else {
                 GlowMode(
@@ -326,8 +340,13 @@ private fun TypeMode(
     onDraftChanged: (String) -> Unit,
     onSend: (String) -> Unit,
     onVoice: () -> Unit,
+    drafts: List<DraftAttachment>,
+    onAttach: () -> Unit,
+    onRemoveAttachment: (DraftAttachment) -> Unit,
+    onRetryAttachment: (DraftAttachment) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
+    val attachmentsReady = drafts.all { it.state == DraftUploadState.Ready }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -374,15 +393,28 @@ private fun TypeMode(
                 },
                 onSend = {
                     val text = draft.trim()
-                    if (text.isNotEmpty() && !busy) onSend(text)
+                    if ((text.isNotEmpty() || drafts.isNotEmpty()) && attachmentsReady && !busy) onSend(text)
                 },
-                onAttach = {},
+                onAttach = onAttach,
                 onVoice = onVoice,
                 placeholder = copy.placeholder,
                 focusRequester = focusRequester,
-                showAttach = false,
                 enabled = !busy,
                 elevated = true,
+                attachments = if (drafts.isEmpty()) null else {
+                    {
+                        drafts.forEach { attachment ->
+                            key(attachment.localId) {
+                                ZunoDraftAttachment(
+                                    draft = attachment,
+                                    onRemove = { onRemoveAttachment(attachment) },
+                                    onRetry = { onRetryAttachment(attachment) },
+                                )
+                            }
+                        }
+                    }
+                },
+                sendEnabled = attachmentsReady,
             )
         }
     }

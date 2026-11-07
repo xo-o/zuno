@@ -107,18 +107,26 @@ fun ZunoButton(
 
 enum class ZunoIconButtonStyle { Ghost, Subtle, Outline, Strong }
 
-/** Circular icon-only button. 40dp (Medium) or 32dp (Small). */
+enum class ZunoIconButtonSize(val button: Dp, val icon: Dp) {
+    /** Top bars. */
+    Large(44.dp, 24.dp),
+    Medium(40.dp, 20.dp),
+    /** Dense rows. */
+    Small(32.dp, 16.dp),
+}
+
+/** Circular icon-only button: 44dp (Large, top bars), 40dp (Medium) or 32dp (Small). */
 @Composable
 fun ZunoIconButton(
     @DrawableRes icon: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     style: ZunoIconButtonStyle = ZunoIconButtonStyle.Ghost,
-    small: Boolean = false,
-    iconSize: Dp = if (small) 16.dp else 20.dp,
+    size: ZunoIconButtonSize = ZunoIconButtonSize.Medium,
+    iconSize: Dp = size.icon,
     contentDescription: String? = null,
 ) {
-    val buttonSize = if (small) 32.dp else 40.dp
+    val buttonSize = size.button
     val background = when (style) {
         ZunoIconButtonStyle.Ghost -> Color.Transparent
         ZunoIconButtonStyle.Subtle -> ZunoColors.SurfaceDefault
@@ -139,20 +147,21 @@ fun ZunoIconButton(
     }
 }
 
-/** Compact pill for secondary inline actions (Listen, Explain grammar). */
+/** Compact pill for secondary inline actions (Listen, Explain grammar) and choices ([selected] fills it). */
 @Composable
 fun ZunoChip(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     @DrawableRes leadingIcon: Int? = null,
+    selected: Boolean = false,
 ) {
     val shape = CircleShape
     Row(
         modifier = modifier
             .height(32.dp)
             .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
+            .background(if (selected) ZunoColors.SurfaceStrong else ZunoColors.SurfaceSubtle)
             .border(1.dp, ZunoColors.BorderDefault, shape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = ZunoSpace.s12),

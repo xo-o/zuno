@@ -2,23 +2,31 @@ package com.talkie.ai.ui
 
 import android.Manifest
 import android.app.Activity
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.text.format.DateFormat
 import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -40,8 +48,10 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -50,6 +60,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.talkie.ai.auth.AuthState
 import com.talkie.ai.auth.AuthViewModel
+import com.talkie.ai.data.Attachment
+import com.talkie.ai.data.AttachmentFiles
+import com.talkie.ai.data.AttachmentKind
 import com.talkie.ai.data.Conversation
 import com.talkie.ai.data.ConversationKind
 import com.talkie.ai.data.Message
@@ -59,7 +72,16 @@ import com.talkie.ai.model.AgentState
 import com.talkie.ai.model.Speaker
 import com.talkie.ai.model.VoiceCatalog
 import com.talkie.ai.ui.components.AgentGlowState
+import com.talkie.ai.R
+import com.talkie.ai.reminders.Reminder
+import com.talkie.ai.reminders.Reminders
+import com.talkie.ai.ui.components.ReminderOption
+import com.talkie.ai.ui.components.ZunoAttachSheet
+import com.talkie.ai.ui.components.ZunoImageViewer
 import com.talkie.ai.ui.components.ZunoMenuAction
+import com.talkie.ai.ui.components.ZunoPasteLinkSheet
+import com.talkie.ai.ui.components.ZunoReminderSheet
+import com.talkie.ai.ui.components.ZunoToast
 import com.talkie.ai.ui.screens.AccountSheet
 import com.talkie.ai.ui.screens.AppDrawer
 import com.talkie.ai.ui.screens.AuthMode
@@ -78,11 +100,19 @@ import com.talkie.ai.ui.screens.SplashScreen
 import com.talkie.ai.ui.screens.TopicScreen
 import com.talkie.ai.ui.screens.TopicsScreen
 import com.talkie.ai.ui.theme.ZunoColors
+import com.talkie.ai.ui.theme.ZunoSpace
 import com.talkie.ai.ui.theme.ZunoType
+import com.talkie.ai.viewmodel.HOME_DRAFT_KEY
+import com.talkie.ai.viewmodel.MAX_TOPIC_MATERIAL
+import com.talkie.ai.viewmodel.TOPIC_DRAFT_KEY
 import com.talkie.ai.viewmodel.VoiceSessionViewModel
 import com.talkie.ai.viewmodel.ZunoViewModel
 import com.talkie.ai.voice.rememberSpeechCapture
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 sealed interface ZunoRoute {
@@ -145,6 +175,8 @@ fun ZunoApp(
     authViewModel: AuthViewModel,
     zunoViewModel: ZunoViewModel,
     runWithVoicePermissions: (() -> Unit) -> Unit,
+    /** Conversation to open from a reminder notification; set back to null once opened. */
+    openChatRequest: MutableStateFlow<String?>,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -163,6 +195,9 @@ fun ZunoApp(
     val chats by zunoViewModel.chats.collectAsStateWithLifecycle()
     val busy by zunoViewModel.busy.collectAsStateWithLifecycle()
     val typingHint by zunoViewModel.typingHint.collectAsStateWithLifecycle()
+    val drafts by zunoViewModel.drafts.collectAsStateWithLifecycle()
+    val materialAnalysis by zunoViewModel.materialAnalysis.collectAsStateWithLifecycle()
+    val pendingChat by openChatRequest.collectAsStateWithLifecycle()
 
     val language = profile?.targetLanguage ?: TargetLanguage.Spanish
     val tts = rememberTutorTts(language)
@@ -274,6 +309,7 @@ fun ZunoApp(
             AuthState.SignedOut -> {
                 if (voiceConversationId != null) endVoice(commit = false)
                 zunoViewModel.clear()
+                Reminders.clearAll(context)
                 if (current.hasDrawer) navigate(ZunoRoute.Onboarding, clearStack = true)
             }
         }
@@ -286,6 +322,17 @@ fun ZunoApp(
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
             authViewModel.clearError()
         }
+    }
+
+    // A reminder notification reopens its chat on top of Home, once signed in and past the splash.
+    LaunchedEffect(pendingChat, authState, route) {
+        val conversationId = pendingChat ?: return@LaunchedEffect
+        if (authState !is AuthState.SignedIn || route == ZunoRoute.Splash) return@LaunchedEffect
+        if (voiceConversationId != null && voiceConversationId != conversationId) endVoice()
+        backStack.clear()
+        backStack.add(ZunoRoute.Home)
+        backStack.add(ZunoRoute.Chat(conversationId))
+        openChatRequest.value = null
     }
 
     BackHandler(enabled = drawerState.isOpen) {
@@ -354,6 +401,158 @@ fun ZunoApp(
             voiceConversationId = conversation.id
             openChat(conversation.id)
         }
+    }
+
+    // ── Attachments: + sheet, pickers, links, viewer ────────────────────────
+    /** Draft key (conversation id, Home or topic material) the + sheet adds files to. */
+    var attachTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var pickerTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var linkTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var cameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var viewing by remember { mutableStateOf<Attachment?>(null) }
+
+    fun roomFor(key: String) = (zunoViewModel.maxAttachments(key) - drafts[key].orEmpty().size).coerceAtLeast(0)
+
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(AttachmentFiles.MAX_PER_MESSAGE),
+    ) { uris -> pickerTarget?.let { zunoViewModel.addAttachments(it, uris) } }
+    val materialPhotoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(MAX_TOPIC_MATERIAL),
+    ) { uris -> pickerTarget?.let { zunoViewModel.addAttachments(it, uris) } }
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        pickerTarget?.let { zunoViewModel.addAttachments(it, uris) }
+    }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        val uri = cameraUri
+        if (saved && uri != null) pickerTarget?.let { zunoViewModel.addAttachments(it, listOf(uri)) }
+    }
+
+    fun limitMessage(key: String) =
+        if (key == TOPIC_DRAFT_KEY) "You can add up to $MAX_TOPIC_MATERIAL files"
+        else "You can attach up to ${AttachmentFiles.MAX_PER_MESSAGE} files per message"
+
+    fun openAttachmentSheet(key: String) {
+        if (roomFor(key) == 0) toast(limitMessage(key)) else attachTarget = key
+    }
+
+    /** Runs a picker for [key] directly (the topic Upload Area has its own source buttons). */
+    fun launchPicker(key: String, action: (String) -> Unit) {
+        if (roomFor(key) == 0) {
+            toast(limitMessage(key))
+            return
+        }
+        pickerTarget = key
+        try {
+            action(key)
+        } catch (_: android.content.ActivityNotFoundException) {
+            toast("No app available for this on your device")
+        }
+    }
+
+    fun pick(action: (String) -> Unit) {
+        val key = attachTarget ?: return
+        attachTarget = null
+        launchPicker(key, action)
+    }
+
+    fun launchCamera(key: String) = launchPicker(key) {
+        val uri = AttachmentFiles.newCameraUri(context)
+        cameraUri = uri
+        camera.launch(uri)
+    }
+
+    fun launchPhotos(key: String) = launchPicker(key) {
+        val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        if (key == TOPIC_DRAFT_KEY) materialPhotoPicker.launch(request) else photoPicker.launch(request)
+    }
+
+    fun launchFiles(key: String) = launchPicker(key) { documentPicker.launch(AttachmentFiles.documentMimeTypes) }
+
+    fun openUrl(url: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            toast("No app can open this link")
+        }
+    }
+
+    fun openAttachment(attachment: Attachment) {
+        when (attachment.kind) {
+            AttachmentKind.Image -> viewing = attachment
+            AttachmentKind.Link -> attachment.url?.let(::openUrl)
+            AttachmentKind.Document -> scope.launch {
+                val url = zunoViewModel.attachmentUrl(attachment.id) ?: return@launch
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    toast("No app can open this file")
+                }
+            }
+        }
+    }
+
+    // ── Toast & "Remind me to continue" ─────────────────────────────────────
+    var toastState by remember { mutableStateOf<ToastState?>(null) }
+    LaunchedEffect(toastState) {
+        if (toastState != null) {
+            delay(TOAST_DURATION_MS)
+            toastState = null
+        }
+    }
+
+    var reminderTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var customReminder by remember { mutableStateOf<ReminderOption?>(null) }
+    var pendingReminder by remember { mutableStateOf<Reminder?>(null) }
+
+    fun confirmReminder(reminder: Reminder, summary: String) {
+        Reminders.schedule(context, reminder)
+        if (!Reminders.canNotify(context)) toast("Turn on notifications for Zuno to get this reminder")
+        toastState = ToastState("Reminder set · $summary", action = "Undo") {
+            Reminders.cancel(context, reminder.conversationId)
+            toastState = null
+        }
+    }
+
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pendingReminder?.let { reminder ->
+            confirmReminder(reminder, reminderSummary(context, reminder.atMillis))
+            pendingReminder = null
+        }
+    }
+
+    fun setReminder(conversationId: String, option: ReminderOption) {
+        val chat = chats[conversationId]
+        val reminder = Reminder(
+            conversationId = conversationId,
+            title = chat?.conversation?.title?.ifBlank { null } ?: "your chat",
+            lastLine = chat?.messages?.lastOrNull { !it.isUser }?.text.orEmpty(),
+            atMillis = option.atMillis,
+        )
+        if (!Reminders.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pendingReminder = reminder
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            confirmReminder(reminder, option.summary)
+        }
+    }
+
+    fun pickReminderTime() {
+        val now = Calendar.getInstance()
+        TimePickerDialog(
+            context,
+            { _, hour, minute -> customReminder = customReminderOption(context, hour, minute) },
+            now.get(Calendar.HOUR_OF_DAY),
+            now.get(Calendar.MINUTE),
+            DateFormat.is24HourFormat(context),
+        ).show()
+    }
+
+    // ── New topic (optionally from a chat's material) ───────────────────────
+    var topicPrefill by rememberSaveable { mutableStateOf("") }
+
+    fun leaveNewTopic() {
+        zunoViewModel.discardTopicDraft()
+        pop()
     }
 
     // ── Account sheet & grammar explanations ────────────────────────────────
@@ -479,8 +678,9 @@ fun ZunoApp(
                     micBlocked = micBlocked,
                     busy = busy,
                     typingHint = typingHint,
+                    selector = profile?.detail ?: "${language.label} · …",
                     onOpenDrawer = { openDrawer() },
-                    onPersonalize = { showAccount = true },
+                    onSelector = { showAccount = true },
                     onHoldStart = {
                         when {
                             !micGranted() -> requestMicrophone()
@@ -517,6 +717,10 @@ fun ZunoApp(
                     onDraftChanged = zunoViewModel::onDraftChanged,
                     onSendText = { text -> startFreeTalk(text) },
                     onTypeModeChanged = { if (!it) zunoViewModel.clearHint() },
+                    drafts = drafts[HOME_DRAFT_KEY].orEmpty(),
+                    onAttach = { openAttachmentSheet(HOME_DRAFT_KEY) },
+                    onRemoveAttachment = { zunoViewModel.removeAttachment(HOME_DRAFT_KEY, it.localId) },
+                    onRetryAttachment = { zunoViewModel.retryAttachment(HOME_DRAFT_KEY, it.localId) },
                     modifier = screenModifier,
                 )
 
@@ -529,18 +733,35 @@ fun ZunoApp(
                         onBack = ::pop,
                         onRetry = zunoViewModel::loadTopics,
                         onOpen = { navigate(ZunoRoute.Topic(it)) },
-                        onCreate = { navigate(ZunoRoute.NewTopic) },
+                        onCreate = {
+                            topicPrefill = ""
+                            navigate(ZunoRoute.NewTopic)
+                        },
                         onDelete = { zunoViewModel.deleteTopic(it.id) },
                         modifier = screenModifier,
                     )
                 }
 
-                ZunoRoute.NewTopic -> NewTopicScreen(
-                    busy = busy,
-                    onBack = ::pop,
-                    onCreate = { prompt -> zunoViewModel.createTopic(prompt) { replace(ZunoRoute.Topic(it.summary.id)) } },
-                    modifier = screenModifier,
-                )
+                ZunoRoute.NewTopic -> {
+                    BackHandler(enabled = !drawerState.isOpen) { leaveNewTopic() }
+                    NewTopicScreen(
+                        busy = busy,
+                        initialPrompt = topicPrefill,
+                        material = drafts[TOPIC_DRAFT_KEY].orEmpty(),
+                        analysis = materialAnalysis,
+                        onBack = ::leaveNewTopic,
+                        onCreate = { prompt -> zunoViewModel.createTopic(prompt) { replace(ZunoRoute.Topic(it.summary.id)) } },
+                        onAnalyze = zunoViewModel::analyzeMaterial,
+                        onTogglePart = zunoViewModel::toggleMaterialPart,
+                        onFiles = { launchFiles(TOPIC_DRAFT_KEY) },
+                        onPhotos = { launchPhotos(TOPIC_DRAFT_KEY) },
+                        onCamera = { launchCamera(TOPIC_DRAFT_KEY) },
+                        onAddMaterial = { openAttachmentSheet(TOPIC_DRAFT_KEY) },
+                        onRemoveMaterial = { zunoViewModel.removeAttachment(TOPIC_DRAFT_KEY, it.localId) },
+                        onRetryMaterial = { zunoViewModel.retryAttachment(TOPIC_DRAFT_KEY, it.localId) },
+                        modifier = screenModifier,
+                    )
+                }
 
                 is ZunoRoute.Topic -> {
                     LaunchedEffect(screen.id) { zunoViewModel.loadTopic(screen.id) }
@@ -588,6 +809,7 @@ fun ZunoApp(
                     val chat = chats[screen.conversationId]
                     LaunchedEffect(screen.conversationId) {
                         if (chat == null) zunoViewModel.loadConversation(screen.conversationId)
+                        zunoViewModel.restoreDraft(screen.conversationId)
                     }
                     val conversation = chat?.conversation
                     val inVoice = voiceConversationId == screen.conversationId
@@ -597,6 +819,17 @@ fun ZunoApp(
                         emptyList()
                     }
                     val menu = buildList {
+                        if (conversation != null) {
+                            add(ZunoMenuAction("Remind me to continue") {
+                                customReminder = null
+                                reminderTarget = screen.conversationId
+                            })
+                            add(ZunoMenuAction("Turn into a topic") {
+                                if (inVoice) endVoice()
+                                topicPrefill = zunoViewModel.prefillTopicFromChat(screen.conversationId)
+                                navigate(ZunoRoute.NewTopic)
+                            })
+                        }
                         if (conversation?.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
                             add(ZunoMenuAction("Mark lesson complete") {
                                 zunoViewModel.completeLesson(conversation.topicId, conversation.lessonId)
@@ -619,6 +852,8 @@ fun ZunoApp(
                         sessionLabel = conversation?.let(::sessionLabel).orEmpty(),
                         messages = chat?.messages,
                         pendingText = chat?.pendingText,
+                        pendingAttachments = chat?.pendingAttachments.orEmpty(),
+                        drafts = drafts[screen.conversationId].orEmpty(),
                         error = chat?.error,
                         liveLines = liveLines,
                         voiceMode = inVoice,
@@ -633,10 +868,15 @@ fun ZunoApp(
                         placeholder = HomeCopy.forLanguage(language, "").placeholder,
                         typingHint = typingHint,
                         menu = menu,
-                        onOpenDrawer = { openDrawer() },
+                        onBack = {
+                            if (inVoice) endVoice()
+                            pop()
+                        },
                         onRetryLoad = { zunoViewModel.loadConversation(screen.conversationId) },
                         onSend = { text -> zunoViewModel.send(screen.conversationId, text) },
                         onDraftChanged = zunoViewModel::onDraftChanged,
+                        savedDraft = { zunoViewModel.draftText(screen.conversationId) },
+                        onSaveDraft = { zunoViewModel.saveDraftText(screen.conversationId, it) },
                         onStartVoice = {
                             if (chat?.pendingText == null) startVoice(screen.conversationId)
                             else toast("One moment — Zuno is still replying")
@@ -646,12 +886,79 @@ fun ZunoApp(
                         onEndVoice = { endVoice() },
                         onListen = { text -> tts.speak(text) },
                         onExplain = ::explain,
+                        onAttach = { openAttachmentSheet(screen.conversationId) },
+                        onRemoveAttachment = { zunoViewModel.removeAttachment(screen.conversationId, it.localId) },
+                        onRetryAttachment = { zunoViewModel.retryAttachment(screen.conversationId, it.localId) },
+                        onOpenAttachment = ::openAttachment,
                         modifier = screenModifier,
                     )
                 }
             }
         }
     }
+
+    attachTarget?.let { key ->
+        // Conversations get "Remind me to continue"; Home and topic material have no chat to come back to yet.
+        val isConversation = key != HOME_DRAFT_KEY && key != TOPIC_DRAFT_KEY
+        ZunoAttachSheet(
+            title = if (key == TOPIC_DRAFT_KEY) "Add learning material" else "Add to this chat",
+            onDismiss = { attachTarget = null },
+            onCamera = { pick(::launchCamera) },
+            onPhotos = { pick(::launchPhotos) },
+            onFiles = { pick(::launchFiles) },
+            onPasteLink = {
+                attachTarget = null
+                linkTarget = key
+            },
+            onRemind = if (isConversation) {
+                {
+                    attachTarget = null
+                    customReminder = null
+                    reminderTarget = key
+                }
+            } else {
+                null
+            },
+        )
+    }
+
+    linkTarget?.let { key ->
+        ZunoPasteLinkSheet(
+            onDismiss = { linkTarget = null },
+            onAdd = { url ->
+                linkTarget = null
+                zunoViewModel.addLink(key, url)
+            },
+        )
+    }
+
+    reminderTarget?.let { conversationId ->
+        ZunoReminderSheet(
+            options = remember(conversationId) { reminderOptions(context) },
+            custom = customReminder,
+            onPickTime = ::pickReminderTime,
+            onDismiss = { reminderTarget = null },
+            onSet = { option ->
+                reminderTarget = null
+                setReminder(conversationId, option)
+            },
+        )
+    }
+
+    toastState?.let { state ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(bottom = 80.dp, start = ZunoSpace.s24, end = ZunoSpace.s24),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            ZunoToast(state.message, action = state.action, onAction = state.onAction)
+        }
+    }
+
+    viewing?.let { ZunoImageViewer(it, onDismiss = { viewing = null }) }
 
     val currentProfile = profile
     if (showAccount && currentProfile != null) {
@@ -714,6 +1021,49 @@ private fun sessionLabel(conversation: Conversation): String {
 }
 
 private data class ExplanationState(val source: String, val text: String?, val loaded: Boolean = false)
+
+private data class ToastState(val message: String, val action: String? = null, val onAction: () -> Unit = {})
+
+private const val TOAST_DURATION_MS = 4_000L
+
+private fun timeLabel(context: Context, millis: Long): String = DateFormat.getTimeFormat(context).format(Date(millis))
+
+private fun atTime(dayOffset: Int, hour: Int, minute: Int = 0): Long = Calendar.getInstance().apply {
+    add(Calendar.DAY_OF_YEAR, dayOffset)
+    set(Calendar.HOUR_OF_DAY, hour)
+    set(Calendar.MINUTE, minute)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+/** Quick reminder times: in an hour, tonight at 9 (while it's at least an hour away) and tomorrow at 8. */
+private fun reminderOptions(context: Context): List<ReminderOption> {
+    val now = System.currentTimeMillis()
+    val tonight = atTime(0, 21)
+    val tomorrow = atTime(1, 8)
+    return buildList {
+        add(ReminderOption("In 1 hour", "In 1 hour", now + DateUtils.HOUR_IN_MILLIS))
+        if (tonight - now >= DateUtils.HOUR_IN_MILLIS) {
+            val time = timeLabel(context, tonight)
+            add(ReminderOption("Tonight · $time", "Tonight $time", tonight))
+        }
+        val time = timeLabel(context, tomorrow)
+        add(ReminderOption("Tomorrow · $time", "Tomorrow $time", tomorrow))
+    }
+}
+
+/** The next [hour]:[minute] — today if it's still ahead, otherwise tomorrow. */
+private fun customReminderOption(context: Context, hour: Int, minute: Int): ReminderOption {
+    val today = atTime(0, hour, minute)
+    val (at, day) = if (today > System.currentTimeMillis()) today to "Today" else atTime(1, hour, minute) to "Tomorrow"
+    val time = timeLabel(context, at)
+    return ReminderOption("$day · $time", "$day $time", at, icon = R.drawable.zuno_ic_clock_small)
+}
+
+private fun reminderSummary(context: Context, millis: Long): String {
+    val day = if (DateUtils.isToday(millis)) "Today" else "Tomorrow"
+    return "$day ${timeLabel(context, millis)}"
+}
 
 private val TargetLanguage.speechTag: String
     get() = when (this) {

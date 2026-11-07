@@ -20,16 +20,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.talkie.ai.auth.AuthViewModel
+import com.talkie.ai.reminders.Reminders
 import com.talkie.ai.ui.ZunoApp
 import com.talkie.ai.ui.theme.ZunoTheme
 import com.talkie.ai.viewmodel.VoiceSessionViewModel
 import com.talkie.ai.viewmodel.ZunoViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: VoiceSessionViewModel by viewModels()
     private val authViewModel: AuthViewModel by viewModels()
     private val zunoViewModel: ZunoViewModel by viewModels()
+
+    /** Conversation to open from a reminder notification; cleared once shown. */
+    private val openChatRequest = MutableStateFlow<String?>(null)
+    private var handledChatIntent: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -41,6 +47,10 @@ class MainActivity : ComponentActivity() {
 
         // Magic link tokens are single-use, so only redeem on a fresh launch, not on recreation.
         if (savedInstanceState == null) authViewModel.handleMagicLink(intent?.data)
+        // A reminder tap can also recreate the activity from saved state (process was killed), so check
+        // the intent whenever it hasn't been handled yet.
+        handledChatIntent = savedInstanceState?.getString(KEY_HANDLED_CHAT_INTENT)
+        handleOpenChat(intent)
 
         setContent {
             ZunoTheme {
@@ -87,6 +97,7 @@ class MainActivity : ComponentActivity() {
                     authViewModel = authViewModel,
                     zunoViewModel = zunoViewModel,
                     runWithVoicePermissions = ::runWithVoicePermissions,
+                    openChatRequest = openChatRequest,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -97,5 +108,23 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         authViewModel.handleMagicLink(intent.data)
+        handledChatIntent = null
+        handleOpenChat(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(KEY_HANDLED_CHAT_INTENT, handledChatIntent)
+    }
+
+    private fun handleOpenChat(intent: Intent?) {
+        val conversationId = intent?.getStringExtra(Reminders.EXTRA_CONVERSATION_ID) ?: return
+        if (intent.action == handledChatIntent) return
+        handledChatIntent = intent.action
+        openChatRequest.value = conversationId
+    }
+
+    private companion object {
+        const val KEY_HANDLED_CHAT_INTENT = "handled_chat_intent"
     }
 }

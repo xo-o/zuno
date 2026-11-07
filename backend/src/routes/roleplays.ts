@@ -5,10 +5,11 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { conversation, roleplay } from "../db/app-schema.js";
 import { db } from "../db/index.js";
-import { createConversation, listMessages } from "../lib/conversations.js";
+import { collectConversationFiles } from "../lib/attachments.js";
+import { conversationIdsWhere, createConversation, listMessages } from "../lib/conversations.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
-import { serializeConversation, serializeMessage, serializeRoleplay } from "../lib/serializers.js";
+import { serializeConversation, serializeMessages, serializeRoleplay } from "../lib/serializers.js";
 import { generateRoleplay } from "../lib/tutor.js";
 
 const createSchema = z.object({
@@ -31,7 +32,7 @@ async function startRun(row: typeof roleplay.$inferSelect) {
     { withOpening: true },
   );
   const messages = await listMessages(thread.id);
-  return { conversation: serializeConversation(thread), messages: messages.map(serializeMessage) };
+  return { conversation: serializeConversation(thread), messages: await serializeMessages(messages) };
 }
 
 const aiLimit = rateLimit({ windowMs: 60_000, max: 10 });
@@ -71,7 +72,9 @@ export const roleplayRoutes = new Hono<AuthEnv>()
   })
   .delete("/:id", async (c) => {
     const row = await loadRoleplay(c.get("user").id, c.req.param("id"));
+    const removeFiles = await collectConversationFiles(await conversationIdsWhere(eq(conversation.roleplayId, row.id)));
     await db.delete(roleplay).where(eq(roleplay.id, row.id));
+    await removeFiles();
     return c.body(null, 204);
   })
   /** Resumes the latest run of this roleplay, or starts one if there is none. */
@@ -83,7 +86,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     });
     if (!latest) return c.json(await startRun(row));
     const messages = await listMessages(latest.id);
-    return c.json({ conversation: serializeConversation(latest), messages: messages.map(serializeMessage) });
+    return c.json({ conversation: serializeConversation(latest), messages: await serializeMessages(messages) });
   })
   .post("/:id/restart", aiLimit, async (c) => {
     const row = await loadRoleplay(c.get("user").id, c.req.param("id"));

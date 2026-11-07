@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { conversation, message, roleplay, topic, topicLesson } from "../db/app-schema.js";
+import { and, asc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { attachment, conversation, message, roleplay, topic, topicLesson } from "../db/app-schema.js";
 import { db } from "../db/index.js";
+import {
+  describeAttachment,
+  filesForTurn,
+  loadImageFiles,
+  recentImages,
+  type AttachmentRow,
+} from "./attachments.js";
+import type { GeminiTurn } from "./gemini.js";
 import type { LearnerProfile } from "./profile.js";
 import { generateOpening, generateReply, LESSONS_PER_TOPIC, type ConversationContext } from "./tutor.js";
 
@@ -22,7 +30,15 @@ export async function listMessages(conversationId: string) {
   return db.query.message.findMany({
     where: eq(message.conversationId, conversationId),
     orderBy: [asc(message.createdAt)],
+    with: { attachments: { orderBy: [asc(attachment.createdAt)] } },
   });
+}
+
+export type MessageWithAttachments = Awaited<ReturnType<typeof listMessages>>[number];
+
+export async function conversationIdsWhere(where: SQL | undefined) {
+  const rows = await db.select({ id: conversation.id }).from(conversation).where(where);
+  return rows.map((row) => row.id);
 }
 
 export async function contextFor(row: ConversationRow): Promise<ConversationContext> {
@@ -43,6 +59,7 @@ export async function contextFor(row: ConversationRow): Promise<ConversationCont
         objective: lesson.objective,
         position: lesson.position,
         total: LESSONS_PER_TOPIC,
+        material: parent.material,
       };
     }
   }
@@ -78,43 +95,93 @@ export async function createConversation(
   return row;
 }
 
-/** Stores the learner's turn, asks the tutor for a reply and applies lesson completion. */
-export async function sendUserMessage(row: ConversationRow, profile: LearnerProfile, text: string, viaVoice: boolean) {
-  const history = await listMessages(row.id);
-  const recent = history.slice(-HISTORY_LIMIT);
-  const turns = [
-    ...recent.map((m) => ({ role: m.role === "user" ? ("user" as const) : ("model" as const), text: m.text })),
-    { role: "user" as const, text },
-  ];
+/**
+ * Builds the tutor's view of the conversation. Files shared earlier appear as their digest
+ * text; the most recent images are resent as pixels; new files are sent in full.
+ */
+async function buildTurns(recent: MessageWithAttachments[], text: string, attachments: AttachmentRow[]) {
+  const resent = await loadImageFiles(recentImages(recent.flatMap((m) => m.attachments)));
+  const turns: GeminiTurn[] = recent.map((m) => {
+    const notes = m.attachments.map(describeAttachment);
+    return {
+      role: m.role === "user" ? "user" : "model",
+      text: [...notes, m.text].filter(Boolean).join("\n") || "(sent an attachment)",
+      files: m.attachments.map((a) => resent.get(a.id)).filter((file) => file !== undefined),
+    };
+  });
+  const current = await filesForTurn(attachments);
+  turns.push({
+    role: "user",
+    text: [...current.notes, text || "(The learner shared this without a message.)"].join("\n"),
+    files: current.files,
+  });
   // Gemini requires the conversation to start with a user turn.
   if (turns[0]?.role === "model") turns.unshift({ role: "user", text: "(The learner opened the conversation.)" });
+  return turns;
+}
+
+/** Stores the learner's turn, asks the tutor for a reply and applies lesson completion. */
+export async function sendUserMessage(
+  row: ConversationRow,
+  profile: LearnerProfile,
+  text: string,
+  viaVoice: boolean,
+  attachments: AttachmentRow[] = [],
+) {
+  const history = await listMessages(row.id);
+  const turns = await buildTurns(history.slice(-HISTORY_LIMIT), text, attachments);
 
   const needsTitle = row.kind === "freetalk" && row.title === DEFAULT_FREE_TALK_TITLE;
-  const reply = await generateReply({ context: await contextFor(row), profile, history: turns, needsTitle });
+  const reply = await generateReply({
+    context: await contextFor(row),
+    profile,
+    history: turns,
+    needsTitle,
+    withAttachments: attachments.length > 0,
+  });
 
-  const [userMessage, assistantMessage] = await db
-    .insert(message)
-    .values([
-      {
-        id: randomUUID(),
-        conversationId: row.id,
-        role: "user",
-        text,
-        feedback: reply.feedback,
-        viaVoice,
-        createdAt: sql`now()`,
-      },
-      {
-        id: randomUUID(),
-        conversationId: row.id,
-        role: "assistant",
-        text: reply.reply,
-        translation: reply.translation,
-        glossary: reply.glossary,
-        createdAt: sql`now() + interval '1 millisecond'`,
-      },
-    ])
-    .returning();
+  const { userMessage, assistantMessage, linked } = await db.transaction(async (tx) => {
+    const [userMessage, assistantMessage] = await tx
+      .insert(message)
+      .values([
+        {
+          id: randomUUID(),
+          conversationId: row.id,
+          role: "user",
+          text,
+          feedback: reply.feedback,
+          viaVoice,
+          createdAt: sql`now()`,
+        },
+        {
+          id: randomUUID(),
+          conversationId: row.id,
+          role: "assistant",
+          text: reply.reply,
+          translation: reply.translation,
+          glossary: reply.glossary,
+          contextNote: attachments.length ? reply.contextNote.trim() || null : null,
+          createdAt: sql`now() + interval '1 millisecond'`,
+        },
+      ])
+      .returning();
+    const linked = attachments.length
+      ? await tx
+          .update(attachment)
+          .set({ messageId: userMessage.id, conversationId: row.id })
+          .where(
+            and(
+              inArray(
+                attachment.id,
+                attachments.map((a) => a.id),
+              ),
+              isNull(attachment.messageId),
+            ),
+          )
+          .returning()
+      : [];
+    return { userMessage, assistantMessage, linked };
+  });
 
   let updated = row;
   const title = reply.title.trim();
@@ -133,7 +200,13 @@ export async function sendUserMessage(row: ConversationRow, profile: LearnerProf
   }
 
   await touch(updated);
-  return { userMessage, assistantMessage, conversation: updated, lessonCompleted };
+  const ordered = attachments.map((a) => linked.find((l) => l.id === a.id) ?? a);
+  return {
+    userMessage: { ...userMessage, attachments: ordered },
+    assistantMessage: { ...assistantMessage, attachments: [] as AttachmentRow[] },
+    conversation: updated,
+    lessonCompleted,
+  };
 }
 
 /** Saves turns spoken in a realtime voice session (already answered by the voice agent). */

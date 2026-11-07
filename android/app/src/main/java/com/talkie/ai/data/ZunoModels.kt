@@ -74,6 +74,32 @@ data class Conversation(
     val createdAtMillis: Long,
 )
 
+enum class AttachmentKind { Image, Document, Link }
+
+enum class AttachmentStatus { Pending, Processing, Ready, Failed }
+
+/**
+ * A file stored on the server, or a shared link. For files [url] is a short-lived signed link — cache
+ * images by [id], not by URL. For links it is the page or video address and [fileName] is its title.
+ */
+data class Attachment(
+    val id: String,
+    val kind: AttachmentKind,
+    val mimeType: String,
+    val fileName: String,
+    val sizeBytes: Long,
+    val width: Int?,
+    val height: Int?,
+    val status: AttachmentStatus,
+    val error: String?,
+    val url: String?,
+    val pageCount: Int? = null,
+    val sectionCount: Int? = null,
+)
+
+/** A sub-topic Zuno found in learning material ("Found in your material"). */
+data class MaterialPart(val label: String, val suggested: Boolean)
+
 data class Message(
     val id: String,
     val isUser: Boolean,
@@ -81,7 +107,13 @@ data class Message(
     val translation: String?,
     val feedback: String?,
     val glossary: List<String>,
+    val attachments: List<Attachment> = emptyList(),
+    /** "Read menu photo · 4 items found" — what the tutor read from the learner's attachments. */
+    val contextNote: String? = null,
 )
+
+/** A presigned R2 upload for a newly created attachment. */
+data class UploadTicket(val attachment: Attachment, val uploadUrl: String)
 
 data class ConversationThread(val conversation: Conversation, val messages: List<Message>)
 
@@ -168,6 +200,35 @@ internal fun JSONObject.toConversation() = Conversation(
     createdAtMillis = runCatching { Instant.parse(optString("createdAt")).toEpochMilli() }.getOrDefault(System.currentTimeMillis()),
 )
 
+internal fun JSONObject.toAttachment() = Attachment(
+    id = getString("id"),
+    kind = when (optString("kind")) {
+        "image" -> AttachmentKind.Image
+        "link" -> AttachmentKind.Link
+        else -> AttachmentKind.Document
+    },
+    mimeType = optString("mimeType"),
+    fileName = optString("fileName"),
+    sizeBytes = optLong("sizeBytes"),
+    width = if (isNull("width")) null else optInt("width"),
+    height = if (isNull("height")) null else optInt("height"),
+    status = when (optString("status")) {
+        "ready" -> AttachmentStatus.Ready
+        "processing" -> AttachmentStatus.Processing
+        "failed" -> AttachmentStatus.Failed
+        else -> AttachmentStatus.Pending
+    },
+    error = optStringOrNull("error"),
+    url = optStringOrNull("url"),
+    pageCount = if (isNull("pageCount")) null else optInt("pageCount").takeIf { it > 0 },
+    sectionCount = if (isNull("sectionCount")) null else optInt("sectionCount").takeIf { it > 0 },
+)
+
+internal fun JSONObject.toUploadTicket() = UploadTicket(
+    attachment = getJSONObject("attachment").toAttachment(),
+    uploadUrl = getString("uploadUrl"),
+)
+
 internal fun JSONObject.toMessage(): Message {
     val glossary = optJSONArray("glossary")
     return Message(
@@ -177,6 +238,8 @@ internal fun JSONObject.toMessage(): Message {
         translation = optStringOrNull("translation"),
         feedback = optStringOrNull("feedback"),
         glossary = if (glossary == null) emptyList() else List(glossary.length()) { glossary.getString(it) },
+        attachments = optJSONArray("attachments")?.objects()?.map { it.toAttachment() }.orEmpty(),
+        contextNote = optStringOrNull("contextNote"),
     )
 }
 

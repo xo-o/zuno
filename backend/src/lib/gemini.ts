@@ -11,7 +11,10 @@ export class GeminiError extends Error {
   }
 }
 
-export type GeminiTurn = { role: "user" | "model"; text: string };
+/** A file sent with a turn: inline bytes (images and PDFs, base64-encoded) or a URI Gemini fetches itself (YouTube). */
+export type GeminiFile = { mimeType: string; data: string } | { mimeType?: string; fileUri: string };
+
+export type GeminiTurn = { role: "user" | "model"; text: string; files?: GeminiFile[] };
 
 type GenerateOptions<T extends z.ZodType> = {
   system: string;
@@ -20,6 +23,7 @@ type GenerateOptions<T extends z.ZodType> = {
   schema: T;
   thinking?: "low" | "medium" | "high";
   temperature?: number;
+  timeoutMs?: number;
 };
 
 /**
@@ -34,7 +38,17 @@ export async function generateJson<T extends z.ZodType>(options: GenerateOptions
   const contents =
     typeof options.contents === "string"
       ? [{ role: "user", parts: [{ text: options.contents }] }]
-      : options.contents.map((turn) => ({ role: turn.role, parts: [{ text: turn.text }] }));
+      : options.contents.map((turn) => ({
+          role: turn.role,
+          parts: [
+            ...(turn.files ?? []).map((file) =>
+              "data" in file
+                ? { inlineData: { mimeType: file.mimeType, data: file.data } }
+                : { fileData: { fileUri: file.fileUri, ...(file.mimeType && { mimeType: file.mimeType }) } },
+            ),
+            { text: turn.text },
+          ],
+        }));
 
   const body = {
     systemInstruction: { parts: [{ text: options.system }] },
@@ -51,7 +65,7 @@ export async function generateJson<T extends z.ZodType>(options: GenerateOptions
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS),
   }).catch((err: unknown) => {
     throw new GeminiError(`Gemini request failed: ${err instanceof Error ? err.message : String(err)}`);
   });

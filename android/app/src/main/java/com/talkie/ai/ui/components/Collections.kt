@@ -66,9 +66,11 @@ fun ZunoBackTitleTopBar(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIconButton(R.drawable.zuno_ic_arrow_left, onBack, contentDescription = "Back")
+        ZunoIconButton(R.drawable.zuno_ic_arrow_left, onBack, size = ZunoIconButtonSize.Large, contentDescription = "Back")
         EllipsizedText(title, ZunoType.TitleLarge, ZunoColors.TextPrimary, Modifier.weight(1f))
-        trailingIcon?.let { ZunoIconButton(it, onTrailing, contentDescription = trailingDescription) }
+        trailingIcon?.let {
+            ZunoIconButton(it, onTrailing, size = ZunoIconButtonSize.Large, contentDescription = trailingDescription)
+        }
     }
 }
 
@@ -90,7 +92,7 @@ fun ZunoSearchTopBar(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIconButton(R.drawable.zuno_ic_arrow_left, onClose, contentDescription = "Close search")
+        ZunoIconButton(R.drawable.zuno_ic_arrow_left, onClose, size = ZunoIconButtonSize.Large, contentDescription = "Close search")
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -150,19 +152,23 @@ fun ZunoCollectionCard(
             EllipsizedText(title, ZunoType.Headline, ZunoColors.TextPrimary)
             EllipsizedText(subtitle, ZunoType.BodySmall, ZunoColors.TextSecondary)
         }
-        ZunoOverflowMenu(menu, small = true)
+        ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Small)
     }
 }
 
 /** Three-dots button that opens a dropdown of [actions]. */
 @Composable
-fun ZunoOverflowMenu(actions: List<ZunoMenuAction>, modifier: Modifier = Modifier, small: Boolean = false) {
+fun ZunoOverflowMenu(
+    actions: List<ZunoMenuAction>,
+    modifier: Modifier = Modifier,
+    size: ZunoIconButtonSize = ZunoIconButtonSize.Medium,
+) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
         ZunoIconButton(
             icon = R.drawable.zuno_ic_more_vertical,
             onClick = { open = true },
-            small = small,
+            size = size,
             contentDescription = "More options",
         )
         DropdownMenu(

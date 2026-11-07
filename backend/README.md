@@ -44,14 +44,17 @@ docker run -p 3000:3000 --env-file .env zuno-backend
 | User Profile | `GET /api/me` | `{ user, profile: { targetLanguage, nativeLanguage, level } }` |
 | Update Profile | `PATCH /api/me` | `{ name?, targetLanguage?: "es" \| "en", level?: "A1"…"C2" }` |
 | Recent Sessions | `GET /api/conversations/recent` | Drawer list: Free Talk threads, topics and roleplays by latest activity |
-| Topics | `GET /api/topics` · `POST /api/topics` | List · create from `{ prompt }` (Gemini builds 5 lessons) |
+| Topics | `GET /api/topics` · `POST /api/topics` | List · create from `{ prompt, attachmentIds?, parts? }` (Gemini builds 5 lessons, optionally from learning material) |
+| Topic Material | `POST /api/topics/analyze` | `{ prompt?, attachmentIds }` → `{ parts: [{ label, suggested }] }` sub-topics found in the material |
 | Topic | `GET` · `DELETE /api/topics/:id` · `POST /api/topics/:id/reset` | Detail with lesson states · delete · reset progress |
 | Lesson | `POST /api/topics/:id/lessons/:lessonId/start` · `…/complete` | Open (or resume) the lesson conversation · mark done |
 | Roleplays | `GET /api/roleplays` · `POST /api/roleplays` | List · create from `{ scenario, userRole?, aiRole? }` and open the first run |
 | Roleplay | `POST /api/roleplays/:id/open` · `…/restart` · `DELETE /api/roleplays/:id` | Resume latest run · new run · delete |
 | Free Talk | `POST /api/conversations` | New Free Talk thread (titled after the first reply) |
 | Conversation | `GET` · `DELETE /api/conversations/:id` | Thread with messages · delete |
-| Send Message | `POST /api/conversations/:id/messages` | `{ text, viaVoice? }` → `{ userMessage (with feedback), reply, lessonCompleted }` |
+| Send Message | `POST /api/conversations/:id/messages` | `{ text, viaVoice?, attachmentIds? }` → `{ userMessage (with feedback), reply, lessonCompleted }` |
+| Attachments | `POST /api/attachments` · `…/:id/complete` · `GET` · `DELETE /api/attachments/:id` | Presigned R2 upload → complete → poll until `ready` |
+| Shared Link | `POST /api/attachments/link` | `{ url }` article or YouTube link; read in the background like a file (poll `GET` until `ready`) |
 | Voice Transcript | `POST /api/conversations/:id/transcript` | `{ turns: [{ role, text }] }` saves turns spoken in a live voice session |
 | Explain Grammar | `POST /api/messages/:id/explain` | Cached explanation of a tutor message |
 | Typing Hint | `POST /api/tutor/hint` | `{ text }` → `{ hint \| null }` |

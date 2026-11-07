@@ -6,12 +6,14 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { HTTPException } from "hono/http-exception";
 import { AccessToken } from "livekit-server-sdk";
+import { describeAttachment, startAttachmentJobs } from "./lib/attachments.js";
 import { auth } from "./lib/auth.js";
 import { contextFor, findConversation, listMessages } from "./lib/conversations.js";
 import { GeminiError } from "./lib/gemini.js";
 import { completeFlow, consumeFlow, getFlow, isFlowVerified } from "./lib/magic-link-flows.js";
 import { getProfile } from "./lib/profile.js";
 import { voiceInstructions } from "./lib/tutor.js";
+import { attachmentRoutes } from "./routes/attachments.js";
 import { conversationRoutes, messageRoutes, tutorRoutes } from "./routes/conversations.js";
 import { profileRoutes } from "./routes/profile.js";
 import { roleplayRoutes } from "./routes/roleplays.js";
@@ -39,7 +41,7 @@ app.use(
   cors({
     origin: (origin) => origin || "*",
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     credentials: true,
   })
@@ -81,6 +83,7 @@ app.route("/api/roleplays", roleplayRoutes);
 app.route("/api/conversations", conversationRoutes);
 app.route("/api/messages", messageRoutes);
 app.route("/api/tutor", tutorRoutes);
+app.route("/api/attachments", attachmentRoutes);
 
 // 3. LiveKit token generation
 type TokenRequest = {
@@ -115,7 +118,12 @@ app.post("/api/livekit/token", async (c) => {
   const thread = body.conversationId ? await findConversation(user.id, body.conversationId) : undefined;
   const context = thread ? await contextFor(thread) : { kind: "freetalk" as const };
   const history = thread ? (await listMessages(thread.id)).slice(-VOICE_HISTORY_TURNS) : [];
-  const transcript = history.map((m) => `${m.role === "user" ? "Learner" : "You"}: ${m.text}`).join("\n");
+  const transcript = history
+    .map((m) => {
+      const files = m.attachments.map(describeAttachment).join("\n");
+      return `${m.role === "user" ? "Learner" : "You"}: ${[files, m.text].filter(Boolean).join("\n")}`;
+    })
+    .join("\n");
   const instructions = transcript
     ? `${voiceInstructions(context, profile)}\n\nConversation so far (continue naturally from here):\n${transcript}`
     : voiceInstructions(context, profile);
@@ -371,3 +379,4 @@ serve({
   fetch: app.fetch,
   port,
 });
+startAttachmentJobs();

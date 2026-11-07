@@ -20,11 +20,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,25 +37,32 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
+import com.talkie.ai.data.Attachment
 import com.talkie.ai.data.Message
 import com.talkie.ai.ui.components.AgentGlowState
 import com.talkie.ai.ui.components.CallControlState
 import com.talkie.ai.ui.components.ZunoAssistantBubble
 import com.talkie.ai.ui.components.ZunoCallControl
 import com.talkie.ai.ui.components.ZunoComposer
+import com.talkie.ai.ui.components.ZunoDraftAttachment
+import com.talkie.ai.ui.components.ZunoMessageAttachments
+import com.talkie.ai.ui.components.ZunoPendingAttachments
 import com.talkie.ai.ui.components.ZunoFeedbackPill
 import com.talkie.ai.ui.components.ZunoLiveIndicator
 import com.talkie.ai.ui.components.ZunoLoadState
 import com.talkie.ai.ui.components.ZunoMenuAction
 import com.talkie.ai.ui.components.ZunoOverflowMenu
 import com.talkie.ai.ui.components.ZunoSessionStart
-import com.talkie.ai.ui.components.ZunoTitleTopBar
+import com.talkie.ai.ui.components.ZunoCompactTitleTopBar
+import com.talkie.ai.ui.components.ZunoIconButtonSize
 import com.talkie.ai.ui.components.ZunoTutorHint
 import com.talkie.ai.ui.components.ZunoTypingBubble
 import com.talkie.ai.ui.components.ZunoUserBubble
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoSpace
 import com.talkie.ai.ui.theme.ZunoType
+import com.talkie.ai.viewmodel.DraftAttachment
+import com.talkie.ai.viewmodel.DraftUploadState
 
 /** A line spoken in the current live voice session (not yet saved to history). */
 data class LiveLine(val isUser: Boolean, val text: String)
@@ -65,6 +74,8 @@ fun ChatScreen(
     sessionLabel: String,
     messages: List<Message>?,
     pendingText: String?,
+    pendingAttachments: List<DraftAttachment>,
+    drafts: List<DraftAttachment>,
     error: String?,
     liveLines: List<LiveLine>,
     voiceMode: Boolean,
@@ -75,16 +86,23 @@ fun ChatScreen(
     placeholder: String,
     typingHint: String?,
     menu: List<ZunoMenuAction>,
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     onRetryLoad: () -> Unit,
     onSend: (String) -> Unit,
     onDraftChanged: (String) -> Unit,
+    /** Saved composer text, restored when the chat reopens. */
+    savedDraft: () -> String,
+    onSaveDraft: (String) -> Unit,
     onStartVoice: () -> Unit,
     onSwitchToText: () -> Unit,
     onToggleMute: () -> Unit,
     onEndVoice: () -> Unit,
     onListen: (String) -> Unit,
     onExplain: (Message) -> Unit,
+    onAttach: () -> Unit,
+    onRemoveAttachment: (DraftAttachment) -> Unit,
+    onRetryAttachment: (DraftAttachment) -> Unit,
+    onOpenAttachment: (Attachment) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -106,11 +124,10 @@ fun ChatScreen(
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
-            ZunoTitleTopBar(
+            ZunoCompactTitleTopBar(
                 title = title,
-                onMenu = onOpenDrawer,
-                onMore = {},
-                trailing = { ZunoOverflowMenu(menu) },
+                onBack = onBack,
+                trailing = { ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Large) },
             )
             if (messages == null) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -124,16 +141,22 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
                 ) {
                     item(key = "start") { ZunoSessionStart(sessionLabel) }
-                    items(messages, key = { it.id }) { message ->
+                    itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
                         if (message.isUser) {
-                            UserTurn(message.text, message.feedback)
+                            UserTurn(message.text, message.feedback) {
+                                if (message.attachments.isNotEmpty()) ZunoMessageAttachments(message.attachments, onOpenAttachment)
+                            }
                         } else {
+                            // The note describes files on the learner turn just above; tapping it opens the first one.
+                            val source = messages.getOrNull(index - 1)?.attachments?.firstOrNull()
                             ZunoAssistantBubble(
                                 message = message.text,
                                 translation = message.translation,
                                 glossary = message.glossary,
                                 onListen = { onListen(message.text) },
                                 onExplain = { onExplain(message) },
+                                contextNote = message.contextNote,
+                                onContextClick = source?.let { { onOpenAttachment(it) } },
                             )
                         }
                     }
@@ -142,7 +165,11 @@ fun ChatScreen(
                         if (line.isUser) UserTurn(line.text, null) else ZunoAssistantBubble(message = line.text)
                     }
                     if (pendingText != null) {
-                        item(key = "pending-user") { UserTurn(pendingText, null) }
+                        item(key = "pending-user") {
+                            UserTurn(pendingText, null) {
+                                if (pendingAttachments.isNotEmpty()) ZunoPendingAttachments(pendingAttachments)
+                            }
+                        }
                         item(key = "pending-reply") { ZunoTypingBubble() }
                     }
                     if (error != null && pendingText == null) {
@@ -184,7 +211,13 @@ fun ChatScreen(
                         enabled = messages != null && pendingText == null,
                         placeholder = placeholder,
                         typingHint = typingHint,
+                        drafts = drafts,
+                        onAttach = onAttach,
+                        onRemoveAttachment = onRemoveAttachment,
+                        onRetryAttachment = onRetryAttachment,
                         onDraftChanged = onDraftChanged,
+                        savedDraft = savedDraft,
+                        onSaveDraft = onSaveDraft,
                         onSend = onSend,
                         onVoice = {
                             focusComposer = false
@@ -198,13 +231,16 @@ fun ChatScreen(
 }
 
 @Composable
-private fun UserTurn(text: String, feedback: String?) {
+private fun UserTurn(text: String, feedback: String?, attachments: @Composable () -> Unit = {}) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
-        ZunoUserBubble(message = text)
+        attachments()
+        // A message can be just a file; the "You" label then sits under the attachment.
+        if (text.isNotBlank()) ZunoUserBubble(message = text)
+        else Text("You", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
         feedback?.let { ZunoFeedbackPill(it) }
     }
 }
@@ -215,11 +251,18 @@ private fun ComposerFooter(
     enabled: Boolean,
     placeholder: String,
     typingHint: String?,
+    drafts: List<DraftAttachment>,
+    onAttach: () -> Unit,
+    onRemoveAttachment: (DraftAttachment) -> Unit,
+    onRetryAttachment: (DraftAttachment) -> Unit,
     onDraftChanged: (String) -> Unit,
+    savedDraft: () -> String,
+    onSaveDraft: (String) -> Unit,
     onSend: (String) -> Unit,
     onVoice: () -> Unit,
 ) {
-    var draft by rememberSaveable { mutableStateOf("") }
+    var draft by rememberSaveable { mutableStateOf(savedDraft()) }
+    val attachmentsReady = drafts.all { it.state == DraftUploadState.Ready }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(autoFocus) {
         if (autoFocus) focusRequester.requestFocus()
@@ -237,19 +280,34 @@ private fun ComposerFooter(
             onValueChange = {
                 draft = it
                 onDraftChanged(it)
+                onSaveDraft(it)
             },
             onSend = {
                 val text = draft.trim()
-                if (text.isNotEmpty() && enabled) {
+                if ((text.isNotEmpty() || drafts.isNotEmpty()) && enabled && attachmentsReady) {
                     onSend(text)
                     draft = ""
+                    onSaveDraft("")
                 }
             },
-            onAttach = {},
+            onAttach = onAttach,
             onVoice = onVoice,
             placeholder = placeholder,
             focusRequester = focusRequester,
-            showAttach = false,
+            attachments = if (drafts.isEmpty()) null else {
+                {
+                    drafts.forEach { attachment ->
+                        key(attachment.localId) {
+                            ZunoDraftAttachment(
+                                draft = attachment,
+                                onRemove = { onRemoveAttachment(attachment) },
+                                onRetry = { onRetryAttachment(attachment) },
+                            )
+                        }
+                    }
+                }
+            },
+            sendEnabled = attachmentsReady,
         )
     }
 }

@@ -5,18 +5,38 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { conversation, topic, topicLesson } from "../db/app-schema.js";
 import { db } from "../db/index.js";
-import { createConversation, listMessages } from "../lib/conversations.js";
+import {
+  bindMaterial,
+  collectConversationFiles,
+  collectTopicFiles,
+  materialForTopic,
+  materialNotes,
+  MAX_TOPIC_MATERIAL,
+} from "../lib/attachments.js";
+import { conversationIdsWhere, createConversation, listMessages } from "../lib/conversations.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
 import {
   serializeConversation,
-  serializeMessage,
+  serializeMessages,
   serializeTopicDetail,
   serializeTopicSummary,
 } from "../lib/serializers.js";
-import { generateTopic } from "../lib/tutor.js";
+import { analyzeMaterial, generateTopic } from "../lib/tutor.js";
 
-const createSchema = z.object({ prompt: z.string().trim().min(2).max(200) });
+const attachmentIds = z.array(z.string().min(1).max(64)).max(MAX_TOPIC_MATERIAL);
+
+const createSchema = z.object({
+  prompt: z.string().trim().min(2).max(200),
+  attachmentIds: attachmentIds.default([]),
+  /** Sub-topics from /analyze the learner kept selected. */
+  parts: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+});
+
+const analyzeSchema = z.object({
+  prompt: z.string().trim().max(200).default(""),
+  attachmentIds: attachmentIds.min(1),
+});
 
 async function loadTopic(userId: string, id: string) {
   const row = await db.query.topic.findFirst({
@@ -39,11 +59,21 @@ export const topicRoutes = new Hono<AuthEnv>()
     });
     return c.json({ topics: rows.map((row) => serializeTopicSummary(row, row.lessons)) });
   })
+  /** "Found in your material": sub-topics the learner can include or skip before creating the topic. */
+  .post("/analyze", aiLimit, async (c) => {
+    const userId = c.get("user").id;
+    const body = await parseBody(c, analyzeSchema);
+    const material = await materialForTopic(userId, body.attachmentIds);
+    const parts = await analyzeMaterial(materialNotes(material), body.prompt, await getProfile(userId));
+    return c.json({ parts });
+  })
   .post("/", aiLimit, async (c) => {
     const userId = c.get("user").id;
-    const { prompt } = await parseBody(c, createSchema);
+    const { prompt, attachmentIds, parts } = await parseBody(c, createSchema);
     const profile = await getProfile(userId);
-    const generated = await generateTopic(prompt, profile);
+    const material = await materialForTopic(userId, attachmentIds);
+    const notes = material.length ? materialNotes(material) : null;
+    const generated = await generateTopic(prompt, profile, notes ? { notes, focus: parts } : undefined);
 
     const topicId = randomUUID();
     const row = await db.transaction(async (tx) => {
@@ -56,6 +86,7 @@ export const topicRoutes = new Hono<AuthEnv>()
           title: generated.title,
           translation: generated.translation,
           language: profile.targetLanguage,
+          material: notes ? materialNotes(material, 12_000) : null,
         })
         .returning();
       const lessons = await tx
@@ -73,6 +104,7 @@ export const topicRoutes = new Hono<AuthEnv>()
         .returning();
       return { ...created, lessons };
     });
+    await bindMaterial(topicId, material);
     return c.json({ topic: serializeTopicDetail(row, row.lessons) }, 201);
   })
   .get("/:id", async (c) => {
@@ -81,15 +113,20 @@ export const topicRoutes = new Hono<AuthEnv>()
   })
   .delete("/:id", async (c) => {
     const row = await loadTopic(c.get("user").id, c.req.param("id"));
+    const removeFiles = await collectConversationFiles(await conversationIdsWhere(eq(conversation.topicId, row.id)));
+    const removeMaterial = await collectTopicFiles(row.id);
     await db.delete(topic).where(eq(topic.id, row.id));
+    await Promise.all([removeFiles(), removeMaterial()]);
     return c.body(null, 204);
   })
   .post("/:id/reset", async (c) => {
     const row = await loadTopic(c.get("user").id, c.req.param("id"));
+    const removeFiles = await collectConversationFiles(await conversationIdsWhere(eq(conversation.topicId, row.id)));
     await db.transaction(async (tx) => {
       await tx.update(topicLesson).set({ completedAt: null }).where(eq(topicLesson.topicId, row.id));
       await tx.delete(conversation).where(eq(conversation.topicId, row.id));
     });
+    await removeFiles();
     const fresh = await loadTopic(row.userId, row.id);
     return c.json({ topic: serializeTopicDetail(fresh, fresh.lessons) });
   })
@@ -113,7 +150,7 @@ export const topicRoutes = new Hono<AuthEnv>()
       );
     }
     const messages = await listMessages(thread.id);
-    return c.json({ conversation: serializeConversation(thread), messages: messages.map(serializeMessage) });
+    return c.json({ conversation: serializeConversation(thread), messages: await serializeMessages(messages) });
   })
   .post("/:id/lessons/:lessonId/complete", async (c) => {
     const row = await loadTopic(c.get("user").id, c.req.param("id"));
