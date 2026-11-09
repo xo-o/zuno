@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common -->
+    <string name="common_clear">Limpar</string>
+    <string name="common_delete">Excluir</string>
+    <string name="common_done">Concluído</string>
+    <string name="common_more_options">Mais opções</string>
+    <string name="common_undo">Desfazer</string>
+    <string name="error_no_app">Nenhum app disponível para isso no seu dispositivo</string>
+    <string name="error_no_app_link">Nenhum app consegue abrir este link</string>
+    <string name="error_no_app_file">Nenhum app consegue abrir este arquivo</string>
+
+    <!-- Drawer -->
+    <string name="drawer_scheduled">Agendados</string>
+    <string name="drawer_pinned">Fixados</string>
+    <string name="drawer_search_sessions">Pesquisar sessões</string>
+
+    <!-- Home -->
+    <string name="home_greeting">Oi, o que vamos praticar hoje?</string>
+    <string name="home_mic_on">Microfone ligado — segure o brilho para falar</string>
+    <string name="home_speech_unavailable">O reconhecimento de voz não está disponível neste dispositivo. Digite sua mensagem.</string>
+    <string name="home_didnt_catch">Não entendi — tente de novo</string>
+    <string name="voice_call_ended">Chamada de voz encerrada</string>
+
+    <!-- Chat actions -->
+    <string name="chat_menu_rename">Renomear</string>
+    <string name="chat_menu_pin">Fixar</string>
+    <string name="chat_menu_unpin">Desafixar</string>
+    <string name="chat_menu_share">Compartilhar</string>
+    <string name="chat_menu_report">Denunciar</string>
+    <string name="chat_menu_delete">Excluir</string>
+    <string name="chat_menu_turn_into_topic">Transformar em tópico</string>
+    <string name="chat_menu_complete_lesson">Marcar aula como concluída</string>
+    <string name="chat_menu_back_to_topic">Voltar ao tópico</string>
+    <string name="chat_menu_start_over">Recomeçar</string>
+    <string name="chat_rename_title">Renomear chat</string>
+    <string name="chat_renamed_toast">Chat renomeado</string>
+    <string name="chat_pinned_toast">Chat fixado no topo</string>
+    <string name="chat_unpinned_toast">Chat desafixado</string>
+    <string name="chat_delete_title">Excluir chat?</string>
+    <string name="chat_delete_body">“%1$s” e suas correções serão excluídos. As palavras salvas no Vocabulário continuam lá. Isso não pode ser desfeito.</string>
+    <string name="chat_deleted_toast">Chat excluído</string>
+    <string name="chat_still_replying">Um momento — o Zuno ainda está respondendo</string>
+    <string name="share_title">Compartilhar</string>
+    <string name="share_only_me">Só eu</string>
+    <string name="share_only_me_desc">Visível só para você</string>
+    <string name="share_public">Acesso público</string>
+    <string name="share_public_desc">Qualquer pessoa com o link pode ver</string>
+    <string name="share_action">Compartilhar</string>
+    <string name="share_copy_link">Copiar link</string>
+    <string name="share_link_copied">Link copiado</string>
+    <string name="report_title">Denunciar chat</string>
+    <string name="report_description">O que deu errado? As denúncias ajudam o Zuno a ensinar melhor.</string>
+    <string name="report_reason_wrong_correction">Correção ou tradução errada</string>
+    <string name="report_reason_wrong_level">Idioma ou nível errado</string>
+    <string name="report_reason_offensive">Ofensivo ou inadequado</string>
+    <string name="report_reason_unsafe">Conselho perigoso ou prejudicial</string>
+    <string name="report_reason_other">Outro motivo</string>
+    <string name="report_details_hint">Adicione mais detalhes (opcional)</string>
+    <string name="report_submit">Enviar denúncia</string>
+    <string name="report_sent_toast">Obrigado — vamos analisar este chat</string>
+    <string name="session_kind_free_talk">Conversa livre</string>
+    <string name="session_kind_roleplay">Roleplay</string>
+    <string name="session_kind_lesson">Aula</string>
+    <string name="session_kind_level_check">Teste de nível</string>
+    <string name="session_label_new">Nova sessão: %1$s · Agora</string>
+    <string name="explain_title">Gramática</string>
+    <string name="explain_thinking">Pensando…</string>
+    <string name="explain_failed">Não foi possível explicar isso agora.</string>
+
+    <!-- Attachments & reminders -->
+    <string name="attach_title_chat">Adicionar a este chat</string>
+    <string name="attach_title_material">Adicionar material de estudo</string>
+    <string name="attach_limit_message">Você pode anexar até %1$d arquivos por mensagem</string>
+    <string name="attach_limit_material">Você pode adicionar até %1$d arquivos</string>
+    <string name="reminder_in_one_hour">Em 1 hora</string>
+    <string name="reminder_tonight_chip">Hoje à noite · %1$s</string>
+    <string name="reminder_tonight">Hoje à noite, %1$s</string>
+    <string name="reminder_today_chip">Hoje · %1$s</string>
+    <string name="reminder_today">Hoje, %1$s</string>
+    <string name="reminder_tomorrow_chip">Amanhã · %1$s</string>
+    <string name="reminder_tomorrow">Amanhã, %1$s</string>
+    <string name="reminder_set_toast">Lembrete definido · %1$s</string>
+    <string name="reminder_enable_notifications">Ative as notificações do Zuno para receber este lembrete</string>
+    <string name="reminder_your_chat">seu chat</string>
+
+    <!-- Push notifications -->
+    <string name="push_channel_reminders">Lembretes de prática</string>
+    <string name="push_channel_reminders_desc">Lembretes para continuar uma conversa e sua prática diária</string>
+    <string name="push_channel_schedule">Sessões agendadas</string>
+    <string name="push_channel_schedule_desc">Aviso antes de uma sessão que você agendou</string>
+    <string name="push_channel_progress">Progresso</string>
+    <string name="push_channel_progress_desc">Conquistas como concluir um tópico</string>
+    <string name="push_channel_news">Novidades</string>
+    <string name="push_channel_news_desc">Novos tópicos, roleplays e novidades do app</string>
+    <string name="push_action_snooze">Adiar 10 min</string>
+
+    <!-- Scheduled -->
+    <string name="schedule_title">Agendados</string>
+    <string name="schedule_empty_title">Nada agendado</string>
+    <string name="schedule_empty_body">Planeje sua prática com antecedência. Escolha um tópico ou roleplay e o Zuno vai lembrar você na hora certa.</string>
+    <string name="schedule_fab">Agendar</string>
+    <string name="schedule_group_today">Hoje</string>
+    <string name="schedule_group_tomorrow">Amanhã</string>
+    <string name="schedule_group_this_week">Mais tarde nesta semana</string>
+    <string name="schedule_group_later">Depois</string>
+    <string name="schedule_group_paused">Pausados</string>
+    <string name="schedule_kind_topic">Tópico</string>
+    <string name="schedule_kind_roleplay">Roleplay</string>
+    <string name="schedule_minutes">%1$d min</string>
+    <string name="schedule_new_title">Novo agendamento</string>
+    <string name="schedule_edit_title">Editar agendamento</string>
+    <string name="schedule_step">Etapa %1$d de %2$d</string>
+    <string name="schedule_step1_question">O que você quer praticar?</string>
+    <string name="schedule_no_topics">Nenhum tópico ainda. Crie um tópico primeiro e depois agende aqui.</string>
+    <string name="schedule_no_roleplays">Nenhum roleplay ainda. Crie um roleplay primeiro e depois agende aqui.</string>
+    <string name="schedule_topic_next">Próxima: aula %1$d de %2$d</string>
+    <string name="schedule_topic_review">Concluído · Revisar</string>
+    <string name="schedule_roles">Você: %1$s · Zuno: %2$s</string>
+    <string name="schedule_continue">Continuar</string>
+    <string name="schedule_section_schedule">Agendamento</string>
+    <string name="schedule_section_more">Mais</string>
+    <string name="schedule_repeat">Repetir</string>
+    <string name="schedule_repeat_once">Uma vez</string>
+    <string name="schedule_repeat_daily">Diariamente</string>
+    <string name="schedule_repeat_weekdays">Dias úteis</string>
+    <string name="schedule_repeat_weekly">Semanalmente</string>
+    <string name="schedule_repeat_monthly">Mensalmente</string>
+    <string name="schedule_date">Data</string>
+    <string name="schedule_time">Horário</string>
+    <string name="schedule_days_hint">Dias · escolha um ou mais</string>
+    <string name="schedule_month_day">Dia do mês</string>
+    <string name="schedule_day_n">Dia %1$d</string>
+    <string name="schedule_active">Ativo</string>
+    <string name="schedule_active_sub">Agendamentos pausados não são executados</string>
+    <string name="schedule_remind_before">Lembrar antes</string>
+    <string name="schedule_remind_before_sub">10 minutos antes de começar</string>
+    <string name="schedule_notify_email">Avisar por e-mail</string>
+    <string name="schedule_phrase_once">Uma vez em %1$s às %2$s</string>
+    <string name="schedule_phrase_daily">Diariamente às %1$s</string>
+    <string name="schedule_phrase_weekdays">Dias úteis às %1$s</string>
+    <string name="schedule_phrase_weekly">Semanalmente, %1$s às %2$s</string>
+    <string name="schedule_phrase_monthly">Mensalmente no dia %1$d às %2$s</string>
+    <string name="schedule_added_toast">Agendado · %1$s</string>
+    <string name="schedule_updated_toast">Atualizado · %1$s</string>
+    <string name="schedule_start_now">Começar agora</string>
+    <string name="schedule_edit">Editar horário e repetição</string>
+    <string name="schedule_skip_tomorrow">Pular só amanhã</string>
+    <string name="schedule_skip_today">Pular só hoje</string>
+    <string name="schedule_skip_day">Pular só %1$s</string>
+    <string name="schedule_skip_next">Pular a próxima sessão</string>
+    <string name="schedule_skipped_toast">Pulado · próxima sessão %1$s</string>
+    <string name="schedule_skipped_done_toast">Pulado · nada mais agendado</string>
+    <string name="schedule_delete">Excluir agendamento</string>
+    <string name="schedule_delete_title">Excluir agendamento?</string>
+    <string name="schedule_delete_body">“%1$s” não será mais agendado. O tópico ou roleplay em si continua.</string>
+    <string name="schedule_deleted_toast">Agendamento excluído</string>
+
+    <!-- Settings · sign out, account -->
+    <string name="signout_title">Sair?</string>
+    <string name="signout_body">Você pode entrar de novo quando quiser. Seu progresso, vocabulário e chats ficam salvos na sua conta.</string>
+    <string name="signed_out_toast">Você saiu da conta</string>
+    <string name="session_expired_toast">Sua sessão expirou — entre novamente</string>
+    <string name="settings_pro_plan">Plano Pro</string>
+    <string name="settings_acc_plan_pro">Pro</string>
+    <string name="settings_acc_edit_name">Seu nome</string>
+    <string name="account_delete_title">Excluir sua conta?</string>
+    <string name="account_delete_body">Sua conta, chats, tópicos, roleplays, agendamentos e arquivos serão excluídos permanentemente. Isso não pode ser desfeito.</string>
+    <string name="account_deleted_toast">Sua conta foi excluída</string>
+    <string name="account_photo_updated">Foto atualizada</string>
+    <string name="account_photo_unreadable">Não foi possível ler esta foto</string>
+    <string name="about_title">Sobre o Zuno</string>
+    <string name="about_body">Zuno %1$s — seu tutor de idiomas com IA.</string>
+    <string name="about_terms">Termos de Serviço</string>
+    <string name="about_privacy">Política de Privacidade</string>
+    <string name="support_email_subject">Suporte Zuno</string>
+    <string name="support_email_body">\n\n—\nZuno %1$s · %2$s · Android %3$s</string>
+    <string name="support_no_email_app">Nenhum app de e-mail encontrado. Escreva para %1$s</string>
+
+    <!-- Settings · learning, preferences -->
+    <string name="settings_learn_find_level">Descobrir meu nível</string>
+    <string name="settings_learn_find_level_sub">Conversa de 5 minutos com o Zuno em %1$s</string>
+    <string name="settings_pref_style_balanced_sub">Corrige o que importa e mantém a conversa fluindo</string>
+    <string name="settings_pref_style_gentle_sub">Encorajador, uma correção por vez</string>
+    <string name="settings_pref_style_immersive_sub">Fica no idioma que você está aprendendo</string>
+    <string name="learning_language_title">Idioma de estudo</string>
+    <string name="learning_language_intro">Escolha o idioma que você quer praticar. Seu progresso em cada idioma é salvo separadamente.</string>
+    <string name="learning_language_search">Pesquisar idiomas</string>
+    <string name="learning_language_now">Aprendendo agora</string>
+    <string name="learning_language_all">Todos os idiomas</string>
+    <plurals name="learning_language_results">
+        <item quantity="one">%1$d resultado</item>
+        <item quantity="other">%1$d resultados</item>
+    </plurals>
+    <string name="learning_language_switch_title">Mudar para %1$s?</string>
+    <string name="learning_language_switch_body">Seu progresso, vocabulário e chats em %1$s ficam salvos — você pode voltar quando quiser.</string>
+    <string name="learning_language_switch_level">Em seguida, uma conversa de 5 minutos com o Zuno descobre seu nível de %1$s.</string>
+    <string name="learning_language_switch">Mudar</string>
+    <string name="learning_language_switched">Agora aprendendo %1$s</string>
+    <string name="level_check_first_message">Oi, Zuno! Vamos descobrir meu nível.</string>
+    <string name="level_check_done">Seu nível: %1$s</string>
+</resources>

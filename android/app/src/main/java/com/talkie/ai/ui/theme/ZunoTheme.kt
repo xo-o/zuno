@@ -24,7 +24,8 @@ import com.talkie.ai.R
 object ZunoColors {
     // Primitives — Gray
     val Gray1 = Color(0xFF050505)
-    val Gray2 = Color(0xFF0D0D0D)
+    // Matches Figma gray/2. Keep res/values/colors.xml `background` and the inverse zuno_ic_* drawables in sync.
+    val Gray2 = Color(0xFF121212)
     val Gray3 = Color(0xFF171717)
     val Gray4 = Color(0xFF242424)
     val Gray5 = Color(0xFF333333)
@@ -71,6 +72,10 @@ object ZunoColors {
     val IconOnInverse = Gray2
 
     val Divider = Color(0x24FFFFFF)
+
+    // Danger (destructive confirm, "Delete" menu item)
+    val SurfaceDanger = Color(0xFFD15555)
+    val TextDanger = Color(0xFFFF8B8B)
 
     // Glow
     val GlowDeep = Gray4

@@ -167,7 +167,7 @@ fun TopicsScreen(
         title = "Topics",
         icon = R.drawable.zuno_ic_book_open,
         items = topics?.map { topic ->
-            CollectionItem(topic.id, topic.title, topic.subtitle(), listOf(ZunoMenuAction("Delete topic") { onDelete(topic) }))
+            CollectionItem(topic.id, topic.title, topic.subtitle(), listOf(ZunoMenuAction("Delete topic", icon = R.drawable.zuno_ic_t_trash, destructive = true) { onDelete(topic) }))
         },
         loading = loading,
         error = error,
@@ -206,8 +206,8 @@ fun RoleplaysScreen(
                 title = roleplay.title,
                 subtitle = "You: ${roleplay.userRole} · Zuno: ${roleplay.aiRole}",
                 menu = listOf(
-                    ZunoMenuAction("Start over") { onRestart(roleplay) },
-                    ZunoMenuAction("Delete roleplay") { onDelete(roleplay) },
+                    ZunoMenuAction("Start over", icon = R.drawable.zuno_ic_t_rotate_ccw) { onRestart(roleplay) },
+                    ZunoMenuAction("Delete roleplay", icon = R.drawable.zuno_ic_t_trash, destructive = true, dividerBefore = true) { onDelete(roleplay) },
                 ),
             )
         },

@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common -->
+    <string name="common_clear">Wissen</string>
+    <string name="common_delete">Verwijderen</string>
+    <string name="common_done">Klaar</string>
+    <string name="common_more_options">Meer opties</string>
+    <string name="common_undo">Ongedaan maken</string>
+    <string name="error_no_app">Geen app op je apparaat beschikbaar hiervoor</string>
+    <string name="error_no_app_link">Geen app kan deze link openen</string>
+    <string name="error_no_app_file">Geen app kan dit bestand openen</string>
+
+    <!-- Drawer -->
+    <string name="drawer_scheduled">Gepland</string>
+    <string name="drawer_pinned">Vastgezet</string>
+    <string name="drawer_search_sessions">Sessies zoeken</string>
+
+    <!-- Home -->
+    <string name="home_greeting">Hoi, wat gaan we vandaag oefenen?</string>
+    <string name="home_mic_on">Microfoon aan — houd de gloed ingedrukt om te praten</string>
+    <string name="home_speech_unavailable">Spraakherkenning is niet beschikbaar op dit apparaat. Typ je bericht.</string>
+    <string name="home_didnt_catch">Niet verstaan — probeer het opnieuw</string>
+    <string name="voice_call_ended">Spraakgesprek beëindigd</string>
+
+    <!-- Chat actions -->
+    <string name="chat_menu_rename">Naam wijzigen</string>
+    <string name="chat_menu_pin">Vastzetten</string>
+    <string name="chat_menu_unpin">Losmaken</string>
+    <string name="chat_menu_share">Delen</string>
+    <string name="chat_menu_report">Melden</string>
+    <string name="chat_menu_delete">Verwijderen</string>
+    <string name="chat_menu_turn_into_topic">Omzetten in onderwerp</string>
+    <string name="chat_menu_complete_lesson">Les als voltooid markeren</string>
+    <string name="chat_menu_back_to_topic">Terug naar onderwerp</string>
+    <string name="chat_menu_start_over">Opnieuw beginnen</string>
+    <string name="chat_rename_title">Naam van chat wijzigen</string>
+    <string name="chat_renamed_toast">Naam van chat gewijzigd</string>
+    <string name="chat_pinned_toast">Chat bovenaan vastgezet</string>
+    <string name="chat_unpinned_toast">Chat losgemaakt</string>
+    <string name="chat_delete_title">Chat verwijderen?</string>
+    <string name="chat_delete_body">“%1$s” en de correcties worden verwijderd. Woorden die in Woordenschat zijn opgeslagen, blijven bewaard. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="chat_deleted_toast">Chat verwijderd</string>
+    <string name="chat_still_replying">Even geduld — Zuno is nog aan het antwoorden</string>
+    <string name="share_title">Delen</string>
+    <string name="share_only_me">Alleen ik</string>
+    <string name="share_only_me_desc">Alleen zichtbaar voor jou</string>
+    <string name="share_public">Openbare toegang</string>
+    <string name="share_public_desc">Iedereen met de link kan meekijken</string>
+    <string name="share_action">Delen</string>
+    <string name="share_copy_link">Link kopiëren</string>
+    <string name="share_link_copied">Link gekopieerd</string>
+    <string name="report_title">Chat melden</string>
+    <string name="report_description">Wat ging er mis? Meldingen helpen Zuno beter les te geven.</string>
+    <string name="report_reason_wrong_correction">Verkeerde correctie of vertaling</string>
+    <string name="report_reason_wrong_level">Verkeerde taal of verkeerd niveau</string>
+    <string name="report_reason_offensive">Beledigend of ongepast</string>
+    <string name="report_reason_unsafe">Onveilig of schadelijk advies</string>
+    <string name="report_reason_other">Iets anders</string>
+    <string name="report_details_hint">Meer details toevoegen (optioneel)</string>
+    <string name="report_submit">Melding versturen</string>
+    <string name="report_sent_toast">Bedankt — we bekijken deze chat</string>
+    <string name="session_kind_free_talk">Vrij spreken</string>
+    <string name="session_kind_roleplay">Rollenspel</string>
+    <string name="session_kind_lesson">Les</string>
+    <string name="session_kind_level_check">Niveautest</string>
+    <string name="session_label_new">Nieuw: %1$s · Zojuist</string>
+    <string name="explain_title">Grammatica</string>
+    <string name="explain_thinking">Even denken…</string>
+    <string name="explain_failed">Kan dit nu niet uitleggen.</string>
+
+    <!-- Attachments & reminders -->
+    <string name="attach_title_chat">Toevoegen aan deze chat</string>
+    <string name="attach_title_material">Lesmateriaal toevoegen</string>
+    <string name="attach_limit_message">Je kunt maximaal %1$d bestanden per bericht bijvoegen</string>
+    <string name="attach_limit_material">Je kunt maximaal %1$d bestanden toevoegen</string>
+    <string name="reminder_in_one_hour">Over 1 uur</string>
+    <string name="reminder_tonight_chip">Vanavond · %1$s</string>
+    <string name="reminder_tonight">Vanavond %1$s</string>
+    <string name="reminder_today_chip">Vandaag · %1$s</string>
+    <string name="reminder_today">Vandaag %1$s</string>
+    <string name="reminder_tomorrow_chip">Morgen · %1$s</string>
+    <string name="reminder_tomorrow">Morgen %1$s</string>
+    <string name="reminder_set_toast">Herinnering ingesteld · %1$s</string>
+    <string name="reminder_enable_notifications">Zet meldingen voor Zuno aan om deze herinnering te krijgen</string>
+    <string name="reminder_your_chat">je chat</string>
+
+    <!-- Push notifications -->
+    <string name="push_channel_reminders">Oefenherinneringen</string>
+    <string name="push_channel_reminders_desc">Duwtjes om een gesprek en je dagelijkse oefening voort te zetten</string>
+    <string name="push_channel_schedule">Geplande sessies</string>
+    <string name="push_channel_schedule_desc">Seintje voor een sessie die je hebt gepland</string>
+    <string name="push_channel_progress">Voortgang</string>
+    <string name="push_channel_progress_desc">Mijlpalen zoals het afronden van een onderwerp</string>
+    <string name="push_channel_news">Nieuws</string>
+    <string name="push_channel_news_desc">Nieuwe onderwerpen, rollenspellen en productnieuws</string>
+    <string name="push_action_snooze">10 min uitstellen</string>
+
+    <!-- Scheduled -->
+    <string name="schedule_title">Gepland</string>
+    <string name="schedule_empty_title">Niets gepland</string>
+    <string name="schedule_empty_body">Plan je oefening vooruit. Kies een onderwerp of rollenspel en Zuno herinnert je eraan als het tijd is.</string>
+    <string name="schedule_fab">Plannen</string>
+    <string name="schedule_group_today">Vandaag</string>
+    <string name="schedule_group_tomorrow">Morgen</string>
+    <string name="schedule_group_this_week">Later deze week</string>
+    <string name="schedule_group_later">Later</string>
+    <string name="schedule_group_paused">Gepauzeerd</string>
+    <string name="schedule_kind_topic">Onderwerp</string>
+    <string name="schedule_kind_roleplay">Rollenspel</string>
+    <string name="schedule_minutes">%1$d min</string>
+    <string name="schedule_new_title">Nieuwe planning</string>
+    <string name="schedule_edit_title">Planning bewerken</string>
+    <string name="schedule_step">Stap %1$d van %2$d</string>
+    <string name="schedule_step1_question">Wat wil je oefenen?</string>
+    <string name="schedule_no_topics">Nog geen onderwerpen. Maak eerst een onderwerp en plan het dan hier.</string>
+    <string name="schedule_no_roleplays">Nog geen rollenspellen. Maak eerst een rollenspel en plan het dan hier.</string>
+    <string name="schedule_topic_next">Volgende: les %1$d van %2$d</string>
+    <string name="schedule_topic_review">Voltooid · Herhalen</string>
+    <string name="schedule_roles">Jij: %1$s · Zuno: %2$s</string>
+    <string name="schedule_continue">Doorgaan</string>
+    <string name="schedule_section_schedule">Planning</string>
+    <string name="schedule_section_more">Meer</string>
+    <string name="schedule_repeat">Herhalen</string>
+    <string name="schedule_repeat_once">Eenmalig</string>
+    <string name="schedule_repeat_daily">Dagelijks</string>
+    <string name="schedule_repeat_weekdays">Werkdagen</string>
+    <string name="schedule_repeat_weekly">Wekelijks</string>
+    <string name="schedule_repeat_monthly">Maandelijks</string>
+    <string name="schedule_date">Datum</string>
+    <string name="schedule_time">Tijd</string>
+    <string name="schedule_days_hint">Dagen · kies er een of meer</string>
+    <string name="schedule_month_day">Dag van de maand</string>
+    <string name="schedule_day_n">Dag %1$d</string>
+    <string name="schedule_active">Actief</string>
+    <string name="schedule_active_sub">Gepauzeerde planningen worden niet uitgevoerd</string>
+    <string name="schedule_remind_before">Herinner me vooraf</string>
+    <string name="schedule_remind_before_sub">10 minuten voor de start</string>
+    <string name="schedule_notify_email">Melding per e-mail</string>
+    <string name="schedule_phrase_once">Eenmalig op %1$s om %2$s</string>
+    <string name="schedule_phrase_daily">Dagelijks om %1$s</string>
+    <string name="schedule_phrase_weekdays">Werkdagen om %1$s</string>
+    <string name="schedule_phrase_weekly">Wekelijks op %1$s om %2$s</string>
+    <string name="schedule_phrase_monthly">Maandelijks op dag %1$d om %2$s</string>
+    <string name="schedule_added_toast">Gepland · %1$s</string>
+    <string name="schedule_updated_toast">Bijgewerkt · %1$s</string>
+    <string name="schedule_start_now">Nu starten</string>
+    <string name="schedule_edit">Tijd &amp; herhaling bewerken</string>
+    <string name="schedule_skip_tomorrow">Alleen morgen overslaan</string>
+    <string name="schedule_skip_today">Alleen vandaag overslaan</string>
+    <string name="schedule_skip_day">Alleen %1$s overslaan</string>
+    <string name="schedule_skip_next">Volgende sessie overslaan</string>
+    <string name="schedule_skipped_toast">Overgeslagen · volgende sessie %1$s</string>
+    <string name="schedule_skipped_done_toast">Overgeslagen · verder niets gepland</string>
+    <string name="schedule_delete">Planning verwijderen</string>
+    <string name="schedule_delete_title">Planning verwijderen?</string>
+    <string name="schedule_delete_body">“%1$s” wordt niet meer gepland. Het onderwerp of rollenspel zelf blijft bestaan.</string>
+    <string name="schedule_deleted_toast">Planning verwijderd</string>
+
+    <!-- Settings · sign out, account -->
+    <string name="signout_title">Uitloggen?</string>
+    <string name="signout_body">Je kunt altijd weer inloggen. Je voortgang, woordenschat en chats blijven in je account bewaard.</string>
+    <string name="signed_out_toast">Je bent uitgelogd</string>
+    <string name="session_expired_toast">Je sessie is verlopen — log opnieuw in</string>
+    <string name="settings_pro_plan">Pro-abonnement</string>
+    <string name="settings_acc_plan_pro">Pro</string>
+    <string name="settings_acc_edit_name">Je naam</string>
+    <string name="account_delete_title">Je account verwijderen?</string>
+    <string name="account_delete_body">Je account, chats, onderwerpen, rollenspellen, planningen en bestanden worden permanent verwijderd. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="account_deleted_toast">Je account is verwijderd</string>
+    <string name="account_photo_updated">Foto bijgewerkt</string>
+    <string name="account_photo_unreadable">Kan deze foto niet lezen</string>
+    <string name="about_title">Over Zuno</string>
+    <string name="about_body">Zuno %1$s — je AI-taaltutor.</string>
+    <string name="about_terms">Servicevoorwaarden</string>
+    <string name="about_privacy">Privacybeleid</string>
+    <string name="support_email_subject">Zuno-support</string>
+    <string name="support_email_body">\n\n—\nZuno %1$s · %2$s · Android %3$s</string>
+    <string name="support_no_email_app">Geen e-mailapp gevonden. Schrijf ons op %1$s</string>
+
+    <!-- Settings · learning, preferences -->
+    <string name="settings_learn_find_level">Mijn niveau bepalen</string>
+    <string name="settings_learn_find_level_sub">Chat van 5 minuten met Zuno in het %1$s</string>
+    <string name="settings_pref_style_balanced_sub">Corrigeert wat ertoe doet en houdt het gesprek gaande</string>
+    <string name="settings_pref_style_gentle_sub">Bemoedigend, één correctie tegelijk</string>
+    <string name="settings_pref_style_immersive_sub">Blijft in de taal die je leert</string>
+    <string name="learning_language_title">Leertaal</string>
+    <string name="learning_language_intro">Kies de taal die je wilt oefenen. Je voortgang wordt per taal apart bewaard.</string>
+    <string name="learning_language_search">Talen zoeken</string>
+    <string name="learning_language_now">Nu aan het leren</string>
+    <string name="learning_language_all">Alle talen</string>
+    <plurals name="learning_language_results">
+        <item quantity="one">%1$d resultaat</item>
+        <item quantity="other">%1$d resultaten</item>
+    </plurals>
+    <string name="learning_language_switch_title">Overstappen naar %1$s?</string>
+    <string name="learning_language_switch_body">Je voortgang, woordenschat en chats voor %1$s blijven bewaard — je kunt altijd terugschakelen.</string>
+    <string name="learning_language_switch_level">Daarna bepaalt Zuno in een chat van 5 minuten je niveau in het %1$s.</string>
+    <string name="learning_language_switch">Overstappen</string>
+    <string name="learning_language_switched">Je leert nu %1$s</string>
+    <string name="level_check_first_message">Hoi Zuno! Laten we mijn niveau bepalen.</string>
+    <string name="level_check_done">Je niveau: %1$s</string>
+</resources>

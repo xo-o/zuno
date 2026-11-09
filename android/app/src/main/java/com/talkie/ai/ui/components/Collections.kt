@@ -1,6 +1,7 @@
 package com.talkie.ai.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,7 +24,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,6 +39,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -121,7 +123,17 @@ fun ZunoListGroup(modifier: Modifier = Modifier, content: @Composable ColumnScop
     )
 }
 
-data class ZunoMenuAction(val label: String, val onClick: () -> Unit)
+/**
+ * An overflow menu item. [icon] is a tintable `zuno_ic_t_*` glyph; [destructive] renders it red;
+ * [dividerBefore] draws a rule above it (e.g. before Delete).
+ */
+data class ZunoMenuAction(
+    val label: String,
+    @param:DrawableRes val icon: Int? = null,
+    val destructive: Boolean = false,
+    val dividerBefore: Boolean = false,
+    val onClick: () -> Unit,
+)
 
 /** Collection Card — topic / roleplay row with icon badge, two lines and an overflow menu. */
 @Composable
@@ -156,7 +168,7 @@ fun ZunoCollectionCard(
     }
 }
 
-/** Three-dots button that opens a dropdown of [actions]. */
+/** Three-dots button that opens the Overflow Menu with [actions]. */
 @Composable
 fun ZunoOverflowMenu(
     actions: List<ZunoMenuAction>,
@@ -169,22 +181,53 @@ fun ZunoOverflowMenu(
             icon = R.drawable.zuno_ic_more_vertical,
             onClick = { open = true },
             size = size,
-            contentDescription = "More options",
+            contentDescription = stringResource(R.string.common_more_options),
         )
-        DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            containerColor = ZunoColors.BgElevated,
-            shape = RoundedCornerShape(ZunoRadius.lg),
-        ) {
-            actions.forEach { action ->
-                DropdownMenuItem(
-                    text = { Text(action.label, style = ZunoType.BodyMedium, color = ZunoColors.TextPrimary) },
-                    onClick = {
-                        open = false
+        ZunoDropdownMenu(expanded = open, onDismiss = { open = false }, actions = actions)
+    }
+}
+
+/** Overflow Menu — elevated card (16dp radius, strong border) of 48dp icon rows. */
+@Composable
+fun ZunoDropdownMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    actions: List<ZunoMenuAction>,
+    selected: ZunoMenuAction? = null,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        containerColor = ZunoColors.BgElevated,
+        shape = RoundedCornerShape(ZunoRadius.lg),
+        border = BorderStroke(1.dp, ZunoColors.BorderStrong),
+        shadowElevation = 8.dp,
+        modifier = Modifier.padding(horizontal = ZunoSpace.s6),
+    ) {
+        actions.forEach { action ->
+            if (action.dividerBefore) {
+                Box(Modifier.padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s6).width(188.dp).height(1.dp).background(ZunoColors.Divider))
+            }
+            val color = if (action.destructive) ZunoColors.TextDanger else ZunoColors.TextPrimary
+            Row(
+                modifier = Modifier
+                    .widthIn(min = 208.dp)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(ZunoRadius.md))
+                    .clickable(role = Role.Button) {
+                        onDismiss()
                         action.onClick()
-                    },
-                )
+                    }
+                    .padding(horizontal = ZunoSpace.s16),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                action.icon?.let { ZunoIcon(it, 20.dp, tint = color) }
+                Text(action.label, style = ZunoType.BodyLarge, color = color, modifier = Modifier.weight(1f, fill = false))
+                if (action == selected) {
+                    Box(Modifier.weight(1f))
+                    ZunoIcon(R.drawable.zuno_ic_t_check, 18.dp, tint = ZunoColors.IconPrimary)
+                }
             }
         }
     }

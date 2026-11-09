@@ -5,13 +5,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,21 +20,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.talkie.ai.auth.AuthViewModel
-import com.talkie.ai.reminders.Reminders
+import com.talkie.ai.push.DeepLink
+import com.talkie.ai.push.Push
 import com.talkie.ai.ui.ZunoApp
 import com.talkie.ai.ui.theme.ZunoTheme
 import com.talkie.ai.viewmodel.VoiceSessionViewModel
 import com.talkie.ai.viewmodel.ZunoViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val viewModel: VoiceSessionViewModel by viewModels()
     private val authViewModel: AuthViewModel by viewModels()
     private val zunoViewModel: ZunoViewModel by viewModels()
 
-    /** Conversation to open from a reminder notification; cleared once shown. */
-    private val openChatRequest = MutableStateFlow<String?>(null)
+    /** Where a notification tap should go (chat, scheduled session, topic); cleared once handled. */
+    private val deepLink = MutableStateFlow<DeepLink?>(null)
     private var handledChatIntent: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
         // the intent whenever it hasn't been handled yet.
         handledChatIntent = savedInstanceState?.getString(KEY_HANDLED_CHAT_INTENT)
         handleOpenChat(intent)
+        Push.ensureChannels(this)
 
         setContent {
             ZunoTheme {
@@ -97,7 +99,7 @@ class MainActivity : ComponentActivity() {
                     authViewModel = authViewModel,
                     zunoViewModel = zunoViewModel,
                     runWithVoicePermissions = ::runWithVoicePermissions,
-                    openChatRequest = openChatRequest,
+                    deepLink = deepLink,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -118,10 +120,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleOpenChat(intent: Intent?) {
-        val conversationId = intent?.getStringExtra(Reminders.EXTRA_CONVERSATION_ID) ?: return
-        if (intent.action == handledChatIntent) return
-        handledChatIntent = intent.action
-        openChatRequest.value = conversationId
+        val link = DeepLink.from(intent) ?: return
+        if (intent?.action == handledChatIntent) return
+        handledChatIntent = intent?.action
+        deepLink.value = link
     }
 
     private companion object {

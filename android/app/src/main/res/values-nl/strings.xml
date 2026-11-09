@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zuno</string>
+
+    <!-- Common -->
+    <string name="common_back">Terug</string>
+    <string name="common_cancel">Annuleren</string>
+    <string name="common_save">Opslaan</string>
+    <string name="common_got_it">Begrepen</string>
+    <string name="common_try_again">Opnieuw proberen</string>
+    <string name="common_coming_soon">%1$s — binnenkort beschikbaar</string>
+
+    <!-- Drawer -->
+    <string name="drawer_free_talk">Vrij spreken</string>
+    <string name="drawer_topics">Onderwerpen</string>
+    <string name="drawer_roleplays">Rollenspellen</string>
+    <string name="drawer_progress">Voortgang</string>
+    <string name="drawer_vocabulary">Woordenschat</string>
+    <string name="drawer_recent_sessions">Recente sessies</string>
+    <string name="drawer_recent_empty">Je gesprekken, onderwerpen en rollenspellen verschijnen hier.</string>
+    <string name="drawer_upgrade_banner">Haal meer uit Zuno Pro</string>
+    <string name="drawer_upgrade_action">Upgraden</string>
+    <string name="drawer_settings">Instellingen</string>
+    <string name="drawer_new_chat">Nieuwe chat</string>
+
+    <!-- Home -->
+    <string name="home_hold_to_talk">Houd ingedrukt om te praten</string>
+    <string name="home_listening">Luisteren…</string>
+    <string name="home_release_to_cancel">Laat los om te annuleren</string>
+    <string name="home_sending">Verzenden…</string>
+    <string name="home_release_to_send">Laat los om te verzenden</string>
+    <string name="home_slide_to_cancel">Veeg omlaag om te annuleren</string>
+    <string name="home_type_instead">Typ in plaats daarvan</string>
+    <string name="home_ai_tutor">AI-tutor</string>
+    <string name="home_mic_off">Microfoon staat uit</string>
+    <string name="home_mic_prompt">Geef microfoontoegang om met je tutor te praten</string>
+    <string name="home_allow_mic">Microfoon toestaan</string>
+    <string name="home_mic_settings_hint">Je kunt dit altijd wijzigen in Instellingen</string>
+    <string name="home_greeting_named">Hoi %1$s, wat gaan we vandaag oefenen?</string>
+    <string name="home_greeting_unnamed">Hoi, wat gaan we vandaag oefenen?</string>
+
+    <!-- Settings · 1 & 2 · Overview / Scrolled -->
+    <string name="settings_title">Instellingen</string>
+    <string name="settings_free_plan">Gratis abonnement</string>
+    <string name="settings_account">Account</string>
+    <string name="settings_learning">Leren</string>
+    <string name="settings_app_language">App-taal</string>
+    <string name="settings_preferences">Voorkeuren</string>
+    <string name="settings_notifications">Meldingen</string>
+    <string name="settings_about">Over</string>
+    <string name="settings_contact_support">Contact met support</string>
+    <string name="settings_sign_out">Uitloggen</string>
+    <string name="settings_delete_account">Account verwijderen</string>
+
+    <!-- Settings · 3 · Preferences -->
+    <string name="settings_pref_voice">Stem van Zuno</string>
+    <string name="settings_pref_voice_warm">Warm &amp; vriendelijk</string>
+    <string name="settings_pref_voice_calm">Kalm &amp; helder</string>
+    <string name="settings_pref_voice_energetic">Energiek</string>
+    <string name="settings_pref_teaching_style">Lesstijl</string>
+    <string name="settings_pref_style_balanced">Gebalanceerd</string>
+    <string name="settings_pref_style_gentle">Zachtaardig</string>
+    <string name="settings_pref_style_immersive">Meeslepend</string>
+    <string name="settings_pref_strict_mode">Strenge modus</string>
+    <string name="settings_pref_strict_mode_sub">Directe correcties, zonder omwegen</string>
+    <string name="settings_pref_hands_free">Handsfree-modus</string>
+    <string name="settings_pref_hands_free_sub">Praat zonder op de microfoon te tikken</string>
+    <string name="settings_pref_suggest">Zegsuggesties</string>
+    <string name="settings_pref_suggest_sub">Antwoordideeën als je vastloopt</string>
+    <string name="settings_pref_show_translations">Vertalingen tonen</string>
+    <string name="settings_pref_teach_in_lang">Lesgeven in het %1$s</string>
+    <string name="settings_pref_teach_in_lang_sub">Uitleg in het %1$s, niet in het %2$s</string>
+
+    <!-- Settings · 4 · App language -->
+    <string name="settings_lang_intro">Menu\'s, tips en uitleg van Zuno verschijnen in deze taal. Je oefentaal verandert niet.</string>
+    <string name="settings_lang_en_us">Engels (VS)</string>
+    <string name="settings_lang_es">Spaans</string>
+    <string name="settings_lang_fr">Frans</string>
+    <string name="settings_lang_de">Duits</string>
+    <string name="settings_lang_it">Italiaans</string>
+    <string name="settings_lang_pt_br">Portugees (Brazilië)</string>
+    <string name="settings_lang_nl">Nederlands</string>
+    <string name="settings_lang_pl">Pools</string>
+
+    <!-- Settings · 5 · Learning -->
+    <string name="settings_learn_studying">Studeren</string>
+    <string name="settings_learn_language">Taal</string>
+    <string name="settings_learn_accent">Accent</string>
+    <string name="settings_learn_accent_latam">Latijns-Amerika</string>
+    <string name="settings_learn_accent_spain">Spanje</string>
+    <string name="settings_learn_accent_us">Verenigde Staten</string>
+    <string name="settings_learn_accent_uk">Verenigd Koninkrijk</string>
+    <string name="settings_learn_your_level">Jouw niveau</string>
+    <string name="settings_learn_level_a1_title">A1 · Beginner</string>
+    <string name="settings_learn_level_a1_desc">Je kent basiswoorden en begroetingen en maakt je eerste zinnen.</string>
+    <string name="settings_learn_level_a2_title">A2 · Elementair</string>
+    <string name="settings_learn_level_a2_desc">Je voert eenvoudige gesprekjes over dagelijkse routines, winkelen en reizen.</string>
+    <string name="settings_learn_level_b1_title">B1 · Gemiddeld</string>
+    <string name="settings_learn_level_b1_desc">Je kunt alledaagse gesprekken voeren en praten over bekende onderwerpen.</string>
+    <string name="settings_learn_level_b2_title">B2 · Bovengemiddeld</string>
+    <string name="settings_learn_level_b2_desc">Je spreekt vloeiend en spontaan en legt je standpunten helder uit.</string>
+    <string name="settings_learn_level_c1_title">C1 · Gevorderd</string>
+    <string name="settings_learn_level_c1_desc">Je drukt ideeën moeiteloos en genuanceerd uit in complexe situaties.</string>
+    <string name="settings_learn_level_c2_title">C2 · Vloeiend</string>
+    <string name="settings_learn_level_c2_desc">Je begrijpt en spreekt met moedertaalprecisie over elk onderwerp.</string>
+    <string name="settings_learn_retake_check">Niveautest opnieuw doen</string>
+    <string name="settings_learn_retake_check_sub">Gesprek van 5 minuten met Zuno</string>
+    <string name="settings_learn_goals">Doelen</string>
+    <string name="settings_learn_daily_goal">Dagelijks doel</string>
+    <string name="settings_learn_daily_goal_min">%1$d min</string>
+    <string name="settings_learn_focus">Focus</string>
+    <string name="settings_learn_focus_conversation">Conversatie</string>
+    <string name="settings_learn_focus_travel">Reizen</string>
+    <string name="settings_learn_focus_work">Werk &amp; carrière</string>
+    <string name="settings_learn_focus_exams">Examens &amp; grammatica</string>
+
+    <!-- Settings · 6 · Account -->
+    <string name="settings_acc_change_photo">Foto wijzigen</string>
+    <string name="settings_acc_profile">Profiel</string>
+    <string name="settings_acc_name">Naam</string>
+    <string name="settings_acc_email">E-mail</string>
+    <string name="settings_acc_signed_in_google">Ingelogd met Google</string>
+    <string name="settings_acc_subscription">Abonnement</string>
+    <string name="settings_acc_plan">Abonnement</string>
+    <string name="settings_acc_plan_free">Gratis</string>
+    <string name="settings_acc_restore_purchases">Aankopen herstellen</string>
+    <string name="settings_acc_download_data">Mijn gegevens downloaden</string>
+
+    <!-- Settings · 7 · Notifications -->
+    <string name="settings_notif_practice">Oefenen</string>
+    <string name="settings_notif_daily_reminder">Dagelijkse herinnering</string>
+    <string name="settings_notif_daily_reminder_sub">Een duwtje in de rug om je reeks vast te houden</string>
+    <string name="settings_notif_reminder_time">Tijdstip herinnering</string>
+    <string name="settings_notif_scheduled">Geplande sessies</string>
+    <string name="settings_notif_scheduled_sub">10 minuten voor aanvang van een sessie</string>
+    <string name="settings_notif_updates">Updates</string>
+    <string name="settings_notif_progress">Voortgang &amp; mijlpalen</string>
+    <string name="settings_notif_new_topics">Nieuwe onderwerpen &amp; rollenspellen</string>
+    <string name="settings_notif_email">E-mail</string>
+    <string name="settings_notif_weekly_summary">Wekelijks overzicht</string>
+    <string name="settings_notif_weekly_summary_sub">Je woorden, tijd en voortgang</string>
+    <string name="settings_notif_product_news">Productnieuws</string>
+    <string name="settings_notif_footnote">Je kunt meldingen ook uitschakelen in de instellingen van je telefoon.</string>
+</resources>

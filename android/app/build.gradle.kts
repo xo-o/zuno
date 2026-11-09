@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.net.URI
 
 plugins {
@@ -10,6 +11,30 @@ plugins {
 val authBaseUrl = providers.gradleProperty("zuno.authBaseUrl").getOrElse("http://10.0.2.2:3000").trimEnd('/')
 val googleWebClientId = providers.gradleProperty("zuno.googleWebClientId").getOrElse("")
 val magicLinkHost: String = URI(authBaseUrl).host
+
+/**
+ * Firebase (push) config read from app/google-services.json — the same resources the google-services
+ * plugin would generate. Without the file the app still builds; push is simply off.
+ */
+val firebaseConfig: Map<String, String>? = file("google-services.json").takeIf { it.exists() }?.let { json ->
+    @Suppress("UNCHECKED_CAST")
+    val root = JsonSlurper().parse(json) as Map<String, Any?>
+    val project = root["project_info"] as Map<String, Any?>
+    val clients = root["client"] as List<Map<String, Any?>>
+    val client = clients.firstOrNull {
+        ((it["client_info"] as Map<String, Any?>)["android_client_info"] as Map<String, Any?>)["package_name"] == "com.talkie.ai"
+    } ?: return@let null
+    val clientInfo = client["client_info"] as Map<String, Any?>
+    val apiKey = (client["api_key"] as List<Map<String, Any?>>).first()["current_key"] as String
+    mapOf(
+        "google_app_id" to clientInfo["mobilesdk_app_id"] as String,
+        "gcm_defaultSenderId" to project["project_number"] as String,
+        "google_api_key" to apiKey,
+        "google_crash_reporting_api_key" to apiKey,
+        "project_id" to project["project_id"] as String,
+        "google_storage_bucket" to (project["storage_bucket"] as String? ?: ""),
+    )
+}
 
 android {
     namespace = "com.talkie.ai"
@@ -27,6 +52,8 @@ android {
         buildConfigField("String", "AUTH_BASE_URL", "\"$authBaseUrl\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
         manifestPlaceholders["magicLinkHost"] = magicLinkHost
+        buildConfigField("boolean", "PUSH_ENABLED", (firebaseConfig != null).toString())
+        firebaseConfig?.forEach { (name, value) -> resValue("string", name, value) }
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -68,6 +95,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
+    }
+
+    androidResources {
+        localeFilters += listOf("en", "es", "fr", "de", "it", "pt-rBR", "nl", "pl")
     }
 }
 
@@ -110,6 +142,12 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
-    // Android Core
+    // Push notifications (Firebase Cloud Messaging)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
+    // Android Core & AppCompat (for Per-App Language APIs)
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }

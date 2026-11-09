@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -29,10 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,17 +44,27 @@ import com.talkie.ai.ui.theme.ZunoRadius
 import com.talkie.ai.ui.theme.ZunoSpace
 import com.talkie.ai.ui.theme.ZunoType
 
-/** Draws a design asset with the colors baked into the Figma export. */
+/**
+ * Draws a design asset with the colors baked into the Figma export. Pass [tint] for the white
+ * `zuno_ic_t_*` glyphs, which are meant to be recolored with an icon/text token.
+ */
 @Composable
-fun ZunoIcon(@DrawableRes icon: Int, size: Dp, modifier: Modifier = Modifier, contentDescription: String? = null) {
+fun ZunoIcon(
+    @DrawableRes icon: Int,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    tint: Color? = null,
+) {
     Image(
         painter = painterResource(icon),
         contentDescription = contentDescription,
         modifier = modifier.size(size),
+        colorFilter = tint?.let { ColorFilter.tint(it) },
     )
 }
 
-enum class ZunoButtonVariant { Primary, Secondary, Ghost }
+enum class ZunoButtonVariant { Primary, Secondary, Ghost, Danger }
 
 enum class ZunoButtonSize(val height: Dp, val horizontalPadding: Dp, val gap: Dp, val iconSize: Dp) {
     Large(52.dp, ZunoSpace.s24, ZunoSpace.s8, 20.dp),
@@ -77,6 +90,7 @@ fun ZunoButton(
         ZunoButtonVariant.Primary -> ZunoColors.SurfaceInverse
         ZunoButtonVariant.Secondary -> ZunoColors.SurfaceSubtle
         ZunoButtonVariant.Ghost -> Color.Transparent
+        ZunoButtonVariant.Danger -> ZunoColors.SurfaceDanger
     }
     val contentColor = if (variant == ZunoButtonVariant.Primary) ZunoColors.TextOnInverse else ZunoColors.TextPrimary
     val textStyle = if (size == ZunoButtonSize.Small) ZunoType.LabelSmall else ZunoType.LabelLarge
@@ -226,6 +240,51 @@ fun ZunoTextField(
         )
         helper?.let { Text(it, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary) }
     }
+}
+
+/** [ZunoTextField] for a [TextFieldValue], so callers can control the selection (e.g. select all on open). */
+@Composable
+fun ZunoTextFieldValue(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    singleLine: Boolean = true,
+    minHeight: Dp = 52.dp,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(ZunoRadius.lg)
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = singleLine,
+        textStyle = ZunoType.BodyLarge.copy(color = ZunoColors.TextPrimary),
+        cursorBrush = SolidColor(ZunoColors.TextPrimary),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        interactionSource = interactionSource,
+        modifier = modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = minHeight)
+                    .clip(shape)
+                    .background(if (focused) ZunoColors.SurfaceDefault else ZunoColors.SurfaceSubtle)
+                    .border(1.dp, if (focused) ZunoColors.BorderFocus else ZunoColors.BorderDefault, shape)
+                    .padding(horizontal = ZunoSpace.s16, vertical = if (singleLine) 0.dp else ZunoSpace.s16),
+                contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+            ) {
+                if (value.text.isEmpty()) {
+                    Text(placeholder, style = ZunoType.BodyLarge, color = ZunoColors.TextPlaceholder)
+                }
+                inner()
+            }
+        },
+    )
 }
 
 /** Hairline separator; pass a label for the auth "or" split. */

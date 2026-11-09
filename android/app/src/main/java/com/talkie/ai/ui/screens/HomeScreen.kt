@@ -39,7 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import com.talkie.ai.R
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -48,7 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import com.talkie.ai.data.TargetLanguage
+import com.talkie.ai.data.LearningLanguage
 import com.talkie.ai.ui.components.AgentGlowState
 import com.talkie.ai.ui.components.ZunoSelectorTopBar
 import com.talkie.ai.ui.components.ZunoAgentGlow
@@ -65,17 +67,13 @@ import com.talkie.ai.ui.theme.ZunoType
 import com.talkie.ai.viewmodel.DraftAttachment
 import com.talkie.ai.viewmodel.DraftUploadState
 
-/** Greeting copy per target language: the prompt in the target language, translation in the native one. */
+/** Greeting copy: the prompt in the language being learned, its translation in the app language. */
 data class HomeCopy(val prompt: String, val translation: String, val placeholder: String) {
     companion object {
-        fun forLanguage(language: TargetLanguage, firstName: String): HomeCopy {
-            val name = firstName.ifBlank { null }
-            val es = if (name != null) "Hola $name, ¿qué practicamos hoy?" else "Hola, ¿qué practicamos hoy?"
-            val en = if (name != null) "Hi $name, what shall we practice today?" else "Hi, what shall we practice today?"
-            return when (language) {
-                TargetLanguage.Spanish -> HomeCopy(es, en, "Responde en español…")
-                TargetLanguage.English -> HomeCopy(en, es, "Reply in English…")
-            }
+        /** [translation] is the app-language greeting; it's hidden when it matches the prompt. */
+        fun forLanguage(language: LearningLanguage, firstName: String, translation: String): HomeCopy {
+            val prompt = language.greeting(firstName)
+            return HomeCopy(prompt, translation.takeIf { it != prompt }.orEmpty(), language.placeholder)
         }
     }
 }
@@ -245,16 +243,22 @@ private fun GlowMode(
                     when {
                         micBlocked -> MicBlockedContent(onAllowMicrophone)
                         voiceState == HomeVoiceState.Sending || busy -> {
-                            Caption("Sending…")
+                            Caption(stringResource(R.string.home_sending))
                             Prompt(liveTranscript.ifBlank { copy.prompt })
                             ZunoSpinner(Modifier.padding(top = ZunoSpace.s8))
                         }
                         holding -> {
-                            Caption(if (voiceState == HomeVoiceState.Cancelling) "Release to cancel" else "Listening…")
+                            Caption(
+                                if (voiceState == HomeVoiceState.Cancelling) {
+                                    stringResource(R.string.home_release_to_cancel)
+                                } else {
+                                    stringResource(R.string.home_listening)
+                                }
+                            )
                             ListeningPrompt(liveTranscript)
                         }
                         else -> {
-                            Caption("Hold the glow to talk")
+                            Caption(stringResource(R.string.home_hold_to_talk))
                             Prompt(copy.prompt)
                         }
                     }
@@ -267,12 +271,12 @@ private fun GlowMode(
             verticalArrangement = Arrangement.Center,
         ) {
             if (holding) {
-                Text("Release to send", style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
+                Text(stringResource(R.string.home_release_to_send), style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
                 Spacer(Modifier.height(ZunoSpace.s4))
-                Text("Slide down to cancel", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                Text(stringResource(R.string.home_slide_to_cancel), style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
             } else {
                 Text(
-                    "Type instead",
+                    stringResource(R.string.home_type_instead),
                     style = ZunoType.LabelSmall,
                     color = if (micBlocked) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
                     modifier = Modifier
@@ -287,12 +291,12 @@ private fun GlowMode(
 
 @Composable
 private fun MicBlockedContent(onAllowMicrophone: () -> Unit) {
-    Caption("Microphone is off")
-    Prompt("Allow mic access to talk with your tutor")
+    Caption(stringResource(R.string.home_mic_off))
+    Prompt(stringResource(R.string.home_mic_prompt))
     Spacer(Modifier.height(ZunoSpace.s8))
-    ZunoButton("Allow microphone", onAllowMicrophone, size = ZunoButtonSize.Medium)
+    ZunoButton(stringResource(R.string.home_allow_mic), onAllowMicrophone, size = ZunoButtonSize.Medium)
     Text(
-        "You can change this anytime in Settings",
+        stringResource(R.string.home_mic_settings_hint),
         style = ZunoType.FootnoteRegular,
         color = ZunoColors.TextTertiary,
         textAlign = TextAlign.Center,
@@ -370,7 +374,7 @@ private fun TypeMode(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         ) {
-            Caption("AI Tutor")
+            Caption(stringResource(R.string.home_ai_tutor))
             Prompt(copy.prompt)
             Text(copy.translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary, textAlign = TextAlign.Center)
         }

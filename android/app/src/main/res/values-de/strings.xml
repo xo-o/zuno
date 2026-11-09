@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zuno</string>
+
+    <!-- Common -->
+    <string name="common_back">Zurück</string>
+    <string name="common_cancel">Abbrechen</string>
+    <string name="common_save">Speichern</string>
+    <string name="common_got_it">Verstanden</string>
+    <string name="common_try_again">Erneut versuchen</string>
+    <string name="common_coming_soon">%1$s — demnächst verfügbar</string>
+
+    <!-- Drawer -->
+    <string name="drawer_free_talk">Freies Sprechen</string>
+    <string name="drawer_topics">Themen</string>
+    <string name="drawer_roleplays">Rollenspiele</string>
+    <string name="drawer_progress">Fortschritt</string>
+    <string name="drawer_vocabulary">Wortschatz</string>
+    <string name="drawer_recent_sessions">Letzte Sitzungen</string>
+    <string name="drawer_recent_empty">Deine Gespräche, Themen und Rollenspiele erscheinen hier.</string>
+    <string name="drawer_upgrade_banner">Mehr erreichen mit Zuno Pro</string>
+    <string name="drawer_upgrade_action">Upgrade</string>
+    <string name="drawer_settings">Einstellungen</string>
+    <string name="drawer_new_chat">Neuer Chat</string>
+
+    <!-- Home -->
+    <string name="home_hold_to_talk">Gedrückt halten zum Sprechen</string>
+    <string name="home_listening">Höre zu…</string>
+    <string name="home_release_to_cancel">Loslassen zum Abbrechen</string>
+    <string name="home_sending">Wird gesendet…</string>
+    <string name="home_release_to_send">Loslassen zum Senden</string>
+    <string name="home_slide_to_cancel">Nach unten wischen zum Abbrechen</string>
+    <string name="home_type_instead">Lieber tippen</string>
+    <string name="home_ai_tutor">KI-Tutor</string>
+    <string name="home_mic_off">Mikrofon ist aus</string>
+    <string name="home_mic_prompt">Erlaube Mikrofonzugriff, um mit deinem Tutor zu sprechen</string>
+    <string name="home_allow_mic">Mikrofon erlauben</string>
+    <string name="home_mic_settings_hint">Du kannst dies jederzeit in den Einstellungen ändern</string>
+    <string name="home_greeting_named">Hallo %1$s, was üben wir heute?</string>
+    <string name="home_greeting_unnamed">Hallo, was üben wir heute?</string>
+
+    <!-- Settings · 1 & 2 · Overview / Scrolled -->
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_free_plan">Kostenloser Tarif</string>
+    <string name="settings_account">Konto</string>
+    <string name="settings_learning">Lernen</string>
+    <string name="settings_app_language">App-Sprache</string>
+    <string name="settings_preferences">Präferenzen</string>
+    <string name="settings_notifications">Benachrichtigungen</string>
+    <string name="settings_about">Über</string>
+    <string name="settings_contact_support">Support kontaktieren</string>
+    <string name="settings_sign_out">Abmelden</string>
+    <string name="settings_delete_account">Konto löschen</string>
+
+    <!-- Settings · 3 · Preferences -->
+    <string name="settings_pref_voice">Zunos Stimme</string>
+    <string name="settings_pref_voice_warm">Warm &amp; freundlich</string>
+    <string name="settings_pref_voice_calm">Ruhig &amp; klar</string>
+    <string name="settings_pref_voice_energetic">Energiegeladen</string>
+    <string name="settings_pref_teaching_style">Unterrichtsstil</string>
+    <string name="settings_pref_style_balanced">Ausgewogen</string>
+    <string name="settings_pref_style_gentle">Sanft</string>
+    <string name="settings_pref_style_immersive">Immersiv</string>
+    <string name="settings_pref_strict_mode">Strenger Modus</string>
+    <string name="settings_pref_strict_mode_sub">Direkte Korrekturen, ohne Beschönigung</string>
+    <string name="settings_pref_hands_free">Freisprechmodus</string>
+    <string name="settings_pref_hands_free_sub">Sprechen ohne aufs Mikrofon zu tippen</string>
+    <string name="settings_pref_suggest">Antwortvorschläge</string>
+    <string name="settings_pref_suggest_sub">Ideen, wenn du nicht weiterweißt</string>
+    <string name="settings_pref_show_translations">Übersetzungen anzeigen</string>
+    <string name="settings_pref_teach_in_lang">Auf %1$s unterrichten</string>
+    <string name="settings_pref_teach_in_lang_sub">Erklärungen auf %1$s statt %2$s</string>
+
+    <!-- Settings · 4 · App language -->
+    <string name="settings_lang_intro">Menüs, Tipps und Zunos Erklärungen erscheinen in dieser Sprache. Deine Lernsprache ändert sich nicht.</string>
+    <string name="settings_lang_en_us">Englisch (USA)</string>
+    <string name="settings_lang_es">Spanisch</string>
+    <string name="settings_lang_fr">Französisch</string>
+    <string name="settings_lang_de">Deutsch</string>
+    <string name="settings_lang_it">Italienisch</string>
+    <string name="settings_lang_pt_br">Portugiesisch (Brasilien)</string>
+    <string name="settings_lang_nl">Niederländisch</string>
+    <string name="settings_lang_pl">Polnisch</string>
+
+    <!-- Settings · 5 · Learning -->
+    <string name="settings_learn_studying">Lernsprache</string>
+    <string name="settings_learn_language">Sprache</string>
+    <string name="settings_learn_accent">Akzent</string>
+    <string name="settings_learn_accent_latam">Lateinamerika</string>
+    <string name="settings_learn_accent_spain">Spanien</string>
+    <string name="settings_learn_accent_us">Vereinigte Staaten</string>
+    <string name="settings_learn_accent_uk">Vereinigtes Königreich</string>
+    <string name="settings_learn_your_level">Dein Niveau</string>
+    <string name="settings_learn_level_a1_title">A1 · Anfänger</string>
+    <string name="settings_learn_level_a1_desc">Du kennst Grundwörter und Begrüßungen und bildest deine ersten Sätze.</string>
+    <string name="settings_learn_level_a2_title">A2 · Grundlegende Kenntnisse</string>
+    <string name="settings_learn_level_a2_desc">Du meisterst einfache Gespräche über Alltag, Einkaufen und Reisen.</string>
+    <string name="settings_learn_level_b1_title">B1 · Mittelstufe</string>
+    <string name="settings_learn_level_b1_desc">Du kannst Alltagsgespräche führen und über vertraute Themen sprechen.</string>
+    <string name="settings_learn_level_b2_title">B2 · Gute Mittelstufe</string>
+    <string name="settings_learn_level_b2_desc">Du sprichst flüssig und spontan und kannst Standpunkte klar vertreten.</string>
+    <string name="settings_learn_level_c1_title">C1 · Fortgeschritten</string>
+    <string name="settings_learn_level_c1_desc">Du drückst dich mühelos und nuanciert in komplexen Situationen aus.</string>
+    <string name="settings_learn_level_c2_title">C2 · Annähernd muttersprachlich</string>
+    <string name="settings_learn_level_c2_desc">Du verstehst und sprichst präzise wie ein Muttersprachler über jedes Thema.</string>
+    <string name="settings_learn_retake_check">Einstufungstest wiederholen</string>
+    <string name="settings_learn_retake_check_sub">5-Minuten-Chat mit Zuno</string>
+    <string name="settings_learn_goals">Ziele</string>
+    <string name="settings_learn_daily_goal">Tagesziel</string>
+    <string name="settings_learn_daily_goal_min">%1$d Min.</string>
+    <string name="settings_learn_focus">Fokus</string>
+    <string name="settings_learn_focus_conversation">Konversation</string>
+    <string name="settings_learn_focus_travel">Reisen</string>
+    <string name="settings_learn_focus_work">Beruf &amp; Karriere</string>
+    <string name="settings_learn_focus_exams">Prüfungen &amp; Grammatik</string>
+
+    <!-- Settings · 6 · Account -->
+    <string name="settings_acc_change_photo">Foto ändern</string>
+    <string name="settings_acc_profile">Profil</string>
+    <string name="settings_acc_name">Name</string>
+    <string name="settings_acc_email">E-Mail</string>
+    <string name="settings_acc_signed_in_google">Mit Google angemeldet</string>
+    <string name="settings_acc_subscription">Abonnement</string>
+    <string name="settings_acc_plan">Tarif</string>
+    <string name="settings_acc_plan_free">Kostenlos</string>
+    <string name="settings_acc_restore_purchases">Käufe wiederherstellen</string>
+    <string name="settings_acc_download_data">Meine Daten herunterladen</string>
+
+    <!-- Settings · 7 · Notifications -->
+    <string name="settings_notif_practice">Üben</string>
+    <string name="settings_notif_daily_reminder">Tägliche Erinnerung</string>
+    <string name="settings_notif_daily_reminder_sub">Ein kleiner Anstoß für deine Serie</string>
+    <string name="settings_notif_reminder_time">Erinnerungszeit</string>
+    <string name="settings_notif_scheduled">Geplante Sitzungen</string>
+    <string name="settings_notif_scheduled_sub">10 Minuten vor Beginn einer Sitzung</string>
+    <string name="settings_notif_updates">Neuigkeiten</string>
+    <string name="settings_notif_progress">Fortschritt &amp; Meilensteine</string>
+    <string name="settings_notif_new_topics">Neue Themen &amp; Rollenspiele</string>
+    <string name="settings_notif_email">E-Mail</string>
+    <string name="settings_notif_weekly_summary">Wochenrückblick</string>
+    <string name="settings_notif_weekly_summary_sub">Deine Wörter, Zeit und Fortschritte</string>
+    <string name="settings_notif_product_news">Produktneuigkeiten</string>
+    <string name="settings_notif_footnote">Du kannst Benachrichtigungen auch in den Einstellungen deines Telefons ausschalten.</string>
+</resources>

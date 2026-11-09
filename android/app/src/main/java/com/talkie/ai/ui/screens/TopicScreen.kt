@@ -67,8 +67,8 @@ fun TopicScreen(
             if (topic != null) {
                 ZunoOverflowMenu(
                     actions = listOf(
-                        ZunoMenuAction("Reset progress", onReset),
-                        ZunoMenuAction("Delete topic", onDelete),
+                        ZunoMenuAction("Reset progress", icon = R.drawable.zuno_ic_t_rotate_ccw, onClick = onReset),
+                        ZunoMenuAction("Delete topic", icon = R.drawable.zuno_ic_t_trash, destructive = true, dividerBefore = true, onClick = onDelete),
                     ),
                     modifier = Modifier.align(Alignment.CenterEnd).padding(end = ZunoSpace.s12),
                 )

@@ -33,6 +33,7 @@ function firebase(): App | null {
     const json = raw.startsWith("{") ? raw : Buffer.from(raw, "base64").toString("utf8");
     const account = JSON.parse(json);
     app = getApps()[0] ?? initializeApp({ credential: cert(account) });
+    console.log(`Push notifications enabled (Firebase project ${account.project_id})`);
   } catch (err) {
     console.error("FIREBASE_SERVICE_ACCOUNT is invalid; push notifications are disabled:", err);
     app = null;
@@ -76,7 +77,10 @@ export async function sendToUser(userId: string, message: PushMessage): Promise<
   const firebaseApp = firebase();
   if (!firebaseApp) return 0;
   const devices = await db.select().from(device).where(eq(device.userId, userId));
-  if (devices.length === 0) return 0;
+  if (devices.length === 0) {
+    console.log(`Push ${message.type} to user ${userId}: no registered devices`);
+    return 0;
+  }
 
   const data: Record<string, string> = { type: message.type, title: message.title, body: message.body };
   for (const [key, value] of Object.entries(message.data ?? {})) if (value) data[key] = value;
@@ -93,5 +97,6 @@ export async function sendToUser(userId: string, message: PushMessage): Promise<
     else if (!result.success) console.warn(`Push to ${devices[index].id} failed:`, result.error?.code, result.error?.message);
   });
   if (stale.length) await db.delete(device).where(inArray(device.pushToken, stale));
+  console.log(`Push ${message.type} to user ${userId}: ${response.successCount}/${devices.length} delivered`);
   return response.successCount;
 }

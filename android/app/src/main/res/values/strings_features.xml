@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common -->
+    <string name="common_clear">Clear</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_done">Done</string>
+    <string name="common_more_options">More options</string>
+    <string name="common_undo">Undo</string>
+    <string name="error_no_app">No app available for this on your device</string>
+    <string name="error_no_app_link">No app can open this link</string>
+    <string name="error_no_app_file">No app can open this file</string>
+
+    <!-- Drawer -->
+    <string name="drawer_scheduled">Scheduled</string>
+    <string name="drawer_pinned">Pinned</string>
+    <string name="drawer_search_sessions">Search sessions</string>
+
+    <!-- Home -->
+    <string name="home_greeting">Hi, what shall we practice today?</string>
+    <string name="home_mic_on">Microphone on — hold the glow to talk</string>
+    <string name="home_speech_unavailable">Speech recognition isn\'t available on this device. Type instead.</string>
+    <string name="home_didnt_catch">Didn\'t catch that — try again</string>
+    <string name="voice_call_ended">Voice call ended</string>
+
+    <!-- Chat actions -->
+    <string name="chat_menu_rename">Rename</string>
+    <string name="chat_menu_pin">Pin</string>
+    <string name="chat_menu_unpin">Unpin</string>
+    <string name="chat_menu_share">Share</string>
+    <string name="chat_menu_report">Report</string>
+    <string name="chat_menu_delete">Delete</string>
+    <string name="chat_menu_turn_into_topic">Turn into a topic</string>
+    <string name="chat_menu_complete_lesson">Mark lesson complete</string>
+    <string name="chat_menu_back_to_topic">Back to topic</string>
+    <string name="chat_menu_start_over">Start over</string>
+    <string name="chat_rename_title">Rename chat</string>
+    <string name="chat_renamed_toast">Chat renamed</string>
+    <string name="chat_pinned_toast">Chat pinned to the top</string>
+    <string name="chat_unpinned_toast">Chat unpinned</string>
+    <string name="chat_delete_title">Delete chat?</string>
+    <string name="chat_delete_body">“%1$s” and its corrections will be deleted. Words saved to Vocabulary stay. This can\'t be undone.</string>
+    <string name="chat_deleted_toast">Chat deleted</string>
+    <string name="chat_still_replying">One moment — Zuno is still replying</string>
+    <string name="share_title">Share</string>
+    <string name="share_only_me">Only me</string>
+    <string name="share_only_me_desc">Visible only to you</string>
+    <string name="share_public">Public access</string>
+    <string name="share_public_desc">Anyone with the link can view</string>
+    <string name="share_action">Share</string>
+    <string name="share_copy_link">Copy link</string>
+    <string name="share_link_copied">Link copied</string>
+    <string name="report_title">Report chat</string>
+    <string name="report_description">What went wrong? Reports help Zuno teach better.</string>
+    <string name="report_reason_wrong_correction">Wrong correction or translation</string>
+    <string name="report_reason_wrong_level">Wrong language or level</string>
+    <string name="report_reason_offensive">Offensive or inappropriate</string>
+    <string name="report_reason_unsafe">Unsafe or harmful advice</string>
+    <string name="report_reason_other">Something else</string>
+    <string name="report_details_hint">Add more details (optional)</string>
+    <string name="report_submit">Submit report</string>
+    <string name="report_sent_toast">Thanks — we\'ll review this chat</string>
+    <string name="session_kind_free_talk">Free Talk</string>
+    <string name="session_kind_roleplay">Roleplay</string>
+    <string name="session_kind_lesson">Lesson</string>
+    <string name="session_kind_level_check">Level check</string>
+    <string name="session_label_new">New %1$s · Just now</string>
+    <string name="explain_title">Grammar</string>
+    <string name="explain_thinking">Thinking…</string>
+    <string name="explain_failed">Couldn\'t explain this right now.</string>
+
+    <!-- Attachments & reminders -->
+    <string name="attach_title_chat">Add to this chat</string>
+    <string name="attach_title_material">Add learning material</string>
+    <string name="attach_limit_message">You can attach up to %1$d files per message</string>
+    <string name="attach_limit_material">You can add up to %1$d files</string>
+    <string name="reminder_in_one_hour">In 1 hour</string>
+    <string name="reminder_tonight_chip">Tonight · %1$s</string>
+    <string name="reminder_tonight">Tonight %1$s</string>
+    <string name="reminder_today_chip">Today · %1$s</string>
+    <string name="reminder_today">Today %1$s</string>
+    <string name="reminder_tomorrow_chip">Tomorrow · %1$s</string>
+    <string name="reminder_tomorrow">Tomorrow %1$s</string>
+    <string name="reminder_set_toast">Reminder set · %1$s</string>
+    <string name="reminder_enable_notifications">Turn on notifications for Zuno to get this reminder</string>
+    <string name="reminder_your_chat">your chat</string>
+
+    <!-- Push notifications -->
+    <string name="push_channel_reminders">Practice reminders</string>
+    <string name="push_channel_reminders_desc">Nudges to continue a conversation and your daily practice</string>
+    <string name="push_channel_schedule">Scheduled sessions</string>
+    <string name="push_channel_schedule_desc">Heads-up before a session you scheduled</string>
+    <string name="push_channel_progress">Progress</string>
+    <string name="push_channel_progress_desc">Milestones like finishing a topic</string>
+    <string name="push_channel_news">News</string>
+    <string name="push_channel_news_desc">New topics, roleplays and product news</string>
+    <string name="push_action_snooze">Snooze 10 min</string>
+
+    <!-- Scheduled -->
+    <string name="schedule_title">Scheduled</string>
+    <string name="schedule_empty_title">Nothing scheduled</string>
+    <string name="schedule_empty_body">Plan practice ahead. Pick a topic or roleplay and Zuno will remind you when it\'s time.</string>
+    <string name="schedule_fab">Schedule</string>
+    <string name="schedule_group_today">Today</string>
+    <string name="schedule_group_tomorrow">Tomorrow</string>
+    <string name="schedule_group_this_week">Later this week</string>
+    <string name="schedule_group_later">Later</string>
+    <string name="schedule_group_paused">Paused</string>
+    <string name="schedule_kind_topic">Topic</string>
+    <string name="schedule_kind_roleplay">Roleplay</string>
+    <string name="schedule_minutes">%1$d min</string>
+    <string name="schedule_new_title">New schedule</string>
+    <string name="schedule_edit_title">Edit schedule</string>
+    <string name="schedule_step">Step %1$d of %2$d</string>
+    <string name="schedule_step1_question">What do you want to practice?</string>
+    <string name="schedule_no_topics">No topics yet. Create a topic first, then schedule it here.</string>
+    <string name="schedule_no_roleplays">No roleplays yet. Create a roleplay first, then schedule it here.</string>
+    <string name="schedule_topic_next">Next: Lesson %1$d of %2$d</string>
+    <string name="schedule_topic_review">Completed · Review</string>
+    <string name="schedule_roles">You: %1$s · Zuno: %2$s</string>
+    <string name="schedule_continue">Continue</string>
+    <string name="schedule_section_schedule">Schedule</string>
+    <string name="schedule_section_more">More</string>
+    <string name="schedule_repeat">Repeat</string>
+    <string name="schedule_repeat_once">Once</string>
+    <string name="schedule_repeat_daily">Daily</string>
+    <string name="schedule_repeat_weekdays">Weekdays</string>
+    <string name="schedule_repeat_weekly">Weekly</string>
+    <string name="schedule_repeat_monthly">Monthly</string>
+    <string name="schedule_date">Date</string>
+    <string name="schedule_time">Time</string>
+    <string name="schedule_days_hint">Days · pick one or more</string>
+    <string name="schedule_month_day">Day of the month</string>
+    <string name="schedule_day_n">Day %1$d</string>
+    <string name="schedule_active">Active</string>
+    <string name="schedule_active_sub">Paused schedules don\'t run</string>
+    <string name="schedule_remind_before">Remind me before</string>
+    <string name="schedule_remind_before_sub">10 minutes before it starts</string>
+    <string name="schedule_notify_email">Notify by email</string>
+    <string name="schedule_phrase_once">Once on %1$s at %2$s</string>
+    <string name="schedule_phrase_daily">Daily at %1$s</string>
+    <string name="schedule_phrase_weekdays">Weekdays at %1$s</string>
+    <string name="schedule_phrase_weekly">Weekly on %1$s at %2$s</string>
+    <string name="schedule_phrase_monthly">Monthly on day %1$d at %2$s</string>
+    <string name="schedule_added_toast">Scheduled · %1$s</string>
+    <string name="schedule_updated_toast">Updated · %1$s</string>
+    <string name="schedule_start_now">Start now</string>
+    <string name="schedule_edit">Edit time &amp; repeat</string>
+    <string name="schedule_skip_tomorrow">Skip tomorrow only</string>
+    <string name="schedule_skip_today">Skip today only</string>
+    <string name="schedule_skip_day">Skip %1$s only</string>
+    <string name="schedule_skip_next">Skip the next session</string>
+    <string name="schedule_skipped_toast">Skipped · next session %1$s</string>
+    <string name="schedule_skipped_done_toast">Skipped · nothing else scheduled</string>
+    <string name="schedule_delete">Delete schedule</string>
+    <string name="schedule_delete_title">Delete schedule?</string>
+    <string name="schedule_delete_body">“%1$s” won\'t be scheduled anymore. The topic or roleplay itself stays.</string>
+    <string name="schedule_deleted_toast">Schedule deleted</string>
+
+    <!-- Settings · sign out, account -->
+    <string name="signout_title">Sign out?</string>
+    <string name="signout_body">You can sign back in anytime. Your progress, vocabulary and chats stay saved to your account.</string>
+    <string name="signed_out_toast">You\'ve signed out</string>
+    <string name="session_expired_toast">Your session expired — sign in again</string>
+    <string name="settings_pro_plan">Pro plan</string>
+    <string name="settings_acc_plan_pro">Pro</string>
+    <string name="settings_acc_edit_name">Your name</string>
+    <string name="account_delete_title">Delete your account?</string>
+    <string name="account_delete_body">Your account, chats, topics, roleplays, schedules and files will be permanently deleted. This can\'t be undone.</string>
+    <string name="account_deleted_toast">Your account was deleted</string>
+    <string name="account_photo_updated">Photo updated</string>
+    <string name="account_photo_unreadable">Couldn\'t read this photo</string>
+    <string name="about_title">About Zuno</string>
+    <string name="about_body">Zuno %1$s — your AI language tutor.</string>
+    <string name="about_terms">Terms of Service</string>
+    <string name="about_privacy">Privacy Policy</string>
+    <string name="support_email_subject">Zuno support</string>
+    <string name="support_email_body">\n\n—\nZuno %1$s · %2$s · Android %3$s</string>
+    <string name="support_no_email_app">No email app found. Write to us at %1$s</string>
+
+    <!-- Settings · learning, preferences -->
+    <string name="settings_learn_find_level">Find my level</string>
+    <string name="settings_learn_find_level_sub">5-minute chat with Zuno in %1$s</string>
+    <string name="settings_pref_style_balanced_sub">Corrects what matters and keeps the conversation flowing</string>
+    <string name="settings_pref_style_gentle_sub">Encouraging, one correction at a time</string>
+    <string name="settings_pref_style_immersive_sub">Stays in the language you\'re learning</string>
+    <string name="learning_language_title">Learning language</string>
+    <string name="learning_language_intro">Pick the language you want to practice. Your progress in each language is saved separately.</string>
+    <string name="learning_language_search">Search languages</string>
+    <string name="learning_language_now">Learning now</string>
+    <string name="learning_language_all">All languages</string>
+    <plurals name="learning_language_results">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
+    <string name="learning_language_switch_title">Switch to %1$s?</string>
+    <string name="learning_language_switch_body">Your %1$s progress, vocabulary and chats are saved — you can switch back anytime.</string>
+    <string name="learning_language_switch_level">Next, a 5-minute chat with Zuno finds your %1$s level.</string>
+    <string name="learning_language_switch">Switch</string>
+    <string name="learning_language_switched">Now learning %1$s</string>
+    <string name="level_check_first_message">Hi Zuno! Let\'s find my level.</string>
+    <string name="level_check_done">Your level: %1$s</string>
+</resources>

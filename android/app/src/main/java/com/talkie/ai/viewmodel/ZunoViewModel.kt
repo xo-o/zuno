@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkie.ai.auth.SessionTokenStore
 import com.talkie.ai.data.ApiException
+import com.talkie.ai.data.AppLanguage
 import com.talkie.ai.data.Attachment
 import com.talkie.ai.data.AttachmentFiles
 import com.talkie.ai.data.AttachmentKind
@@ -20,7 +21,14 @@ import com.talkie.ai.data.Message
 import com.talkie.ai.data.Profile
 import com.talkie.ai.data.RecentSession
 import com.talkie.ai.data.Roleplay
-import com.talkie.ai.data.TargetLanguage
+import com.talkie.ai.data.LearningLanguage
+import com.talkie.ai.data.LearningLanguages
+import com.talkie.ai.data.NotificationPrefs
+import com.talkie.ai.data.Preferences
+import com.talkie.ai.data.ReportReason
+import com.talkie.ai.data.Schedule
+import com.talkie.ai.data.ScheduleDraft
+import com.talkie.ai.data.ScheduleTargets
 import com.talkie.ai.data.TopicDetail
 import com.talkie.ai.data.TopicSummary
 import com.talkie.ai.data.ZunoApi
@@ -132,6 +140,19 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     private val uploadJobs = mutableMapOf<String, Job>()
     private val restoredDrafts = mutableSetOf<String>()
 
+    /** Learning languages from the server; starts with the bundled copy. */
+    private val _languages = MutableStateFlow(LearningLanguages.bundled)
+    val languages: StateFlow<List<LearningLanguage>> = _languages.asStateFlow()
+
+    private val _notificationPrefs = MutableStateFlow<NotificationPrefs?>(null)
+    val notificationPrefs: StateFlow<NotificationPrefs?> = _notificationPrefs.asStateFlow()
+
+    private val _schedules = MutableStateFlow(Loadable<List<Schedule>>())
+    val schedules: StateFlow<Loadable<List<Schedule>>> = _schedules.asStateFlow()
+
+    private val _scheduleTargets = MutableStateFlow(Loadable<ScheduleTargets>())
+    val scheduleTargets: StateFlow<Loadable<ScheduleTargets>> = _scheduleTargets.asStateFlow()
+
     private val _materialAnalysis = MutableStateFlow(MaterialAnalysis())
     val materialAnalysis: StateFlow<MaterialAnalysis> = _materialAnalysis.asStateFlow()
     private var analysisJob: Job? = null
@@ -158,16 +179,156 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val sessionExpired: SharedFlow<Unit> = _sessionExpired.asSharedFlow()
 
+    private val _levelAssessed = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    /** A level check finished with this CEFR level. */
+    val levelAssessed: SharedFlow<String> = _levelAssessed.asSharedFlow()
+
+    // ── Notifications ───────────────────────────────────────────────────────
+
+    fun loadNotificationPrefs() = launchSafely { _notificationPrefs.value = api.notificationPrefs() }
+
+    /** Optimistic; rolls back on failure. Always reports the device's time zone along with the change. */
+    fun updateNotificationPrefs(transform: (NotificationPrefs) -> NotificationPrefs) {
+        val previous = _notificationPrefs.value ?: return
+        val timezone = java.util.TimeZone.getDefault().id
+        val next = transform(previous).copy(timezone = timezone)
+        _notificationPrefs.value = next
+        val fields = buildMap<String, Any> {
+            put("timezone", timezone)
+            if (next.dailyReminder != previous.dailyReminder) put("dailyReminder", next.dailyReminder)
+            if (next.reminderTime != previous.reminderTime) put("reminderTime", next.reminderTime)
+            if (next.scheduledSessions != previous.scheduledSessions) put("scheduledSessions", next.scheduledSessions)
+            if (next.progressMilestones != previous.progressMilestones) put("progressMilestones", next.progressMilestones)
+            if (next.newContent != previous.newContent) put("newContent", next.newContent)
+            if (next.weeklySummaryEmail != previous.weeklySummaryEmail) put("weeklySummaryEmail", next.weeklySummaryEmail)
+            if (next.productNewsEmail != previous.productNewsEmail) put("productNewsEmail", next.productNewsEmail)
+        }
+        viewModelScope.launch {
+            try {
+                _notificationPrefs.value = api.updateNotificationPrefs(fields)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _notificationPrefs.value = previous
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Registers this install's FCM token with the backend (after sign-in and on token refresh). */
+    fun registerPushToken(token: String, appLanguage: String) = launchSafely(silent = true) {
+        api.registerDevice(token, java.util.TimeZone.getDefault().id, appLanguage)
+    }
+
+    // ── Scheduled sessions ──────────────────────────────────────────────────
+
+    fun loadSchedules() {
+        _schedules.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _schedules.value = Loadable(api.schedules())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _schedules.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun loadScheduleTargets() {
+        _scheduleTargets.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _scheduleTargets.value = Loadable(api.scheduleTargets())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _scheduleTargets.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    /** Creates ([editingId] null) or updates a schedule, then reports the saved row. */
+    fun saveSchedule(editingId: String?, draft: ScheduleDraft, onSaved: (Schedule) -> Unit) = runBusy {
+        val saved = if (editingId == null) api.createSchedule(draft) else api.updateSchedule(editingId, draft)
+        _schedules.update { state ->
+            val others = state.items.orEmpty().filterNot { it.id == saved.id }
+            state.copy(items = (others + saved).sortedWith(compareBy(nullsLast()) { it.nextRunAtMillis }))
+        }
+        onSaved(saved)
+    }
+
+    fun deleteSchedule(id: String, onDeleted: () -> Unit = {}) {
+        val previous = _schedules.value
+        _schedules.update { state -> state.copy(items = state.items?.filterNot { it.id == id }) }
+        viewModelScope.launch {
+            try {
+                api.deleteSchedule(id)
+                onDeleted()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _schedules.value = previous
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun skipNextSchedule(id: String, onSkipped: (Schedule) -> Unit) = launchSafely {
+        val updated = api.skipNextSchedule(id)
+        _schedules.update { state ->
+            state.copy(items = state.items?.map { if (it.id == id) updated else it }?.sortedWith(compareBy(nullsLast()) { it.nextRunAtMillis }))
+        }
+        onSkipped(updated)
+    }
+
+    fun snoozeSchedule(id: String, minutes: Int = 10) = launchSafely(silent = true) { api.snoozeSchedule(id, minutes) }
+
+    /** Start now: opens the schedule's lesson or roleplay. */
+    fun startSchedule(id: String, onOpened: (Conversation) -> Unit) = runBusy {
+        val thread = api.startSchedule(id)
+        cacheThread(thread)
+        refreshRecent()
+        onOpened(thread.conversation)
+    }
+
+    // ── Account ─────────────────────────────────────────────────────────────
+
+    /** Change photo: [file] is a compressed JPEG. */
+    fun uploadAvatar(file: java.io.File, onDone: (Boolean) -> Unit) = viewModelScope.launch {
+        try {
+            val url = api.uploadAvatar(file, "image/jpeg")
+            _profile.update { it?.copy(imageUrl = url) }
+            onDone(true)
+        } catch (e: ApiException) {
+            handleAuth(e)
+            if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            onDone(false)
+        } finally {
+            file.delete()
+        }
+    }
+
+    fun deleteAccount(onDeleted: () -> Unit) = runBusy {
+        api.deleteAccount()
+        onDeleted()
+    }
+
     /** Loads everything the signed-in shell needs (drawer + home). */
     fun refreshAccount() {
         launchSafely { _profile.value = api.profile() }
         refreshRecent()
+        loadLanguages()
+    }
+
+    fun loadLanguages() = launchSafely(silent = true) {
+        val list = api.languages()
+        if (list.isNotEmpty()) _languages.value = list
     }
 
     fun refreshRecent() = launchSafely(silent = true) { _recent.value = api.recentSessions() }
 
     fun clear() {
         _profile.value = null
+        _notificationPrefs.value = null
+        _schedules.value = Loadable()
+        _scheduleTargets.value = Loadable()
         _recent.value = emptyList()
         _topics.value = Loadable()
         _topicDetails.value = emptyMap()
@@ -184,11 +345,87 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _materialAnalysis.value = MaterialAnalysis()
     }
 
-    fun updateProfile(targetLanguage: TargetLanguage? = null, level: String? = null, name: String? = null) =
-        launchSafely {
-            _profile.value = api.updateProfile(targetLanguage, level, name)
-            if (targetLanguage != null) _typingHint.value = null
+    fun updateProfile(
+        level: String? = null,
+        name: String? = null,
+        appLanguage: AppLanguage? = null,
+        accent: String? = null,
+    ) {
+        val fields = buildMap<String, Any> {
+            level?.let { put("level", it) }
+            name?.let { put("name", it) }
+            appLanguage?.let { put("nativeLanguage", it.code) }
+            accent?.let { put("accent", it) }
         }
+        if (fields.isEmpty()) return
+        // Optimistic: the settings screens reflect the change right away.
+        val previous = _profile.value
+        _profile.update { current ->
+            current?.copy(
+                level = level ?: current.level,
+                name = name ?: current.name,
+                appLanguage = appLanguage ?: current.appLanguage,
+                accent = accent ?: current.accent,
+                levelChecked = current.levelChecked || level != null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                _profile.value = api.updateProfile(fields)
+                if (appLanguage != null) _typingHint.value = null
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _profile.value = previous
+                if (!e.unauthorized && appLanguage == null) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Preferences & learning goals (server-backed, read by the tutor). Optimistic with rollback. */
+    fun updatePreferences(transform: (Preferences) -> Preferences) {
+        val previous = _profile.value ?: return
+        val next = transform(previous.preferences)
+        if (next == previous.preferences) return
+        _profile.value = previous.copy(preferences = next)
+        val fields = buildMap<String, Any> {
+            val old = previous.preferences
+            if (next.tutorVoice != old.tutorVoice) put("tutorVoice", next.tutorVoice)
+            if (next.teachingStyle != old.teachingStyle) put("teachingStyle", next.teachingStyle)
+            if (next.strictMode != old.strictMode) put("strictMode", next.strictMode)
+            if (next.handsFree != old.handsFree) put("handsFree", next.handsFree)
+            if (next.suggestReplies != old.suggestReplies) put("suggestReplies", next.suggestReplies)
+            if (next.showTranslations != old.showTranslations) put("showTranslations", next.showTranslations)
+            if (next.teachInTarget != old.teachInTarget) put("teachInTarget", next.teachInTarget)
+            if (next.dailyGoalMin != old.dailyGoalMin) put("dailyGoalMin", next.dailyGoalMin)
+            if (next.focus != old.focus) put("focus", next.focus)
+        }
+        if (!next.suggestReplies) clearHint()
+        viewModelScope.launch {
+            try {
+                _profile.value = api.updateProfile(fields)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _profile.update { it?.copy(preferences = previous.preferences) }
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /**
+     * Switches the learning language. The server saves the current language's level and accent and
+     * restores (or starts) the new one's; chats, topics and roleplays are per language, so lists reload.
+     */
+    fun switchLearningLanguage(code: String, onSwitched: (com.talkie.ai.data.Profile) -> Unit) = runBusy {
+        val profile = api.updateProfile(mapOf("targetLanguage" to code))
+        _profile.value = profile
+        _typingHint.value = null
+        _topics.value = Loadable()
+        _roleplays.value = Loadable()
+        _schedules.value = Loadable()
+        _scheduleTargets.value = Loadable()
+        refreshRecent()
+        onSwitched(profile)
+    }
 
     // ── Topics ──────────────────────────────────────────────────────────────
 
@@ -379,9 +616,83 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         api.deleteConversation(id)
         _drafts.value[id].orEmpty().forEach { removeAttachment(id, it.localId) }
         draftStore.remove(id)
+        restoredDrafts.remove(id)
         _chats.update { it - id }
+        _recent.update { list -> list.filterNot { it.id == id || it.conversationId == id } }
         refreshRecent()
         onDeleted()
+    }
+
+    /** Optimistic rename of the chat title and its drawer row; rolls back on failure. */
+    fun renameConversation(id: String, title: String, onRenamed: () -> Unit) {
+        val previous = _chats.value[id]?.conversation ?: return
+        val recentBefore = _recent.value
+        updateChat(id) { it.copy(conversation = it.conversation.copy(title = title)) }
+        _recent.update { list -> list.map { if (it.id == id) it.copy(title = title) else it } }
+        viewModelScope.launch {
+            try {
+                val updated = api.renameConversation(id, title)
+                updateChat(id) { it.copy(conversation = updated) }
+                onRenamed()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                updateChat(id) { it.copy(conversation = previous) }
+                _recent.value = recentBefore
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Pins (or unpins) the chat to the top of the drawer. */
+    fun setPinned(id: String, pinned: Boolean, onDone: (Boolean) -> Unit) {
+        val previous = _chats.value[id]?.conversation ?: return
+        updateChat(id) { it.copy(conversation = it.conversation.copy(pinned = pinned)) }
+        viewModelScope.launch {
+            try {
+                val updated = api.setPinned(id, pinned)
+                updateChat(id) { it.copy(conversation = updated) }
+                refreshRecent()
+                onDone(pinned)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                updateChat(id) { it.copy(conversation = previous) }
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Only me / Public access. Returns the public link (or null) once the server confirms. */
+    suspend fun setShare(id: String, public: Boolean): String? = try {
+        val result = api.setShare(id, public)
+        updateChat(id) { it.copy(conversation = it.conversation.copy(public = result.public, shareUrl = result.shareUrl)) }
+        result.shareUrl
+    } catch (e: ApiException) {
+        handleAuth(e)
+        if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+        throw e
+    }
+
+    fun reportConversation(id: String, reason: ReportReason, details: String, onSent: () -> Unit) = launchSafely {
+        api.reportConversation(id, reason, details)
+        onSent()
+    }
+
+    /** "Remind me to continue" on the server; returns the reminder id, or null when it couldn't be saved. */
+    suspend fun createReminder(conversationId: String, atMillis: Long): String? = try {
+        api.createReminder(conversationId, atMillis)
+    } catch (e: ApiException) {
+        handleAuth(e)
+        null
+    }
+
+    fun cancelReminder(id: String) = launchSafely(silent = true) { api.cancelReminder(id) }
+
+    /** "Find my level": a Free Talk where the tutor assesses the learner and sets their level. */
+    fun startLevelCheck(firstMessage: String, onOpened: (Conversation) -> Unit) = runBusy {
+        val thread = api.createFreeTalk(levelCheck = true)
+        cacheThread(thread)
+        onOpened(thread.conversation)
+        send(thread.conversation.id, firstMessage)
     }
 
     fun send(
@@ -420,6 +731,11 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                 if (result.lessonCompleted) {
                     result.conversation.topicId?.let { loadTopic(it) }
                     _messages.tryEmit("Lesson complete — nice work!")
+                }
+                result.levelAssessed?.let { level ->
+                    _profile.update { it?.copy(level = level, levelChecked = true) }
+                    _levelAssessed.tryEmit(level)
+                    launchSafely(silent = true) { _profile.value = api.profile() }
                 }
                 refreshRecent()
             } catch (e: ApiException) {

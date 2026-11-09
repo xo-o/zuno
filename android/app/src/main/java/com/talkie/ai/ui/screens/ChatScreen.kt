@@ -104,6 +104,8 @@ fun ChatScreen(
     onRetryAttachment: (DraftAttachment) -> Unit,
     onOpenAttachment: (Attachment) -> Unit,
     modifier: Modifier = Modifier,
+    /** Preferences · Show translations. */
+    showTranslations: Boolean = true,
 ) {
     val listState = rememberLazyListState()
     var focusComposer by remember { mutableStateOf(false) }
@@ -151,7 +153,7 @@ fun ChatScreen(
                             val source = messages.getOrNull(index - 1)?.attachments?.firstOrNull()
                             ZunoAssistantBubble(
                                 message = message.text,
-                                translation = message.translation,
+                                translation = message.translation.takeIf { showTranslations },
                                 glossary = message.glossary,
                                 onListen = { onListen(message.text) },
                                 onExplain = { onExplain(message) },

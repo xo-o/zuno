@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Patterns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.talkie.ai.push.Push
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -122,8 +123,21 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         _authState.value = AuthState.SignedOut
         _form.value = AuthFormState()
         if (token != null) {
-            viewModelScope.launch { runCatching { api.signOut(token) } }
+            viewModelScope.launch {
+                // Stop this device's pushes for the account before the session is revoked.
+                runCatching { Push.unregister(getApplication(), token) }
+                runCatching { api.signOut(token) }
+            }
         }
+    }
+
+    /** The account was deleted on the server: forget the session without calling sign-out. */
+    fun forgetSession() {
+        pollingJob?.cancel()
+        pollingJob = null
+        tokenStore.clear()
+        _authState.value = AuthState.SignedOut
+        _form.value = AuthFormState()
     }
 
     private fun refreshSession() {

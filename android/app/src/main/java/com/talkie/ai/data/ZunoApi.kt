@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
@@ -26,12 +27,62 @@ class ZunoApi(
 
     suspend fun profile(): Profile = get("/me").toProfile()
 
-    suspend fun updateProfile(targetLanguage: TargetLanguage? = null, level: String? = null, name: String? = null): Profile {
+    /** PATCH /me with any of: name, targetLanguage, nativeLanguage, level, accent and preference fields. */
+    suspend fun updateProfile(fields: Map<String, Any>): Profile {
         val body = JSONObject()
-        targetLanguage?.let { body.put("targetLanguage", it.code) }
-        level?.let { body.put("level", it) }
-        name?.let { body.put("name", it) }
+        fields.forEach { (key, value) -> body.put(key, value) }
         return send("PATCH", "/me", body).toProfile()
+    }
+
+    suspend fun languages(): List<LearningLanguage> =
+        execute(Request.Builder().url("$apiUrl/languages").get().build()).listOf("languages").map { it.toLearningLanguage() }
+
+    suspend fun notificationPrefs(): NotificationPrefs = get("/me/notifications").getJSONObject("notifications").toNotificationPrefs()
+
+    suspend fun updateNotificationPrefs(fields: Map<String, Any>): NotificationPrefs {
+        val body = JSONObject()
+        fields.forEach { (key, value) -> body.put(key, value) }
+        return send("PATCH", "/me/notifications", body).getJSONObject("notifications").toNotificationPrefs()
+    }
+
+    /** Change photo: presigned upload, PUT the bytes, then confirm. Returns the new photo URL. */
+    suspend fun uploadAvatar(file: java.io.File, mimeType: String): String? {
+        val ticket = send("POST", "/me/avatar", JSONObject().put("mimeType", mimeType).put("sizeBytes", file.length()))
+        val key = ticket.getString("key")
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder().url(ticket.getString("uploadUrl")).put(file.asRequestBody(mimeType.toMediaType())).build()
+            val response = try {
+                uploadClient.newCall(request).execute()
+            } catch (_: IOException) {
+                throw ApiException("Upload failed. Check your connection.")
+            }
+            response.use { if (!it.isSuccessful) throw ApiException("Upload failed (${it.code}).") }
+        }
+        val user = send("POST", "/me/avatar/complete", JSONObject().put("key", key)).getJSONObject("user")
+        return if (user.isNull("image")) null else user.optString("image")
+    }
+
+    suspend fun deleteAccount() {
+        send("DELETE", "/me")
+    }
+
+    // Push devices
+
+    suspend fun registerDevice(pushToken: String, timezone: String, appLanguage: String) {
+        send(
+            "POST",
+            "/devices",
+            JSONObject().put("pushToken", pushToken).put("platform", "android").put("timezone", timezone).put("appLanguage", appLanguage),
+        )
+    }
+
+    suspend fun unregisterDevice(pushToken: String, token: String?) {
+        val request = Request.Builder()
+            .url("$apiUrl/devices/${java.net.URLEncoder.encode(pushToken, "UTF-8")}")
+            .header("Authorization", "Bearer ${token ?: throw ApiException("Not signed in", unauthorized = true)}")
+            .delete()
+            .build()
+        execute(request)
     }
 
     suspend fun recentSessions(): List<RecentSession> =
@@ -97,7 +148,81 @@ class ZunoApi(
 
     // Conversations
 
-    suspend fun createFreeTalk(): ConversationThread = send("POST", "/conversations", JSONObject()).toThread()
+    suspend fun createFreeTalk(levelCheck: Boolean = false): ConversationThread =
+        send("POST", "/conversations", JSONObject().put("levelCheck", levelCheck)).toThread()
+
+    suspend fun renameConversation(id: String, title: String): Conversation =
+        send("PATCH", "/conversations/$id", JSONObject().put("title", title)).getJSONObject("conversation").toConversation()
+
+    suspend fun setPinned(id: String, pinned: Boolean): Conversation =
+        send("PATCH", "/conversations/$id", JSONObject().put("pinned", pinned)).getJSONObject("conversation").toConversation()
+
+    suspend fun setShare(id: String, public: Boolean): ShareResult =
+        send("PUT", "/conversations/$id/share", JSONObject().put("visibility", if (public) "public" else "private")).let {
+            ShareResult(it.optString("visibility") == "public", if (it.isNull("shareUrl")) null else it.optString("shareUrl"))
+        }
+
+    suspend fun reportConversation(id: String, reason: ReportReason, details: String) {
+        val body = JSONObject().put("reason", reason.code)
+        if (details.isNotBlank()) body.put("details", details.trim())
+        send("POST", "/conversations/$id/report", body)
+    }
+
+    /** "Remind me to continue" on the server (push). Returns the reminder id. */
+    suspend fun createReminder(conversationId: String, atMillis: Long): String =
+        send("POST", "/conversations/$conversationId/reminders", JSONObject().put("remindAt", java.time.Instant.ofEpochMilli(atMillis).toString()))
+            .getString("id")
+
+    suspend fun cancelReminder(id: String) {
+        send("DELETE", "/reminders/$id")
+    }
+
+    // Schedules
+
+    suspend fun schedules(): List<Schedule> = get("/schedules").listOf("schedules").map { it.toSchedule() }
+
+    suspend fun scheduleTargets(): ScheduleTargets = get("/schedules/targets").toScheduleTargets()
+
+    suspend fun createSchedule(draft: ScheduleDraft): Schedule =
+        send("POST", "/schedules", draft.toJson(includeTarget = true)).getJSONObject("schedule").toSchedule()
+
+    suspend fun updateSchedule(id: String, draft: ScheduleDraft): Schedule =
+        send("PATCH", "/schedules/$id", draft.toJson(includeTarget = false)).getJSONObject("schedule").toSchedule()
+
+    suspend fun deleteSchedule(id: String) {
+        send("DELETE", "/schedules/$id")
+    }
+
+    suspend fun skipNextSchedule(id: String): Schedule =
+        send("POST", "/schedules/$id/skip-next").getJSONObject("schedule").toSchedule()
+
+    suspend fun snoozeSchedule(id: String, minutes: Int = 10) {
+        send("POST", "/schedules/$id/snooze", JSONObject().put("minutes", minutes))
+    }
+
+    suspend fun startSchedule(id: String): ConversationThread = send("POST", "/schedules/$id/start").toThread()
+
+    private fun ScheduleDraft.toJson(includeTarget: Boolean): JSONObject {
+        val body = JSONObject()
+        if (includeTarget) {
+            body.put("targetKind", if (isRoleplay) "roleplay" else "topic")
+            body.put(if (isRoleplay) "roleplayId" else "topicId", targetId)
+        }
+        body.put("repeat", repeat.code)
+            .put("timeOfDay", timeOfDay)
+            .put("timezone", timezone)
+            .put("durationMin", durationMin)
+            .put("active", active)
+            .put("remindBeforeMin", remindBeforeMin ?: JSONObject.NULL)
+            .put("notifyEmail", notifyEmail)
+        when (repeat) {
+            ScheduleRepeat.Once -> body.put("date", date)
+            ScheduleRepeat.Weekly -> body.put("weekdays", JSONArray(weekdays))
+            ScheduleRepeat.Monthly -> body.put("monthDay", monthDay)
+            else -> Unit
+        }
+        return body
+    }
 
     suspend fun conversation(id: String): ConversationThread = get("/conversations/$id").toThread()
 

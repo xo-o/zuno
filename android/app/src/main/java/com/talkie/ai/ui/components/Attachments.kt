@@ -25,10 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,47 +69,6 @@ import com.talkie.ai.ui.theme.ZunoType
 import com.talkie.ai.viewmodel.DraftAttachment
 import com.talkie.ai.viewmodel.DraftUploadState
 import kotlin.math.roundToInt
-
-private val SheetShape = RoundedCornerShape(topStart = ZunoRadius.xxl, topEnd = ZunoRadius.xxl)
-
-/** Bottom sheet chrome shared by the attachment, link and reminder sheets. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ZunoSheet(onDismiss: () -> Unit, title: String, content: @Composable () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = ZunoColors.BgElevated,
-        scrimColor = ZunoColors.BgScrim,
-        shape = SheetShape,
-        dragHandle = {
-            Box(
-                Modifier
-                    .padding(top = ZunoSpace.s8, bottom = ZunoSpace.s4)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.BorderStrong),
-            )
-        },
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(start = ZunoSpace.s12, end = ZunoSpace.s12, bottom = ZunoSpace.s40),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
-        ) {
-            Text(
-                title,
-                style = ZunoType.Headline,
-                color = ZunoColors.TextPrimary,
-                modifier = Modifier.padding(horizontal = ZunoSpace.s12).heightIn(min = 32.dp).padding(top = ZunoSpace.s4),
-            )
-            content()
-        }
-    }
-}
 
 /**
  * "Add to this chat" — camera, photo picker and document picker, plus learning actions:
@@ -243,7 +199,14 @@ fun ZunoPasteLinkSheet(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
 }
 
 /** A reminder time choice in [ZunoReminderSheet]. [label] is used in the chip, [summary] in the toast. */
-data class ReminderOption(val label: String, val summary: String, val atMillis: Long, @DrawableRes val icon: Int? = null)
+data class ReminderOption(
+    val label: String,
+    val summary: String,
+    val atMillis: Long,
+    @param:DrawableRes val icon: Int? = null,
+    /** "Tonight · 9:00 PM" — preselected when offered, as in the design. */
+    val isTonight: Boolean = false,
+)
 
 /** "Remind me to continue" — quick times, a custom time, then "Set reminder". */
 @OptIn(ExperimentalLayoutApi::class)
@@ -257,7 +220,7 @@ fun ZunoReminderSheet(
 ) {
     // A picked custom time is selected; otherwise "Tonight" when it's still ahead, as in the design.
     var selected by remember(custom) {
-        mutableStateOf(custom ?: options.firstOrNull { it.label.startsWith("Tonight") } ?: options.first())
+        mutableStateOf(custom ?: options.firstOrNull { it.isTonight } ?: options.first())
     }
     ZunoSheet(onDismiss = onDismiss, title = "Remind me to continue") {
         Text(
@@ -286,34 +249,6 @@ fun ZunoReminderSheet(
             onClick = { onSet(selected) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = ZunoSpace.s12),
         )
-    }
-}
-
-/** Toast — inverse pill with a check icon, message and optional action ("Reminder set · Tonight 9:00 PM  Undo"). */
-@Composable
-fun ZunoToast(message: String, modifier: Modifier = Modifier, action: String? = null, onAction: () -> Unit = {}) {
-    Row(
-        modifier = modifier
-            .shadow(8.dp, CircleShape, ambientColor = Color.Black, spotColor = Color.Black)
-            .clip(CircleShape)
-            .background(ZunoColors.SurfaceInverse)
-            .padding(start = ZunoSpace.s16, end = if (action != null) ZunoSpace.s8 else ZunoSpace.s20),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ZunoIcon(R.drawable.zuno_ic_check_circle_inverse, 20.dp, Modifier.padding(vertical = ZunoSpace.s12))
-        Text(message, style = ZunoType.LabelMedium, color = ZunoColors.TextOnInverse, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        action?.let {
-            Text(
-                it,
-                style = ZunoType.LabelMedium,
-                color = ZunoColors.TextOnInverseSecondary,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(role = Role.Button, onClick = onAction)
-                    .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s12),
-            )
-        }
     }
 }
 

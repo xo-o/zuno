@@ -24,8 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.talkie.ai.R
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoRadius
@@ -201,6 +208,8 @@ fun ZunoSessionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    /** Pinned rows (drawer "Pinned") lead with a pin and use the stronger title style. */
+    pinned: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -213,10 +222,11 @@ fun ZunoSessionRow(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (pinned) ZunoIcon(R.drawable.zuno_ic_t_pin, 14.dp, tint = ZunoColors.IconTertiary)
         EllipsizedText(
             text = title,
-            style = if (selected) ZunoType.BodyMediumStrong else ZunoType.BodyMedium,
-            color = if (selected) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
+            style = if (selected || pinned) ZunoType.BodyMediumStrong else ZunoType.BodyMedium,
+            color = if (selected || pinned) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
             modifier = Modifier.weight(1f),
         )
         Text(meta, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary, maxLines = 1)
@@ -280,14 +290,33 @@ fun ZunoLessonRow(
     }
 }
 
-/** Monogram avatar for the signed-in user (Large = 44dp). */
+/** Avatar for the signed-in user: their photo, or a monogram (Large = 44dp). */
 @Composable
-fun ZunoAvatar(initial: String, modifier: Modifier = Modifier) {
+fun ZunoAvatar(
+    initial: String,
+    modifier: Modifier = Modifier,
+    imageUrl: String? = null,
+    size: Dp = 44.dp,
+    textStyle: TextStyle = ZunoType.Headline,
+) {
     Box(
-        modifier = modifier.size(44.dp).clip(CircleShape).background(ZunoColors.SurfaceInverse),
+        modifier = modifier.size(size).clip(CircleShape).background(ZunoColors.SurfaceInverse),
         contentAlignment = Alignment.Center,
     ) {
-        Text(initial, style = ZunoType.Headline, color = ZunoColors.TextOnInverse)
+        Text(initial, style = textStyle, color = ZunoColors.TextOnInverse)
+        if (imageUrl != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(imageUrl)
+                    // Signed URLs change on every load; cache by the stable part of the address.
+                    .apply { imageUrl.substringBefore('?').let { memoryCacheKey(it).diskCacheKey(it) } }
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
     }
 }
 
@@ -298,6 +327,7 @@ fun ZunoProfileCard(
     detail: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    imageUrl: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -309,7 +339,7 @@ fun ZunoProfileCard(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoAvatar(name.take(1).uppercase())
+        ZunoAvatar(name.take(1).uppercase(), imageUrl = imageUrl)
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),

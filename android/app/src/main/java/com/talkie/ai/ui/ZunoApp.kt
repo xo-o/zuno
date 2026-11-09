@@ -3,39 +3,42 @@ package com.talkie.ai.ui
 import android.Manifest
 import android.app.Activity
 import android.app.TimePickerDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.text.format.DateFormat
 import android.text.format.DateUtils
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,41 +51,53 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.talkie.ai.BuildConfig
+import com.talkie.ai.R
 import com.talkie.ai.auth.AuthState
 import com.talkie.ai.auth.AuthViewModel
+import com.talkie.ai.data.AppLanguage
 import com.talkie.ai.data.Attachment
 import com.talkie.ai.data.AttachmentFiles
 import com.talkie.ai.data.AttachmentKind
 import com.talkie.ai.data.Conversation
 import com.talkie.ai.data.ConversationKind
+import com.talkie.ai.data.LearningLanguage
+import com.talkie.ai.data.LearningLanguages
 import com.talkie.ai.data.Message
 import com.talkie.ai.data.RecentKind
-import com.talkie.ai.data.TargetLanguage
+import com.talkie.ai.data.Schedule
 import com.talkie.ai.model.AgentState
 import com.talkie.ai.model.Speaker
 import com.talkie.ai.model.VoiceCatalog
-import com.talkie.ai.ui.components.AgentGlowState
-import com.talkie.ai.R
+import com.talkie.ai.push.DeepLink
+import com.talkie.ai.push.Push
 import com.talkie.ai.reminders.Reminder
 import com.talkie.ai.reminders.Reminders
+import com.talkie.ai.ui.components.AgentGlowState
 import com.talkie.ai.ui.components.ReminderOption
 import com.talkie.ai.ui.components.ZunoAttachSheet
+import com.talkie.ai.ui.components.ZunoDialog
 import com.talkie.ai.ui.components.ZunoImageViewer
+import com.talkie.ai.ui.components.ZunoInputDialog
 import com.talkie.ai.ui.components.ZunoMenuAction
 import com.talkie.ai.ui.components.ZunoPasteLinkSheet
 import com.talkie.ai.ui.components.ZunoReminderSheet
-import com.talkie.ai.ui.components.ZunoToast
-import com.talkie.ai.ui.screens.AccountSheet
+import com.talkie.ai.ui.components.ZunoReportSheet
+import com.talkie.ai.ui.components.ZunoShareSheet
+import com.talkie.ai.ui.components.ZunoSheetAction
+import com.talkie.ai.ui.components.ZunoToastHost
+import com.talkie.ai.ui.components.rememberToastController
 import com.talkie.ai.ui.screens.AppDrawer
 import com.talkie.ai.ui.screens.AuthMode
 import com.talkie.ai.ui.screens.AuthScreen
@@ -93,24 +108,40 @@ import com.talkie.ai.ui.screens.HomeScreen
 import com.talkie.ai.ui.screens.HomeVoiceState
 import com.talkie.ai.ui.screens.LiveLine
 import com.talkie.ai.ui.screens.NewRoleplayScreen
+import com.talkie.ai.ui.screens.NewScheduleScreen
 import com.talkie.ai.ui.screens.NewTopicScreen
 import com.talkie.ai.ui.screens.OnboardingScreen
 import com.talkie.ai.ui.screens.RoleplaysScreen
+import com.talkie.ai.ui.screens.ScheduleActionsSheet
+import com.talkie.ai.ui.screens.ScheduleFormat
+import com.talkie.ai.ui.screens.ScheduledScreen
+import com.talkie.ai.ui.screens.SettingsAccountScreen
+import com.talkie.ai.ui.screens.SettingsAppLanguageScreen
+import com.talkie.ai.ui.screens.SettingsLearningLanguageScreen
+import com.talkie.ai.ui.screens.SettingsLearningScreen
+import com.talkie.ai.ui.screens.SettingsNotificationsScreen
+import com.talkie.ai.ui.screens.SettingsOverviewScreen
+import com.talkie.ai.ui.screens.SettingsPreferencesScreen
 import com.talkie.ai.ui.screens.SplashScreen
 import com.talkie.ai.ui.screens.TopicScreen
 import com.talkie.ai.ui.screens.TopicsScreen
+import com.talkie.ai.ui.screens.displayName
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoSpace
 import com.talkie.ai.ui.theme.ZunoType
 import com.talkie.ai.viewmodel.HOME_DRAFT_KEY
 import com.talkie.ai.viewmodel.MAX_TOPIC_MATERIAL
 import com.talkie.ai.viewmodel.TOPIC_DRAFT_KEY
+import com.talkie.ai.viewmodel.ToastEvent
+import com.talkie.ai.viewmodel.ToastIcon
 import com.talkie.ai.viewmodel.VoiceSessionViewModel
 import com.talkie.ai.viewmodel.ZunoViewModel
 import com.talkie.ai.voice.rememberSpeechCapture
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -120,12 +151,22 @@ sealed interface ZunoRoute {
     data object Onboarding : ZunoRoute
     data class Auth(val mode: AuthMode) : ZunoRoute
     data object Home : ZunoRoute
+    data object Scheduled : ZunoRoute
+    /** New schedule, or editing [editId]. */
+    data class NewSchedule(val editId: String? = null) : ZunoRoute
     data object Topics : ZunoRoute
     data object NewTopic : ZunoRoute
     data class Topic(val id: String) : ZunoRoute
     data object Roleplays : ZunoRoute
     data object NewRoleplay : ZunoRoute
     data class Chat(val conversationId: String) : ZunoRoute
+    data object Settings : ZunoRoute
+    data object SettingsPreferences : ZunoRoute
+    data object SettingsAppLanguage : ZunoRoute
+    data object SettingsLearning : ZunoRoute
+    data object SettingsLearningLanguage : ZunoRoute
+    data object SettingsAccount : ZunoRoute
+    data object SettingsNotifications : ZunoRoute
 
     /** Routes that sit under the side drawer. */
     val hasDrawer: Boolean get() = this !is Splash && this !is Onboarding && this !is Auth
@@ -136,24 +177,42 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.Onboarding -> "onboarding"
     is ZunoRoute.Auth -> "auth:${mode.name}"
     ZunoRoute.Home -> "home"
+    ZunoRoute.Scheduled -> "scheduled"
+    is ZunoRoute.NewSchedule -> "new-schedule:${editId.orEmpty()}"
     ZunoRoute.Topics -> "topics"
     ZunoRoute.NewTopic -> "new-topic"
     is ZunoRoute.Topic -> "topic:$id"
     ZunoRoute.Roleplays -> "roleplays"
     ZunoRoute.NewRoleplay -> "new-roleplay"
     is ZunoRoute.Chat -> "chat:$conversationId"
+    ZunoRoute.Settings -> "settings"
+    ZunoRoute.SettingsPreferences -> "settings:preferences"
+    ZunoRoute.SettingsAppLanguage -> "settings:app-language"
+    ZunoRoute.SettingsLearning -> "settings:learning"
+    ZunoRoute.SettingsLearningLanguage -> "settings:learning-language"
+    ZunoRoute.SettingsAccount -> "settings:account"
+    ZunoRoute.SettingsNotifications -> "settings:notifications"
 }
 
 private fun decodeRoute(value: String): ZunoRoute = when {
     value == "onboarding" -> ZunoRoute.Onboarding
     value.startsWith("auth:") -> ZunoRoute.Auth(AuthMode.valueOf(value.removePrefix("auth:")))
     value == "home" -> ZunoRoute.Home
+    value == "scheduled" -> ZunoRoute.Scheduled
+    value.startsWith("new-schedule:") -> ZunoRoute.NewSchedule(value.removePrefix("new-schedule:").ifBlank { null })
     value == "topics" -> ZunoRoute.Topics
     value == "new-topic" -> ZunoRoute.NewTopic
     value.startsWith("topic:") -> ZunoRoute.Topic(value.removePrefix("topic:"))
     value == "roleplays" -> ZunoRoute.Roleplays
     value == "new-roleplay" -> ZunoRoute.NewRoleplay
     value.startsWith("chat:") -> ZunoRoute.Chat(value.removePrefix("chat:"))
+    value == "settings" -> ZunoRoute.Settings
+    value == "settings:preferences" -> ZunoRoute.SettingsPreferences
+    value == "settings:app-language" -> ZunoRoute.SettingsAppLanguage
+    value == "settings:learning" -> ZunoRoute.SettingsLearning
+    value == "settings:learning-language" -> ZunoRoute.SettingsLearningLanguage
+    value == "settings:account" -> ZunoRoute.SettingsAccount
+    value == "settings:notifications" -> ZunoRoute.SettingsNotifications
     else -> ZunoRoute.Splash
 }
 
@@ -165,6 +224,13 @@ private val BackStackSaver = listSaver<SnapshotStateList<ZunoRoute>, String>(
 private const val PREFS = "zuno_prefs"
 private const val KEY_MIC_ASKED = "mic_permission_asked"
 
+private const val TERMS_URL = "https://usezuno.rest/terms"
+private const val PRIVACY_URL = "https://usezuno.rest/privacy"
+private const val SUPPORT_EMAIL = "support@designcombo.dev"
+
+/** Why the app is signing out, so the Sign in screen can say so. */
+private enum class SignOutReason { User, Expired, Deleted }
+
 /**
  * Root of the Zuno UI: navigation between screens, the side drawer, and the bridges to the
  * app API ([ZunoViewModel]) and the LiveKit voice session ([VoiceSessionViewModel]).
@@ -175,8 +241,8 @@ fun ZunoApp(
     authViewModel: AuthViewModel,
     zunoViewModel: ZunoViewModel,
     runWithVoicePermissions: (() -> Unit) -> Unit,
-    /** Conversation to open from a reminder notification; set back to null once opened. */
-    openChatRequest: MutableStateFlow<String?>,
+    /** Where a notification tap should go; set back to null once handled. */
+    deepLink: MutableStateFlow<DeepLink?>,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -197,10 +263,50 @@ fun ZunoApp(
     val typingHint by zunoViewModel.typingHint.collectAsStateWithLifecycle()
     val drafts by zunoViewModel.drafts.collectAsStateWithLifecycle()
     val materialAnalysis by zunoViewModel.materialAnalysis.collectAsStateWithLifecycle()
-    val pendingChat by openChatRequest.collectAsStateWithLifecycle()
+    val languages by zunoViewModel.languages.collectAsStateWithLifecycle()
+    val notificationPrefs by zunoViewModel.notificationPrefs.collectAsStateWithLifecycle()
+    val schedules by zunoViewModel.schedules.collectAsStateWithLifecycle()
+    val scheduleTargets by zunoViewModel.scheduleTargets.collectAsStateWithLifecycle()
+    val pendingLink by deepLink.collectAsStateWithLifecycle()
 
-    val language = profile?.targetLanguage ?: TargetLanguage.Spanish
-    val tts = rememberTutorTts(language)
+    val language: LearningLanguage = profile?.language ?: LearningLanguages.Spanish
+    val accent = profile?.accent
+    val tts = rememberTutorTts(language.locale(accent))
+    val preferences = profile?.preferences
+
+    var appLanguage by rememberSaveable {
+        val currentTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+        mutableStateOf(
+            if (currentTag.isNotBlank()) AppLanguage.fromCode(currentTag)
+            else AppLanguage.fromCode(Locale.getDefault().language)
+        )
+    }
+
+    LaunchedEffect(profile?.appLanguage) {
+        val serverLang = profile?.appLanguage ?: return@LaunchedEffect
+        if (AppCompatDelegate.getApplicationLocales().isEmpty) {
+            appLanguage = serverLang
+        }
+    }
+
+    val localizedContext = remember(context, appLanguage) {
+        val locale = Locale.forLanguageTag(appLanguage.bcp47)
+        Locale.setDefault(locale)
+        val config = Configuration(context.resources.configuration).apply {
+            setLocale(locale)
+            setLayoutDirection(locale)
+        }
+        context.createConfigurationContext(config)
+    }
+
+    /** A string in the app language, for callbacks outside composition (toasts, intents). */
+    fun str(@StringRes id: Int, vararg args: Any): String = localizedContext.getString(id, *args)
+
+    fun selectAppLanguage(newLanguage: AppLanguage) {
+        appLanguage = newLanguage
+        zunoViewModel.updateProfile(appLanguage = newLanguage)
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(newLanguage.bcp47))
+    }
 
     fun navigate(to: ZunoRoute, clearStack: Boolean = false) {
         if (clearStack) backStack.clear()
@@ -223,11 +329,25 @@ fun ZunoApp(
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) else navigate(ZunoRoute.Home, clearStack = true)
     }
 
-    fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-    fun comingSoon(feature: String) = toast("$feature — coming soon")
+    // ── Toasts (one app-level host, so they survive navigation) ─────────────
+    val toasts = rememberToastController()
+    fun toast(message: String, icon: ToastIcon = ToastIcon.Alert) = toasts.show(ToastEvent(message, icon))
+    fun comingSoon(feature: String) = toast(str(R.string.common_coming_soon, feature), ToastIcon.Alert)
 
     LaunchedEffect(Unit) { zunoViewModel.messages.collect { toast(it) } }
-    LaunchedEffect(Unit) { zunoViewModel.sessionExpired.collect { authViewModel.signOut() } }
+
+    var signOutReason by remember { mutableStateOf<SignOutReason?>(null) }
+    LaunchedEffect(Unit) {
+        zunoViewModel.sessionExpired.collect {
+            if (authViewModel.authState.value is AuthState.SignedIn) {
+                signOutReason = SignOutReason.Expired
+                authViewModel.signOut()
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        zunoViewModel.levelAssessed.collect { level -> toasts.show(ToastEvent(str(R.string.level_check_done, level), ToastIcon.Check)) }
+    }
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     fun openDrawer() = scope.launch { drawerState.open() }
@@ -247,7 +367,7 @@ fun ZunoApp(
     LaunchedEffect(voiceError) {
         val message = voiceError
         if (voiceConversationId != null && !message.isNullOrBlank()) {
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            toast(message)
             voiceConversationId = null
         }
     }
@@ -263,6 +383,8 @@ fun ZunoApp(
                     sessionToken = authViewModel.sessionToken,
                     onSessionExpired = authViewModel::signOut,
                     conversationId = conversationId,
+                    // The server picks the Breeze voice from Preferences · Zuno's voice; Cartesia voices
+                    // remain for languages that have one.
                     voice = VoiceCatalog.tutorVoiceFor(language.code),
                     speakLastReply = speakLastReply,
                 )
@@ -289,12 +411,28 @@ fun ZunoApp(
             AgentState.CONNECTING -> Unit
             AgentState.DISCONNECTED -> {
                 if (callWasLive && voiceConversationId != null) {
-                    toast("Voice call ended")
+                    toast(str(R.string.voice_call_ended), ToastIcon.Check)
                     endVoice()
                 }
                 callWasLive = false
             }
             else -> callWasLive = true
+        }
+    }
+
+    // ── Notifications permission (Android 13+), asked at the first relevant action ──
+    var afterNotificationPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        afterNotificationPermission?.invoke()
+        afterNotificationPermission = null
+    }
+
+    fun withNotificationPermission(action: () -> Unit) {
+        if (!Reminders.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            afterNotificationPermission = action
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            action()
         }
     }
 
@@ -304,13 +442,23 @@ fun ZunoApp(
         when (authState) {
             is AuthState.SignedIn -> {
                 zunoViewModel.refreshAccount()
+                scope.launch { Push.register(context.applicationContext, appLanguage.code) }
                 if (current is ZunoRoute.Auth || current == ZunoRoute.Onboarding) navigate(ZunoRoute.Home, clearStack = true)
             }
             AuthState.SignedOut -> {
                 if (voiceConversationId != null) endVoice(commit = false)
                 zunoViewModel.clear()
                 Reminders.clearAll(context)
-                if (current.hasDrawer) navigate(ZunoRoute.Onboarding, clearStack = true)
+                if (current.hasDrawer) {
+                    navigate(ZunoRoute.Auth(AuthMode.SignIn), clearStack = true)
+                    when (signOutReason) {
+                        SignOutReason.User -> toasts.show(ToastEvent(str(R.string.signed_out_toast), ToastIcon.SignOut, atTop = true))
+                        SignOutReason.Expired -> toasts.show(ToastEvent(str(R.string.session_expired_toast), ToastIcon.SignOut, atTop = true))
+                        SignOutReason.Deleted -> toasts.show(ToastEvent(str(R.string.account_deleted_toast), ToastIcon.Trash, atTop = true))
+                        null -> Unit
+                    }
+                }
+                signOutReason = null
             }
         }
     }
@@ -319,20 +467,9 @@ fun ZunoApp(
     LaunchedEffect(authForm.error) {
         val error = authForm.error
         if (error != null && backStack.last() !is ZunoRoute.Auth) {
-            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+            toast(error)
             authViewModel.clearError()
         }
-    }
-
-    // A reminder notification reopens its chat on top of Home, once signed in and past the splash.
-    LaunchedEffect(pendingChat, authState, route) {
-        val conversationId = pendingChat ?: return@LaunchedEffect
-        if (authState !is AuthState.SignedIn || route == ZunoRoute.Splash) return@LaunchedEffect
-        if (voiceConversationId != null && voiceConversationId != conversationId) endVoice()
-        backStack.clear()
-        backStack.add(ZunoRoute.Home)
-        backStack.add(ZunoRoute.Chat(conversationId))
-        openChatRequest.value = null
     }
 
     BackHandler(enabled = drawerState.isOpen) {
@@ -358,7 +495,7 @@ fun ZunoApp(
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         prefs.edit { putBoolean(KEY_MIC_ASKED, true) }
         micBlocked = !granted
-        if (granted) toast("Microphone on — hold the glow to talk")
+        if (granted) toast(str(R.string.home_mic_on), ToastIcon.Check)
     }
 
     fun requestMicrophone() {
@@ -403,6 +540,41 @@ fun ZunoApp(
         }
     }
 
+    /** "Find my level": a short Free Talk where the tutor assesses the learner. */
+    fun startLevelCheck() {
+        if (voiceConversationId != null) endVoice()
+        zunoViewModel.startLevelCheck(str(R.string.level_check_first_message)) { openChat(it.id) }
+    }
+
+    // ── Deep links from notifications ───────────────────────────────────────
+    LaunchedEffect(pendingLink, authState, route) {
+        val link = pendingLink ?: return@LaunchedEffect
+        if (authState !is AuthState.SignedIn || route == ZunoRoute.Splash) return@LaunchedEffect
+        deepLink.value = null
+        when (link) {
+            is DeepLink.Chat -> {
+                if (voiceConversationId != null && voiceConversationId != link.conversationId) endVoice()
+                backStack.clear()
+                backStack.add(ZunoRoute.Home)
+                backStack.add(ZunoRoute.Chat(link.conversationId))
+            }
+            is DeepLink.Schedule -> {
+                if (voiceConversationId != null) endVoice()
+                zunoViewModel.startSchedule(link.scheduleId) { conversation ->
+                    backStack.clear()
+                    backStack.add(ZunoRoute.Home)
+                    backStack.add(ZunoRoute.Scheduled)
+                    backStack.add(ZunoRoute.Chat(conversation.id))
+                }
+            }
+            is DeepLink.Topic -> {
+                backStack.clear()
+                backStack.add(ZunoRoute.Home)
+                backStack.add(ZunoRoute.Topic(link.topicId))
+            }
+        }
+    }
+
     // ── Attachments: + sheet, pickers, links, viewer ────────────────────────
     /** Draft key (conversation id, Home or topic material) the + sheet adds files to. */
     var attachTarget by rememberSaveable { mutableStateOf<String?>(null) }
@@ -428,8 +600,8 @@ fun ZunoApp(
     }
 
     fun limitMessage(key: String) =
-        if (key == TOPIC_DRAFT_KEY) "You can add up to $MAX_TOPIC_MATERIAL files"
-        else "You can attach up to ${AttachmentFiles.MAX_PER_MESSAGE} files per message"
+        if (key == TOPIC_DRAFT_KEY) str(R.string.attach_limit_material, MAX_TOPIC_MATERIAL)
+        else str(R.string.attach_limit_message, AttachmentFiles.MAX_PER_MESSAGE)
 
     fun openAttachmentSheet(key: String) {
         if (roomFor(key) == 0) toast(limitMessage(key)) else attachTarget = key
@@ -445,7 +617,7 @@ fun ZunoApp(
         try {
             action(key)
         } catch (_: android.content.ActivityNotFoundException) {
-            toast("No app available for this on your device")
+            toast(str(R.string.error_no_app))
         }
     }
 
@@ -472,7 +644,7 @@ fun ZunoApp(
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (_: android.content.ActivityNotFoundException) {
-            toast("No app can open this link")
+            toast(str(R.string.error_no_app_link))
         }
     }
 
@@ -485,38 +657,34 @@ fun ZunoApp(
                 try {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 } catch (_: android.content.ActivityNotFoundException) {
-                    toast("No app can open this file")
+                    toast(str(R.string.error_no_app_file))
                 }
             }
         }
     }
 
-    // ── Toast & "Remind me to continue" ─────────────────────────────────────
-    var toastState by remember { mutableStateOf<ToastState?>(null) }
-    LaunchedEffect(toastState) {
-        if (toastState != null) {
-            delay(TOAST_DURATION_MS)
-            toastState = null
-        }
-    }
-
+    // ── "Remind me to continue" ─────────────────────────────────────────────
     var reminderTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var customReminder by remember { mutableStateOf<ReminderOption?>(null) }
-    var pendingReminder by remember { mutableStateOf<Reminder?>(null) }
 
     fun confirmReminder(reminder: Reminder, summary: String) {
-        Reminders.schedule(context, reminder)
-        if (!Reminders.canNotify(context)) toast("Turn on notifications for Zuno to get this reminder")
-        toastState = ToastState("Reminder set · $summary", action = "Undo") {
-            Reminders.cancel(context, reminder.conversationId)
-            toastState = null
-        }
-    }
-
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        pendingReminder?.let { reminder ->
-            confirmReminder(reminder, reminderSummary(context, reminder.atMillis))
-            pendingReminder = null
+        scope.launch {
+            // Server first (push, survives reinstall and other devices); the on-device alarm is the
+            // offline fallback when push isn't available.
+            val serverId = if (Push.isAvailable) zunoViewModel.createReminder(reminder.conversationId, reminder.atMillis) else null
+            if (serverId == null) Reminders.schedule(context, reminder) else Reminders.cancel(context, reminder.conversationId)
+            if (!Reminders.canNotify(context)) toast(str(R.string.reminder_enable_notifications))
+            toasts.show(
+                ToastEvent(
+                    message = str(R.string.reminder_set_toast, summary),
+                    icon = ToastIcon.Check,
+                    actionLabel = str(R.string.common_undo),
+                    onAction = {
+                        if (serverId != null) zunoViewModel.cancelReminder(serverId)
+                        Reminders.cancel(context, reminder.conversationId)
+                    },
+                ),
+            )
         }
     }
 
@@ -524,27 +692,53 @@ fun ZunoApp(
         val chat = chats[conversationId]
         val reminder = Reminder(
             conversationId = conversationId,
-            title = chat?.conversation?.title?.ifBlank { null } ?: "your chat",
+            title = chat?.conversation?.title?.ifBlank { null } ?: str(R.string.reminder_your_chat),
             lastLine = chat?.messages?.lastOrNull { !it.isUser }?.text.orEmpty(),
             atMillis = option.atMillis,
         )
-        if (!Reminders.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pendingReminder = reminder
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            confirmReminder(reminder, option.summary)
-        }
+        withNotificationPermission { confirmReminder(reminder, option.summary) }
     }
 
     fun pickReminderTime() {
         val now = Calendar.getInstance()
         TimePickerDialog(
             context,
-            { _, hour, minute -> customReminder = customReminderOption(context, hour, minute) },
+            { _, hour, minute -> customReminder = customReminderOption(localizedContext, hour, minute) },
             now.get(Calendar.HOUR_OF_DAY),
             now.get(Calendar.MINUTE),
             DateFormat.is24HourFormat(context),
         ).show()
+    }
+
+    // ── Chat actions: rename, pin, share, report, delete ────────────────────
+    var renameTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var shareTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var shareBusy by remember { mutableStateOf(false) }
+    var reportTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun deleteChat(conversationId: String) {
+        if (voiceConversationId == conversationId) endVoice(commit = false)
+        zunoViewModel.deleteConversation(conversationId) {
+            Reminders.cancel(context, conversationId)
+            navigate(ZunoRoute.Home, clearStack = true)
+            toasts.show(ToastEvent(str(R.string.chat_deleted_toast), ToastIcon.Trash))
+        }
+    }
+
+    fun shareLink(url: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)
+        try {
+            context.startActivity(Intent.createChooser(send, str(R.string.share_title)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            toast(str(R.string.error_no_app))
+        }
+    }
+
+    fun copyLink(url: String) {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText(str(R.string.share_title), url))
+        toasts.show(ToastEvent(str(R.string.share_link_copied), ToastIcon.Link))
     }
 
     // ── New topic (optionally from a chat's material) ───────────────────────
@@ -555,15 +749,65 @@ fun ZunoApp(
         pop()
     }
 
-    // ── Account sheet & grammar explanations ────────────────────────────────
-    var showAccount by rememberSaveable { mutableStateOf(false) }
+    // ── Scheduled sessions ──────────────────────────────────────────────────
+    var scheduleSheet by rememberSaveable { mutableStateOf<String?>(null) }
+    var scheduleDelete by rememberSaveable { mutableStateOf<String?>(null) }
+    var highlightSchedule by remember { mutableStateOf<String?>(null) }
+
+    fun startScheduled(schedule: Schedule) {
+        if (voiceConversationId != null) endVoice()
+        zunoViewModel.startSchedule(schedule.id) { openChat(it.id) }
+    }
+
+    // ── Settings: sign out, account ─────────────────────────────────────────
+    var confirmSignOut by rememberSaveable { mutableStateOf(false) }
+    var confirmDeleteAccount by rememberSaveable { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
+    var uploadingPhoto by remember { mutableStateOf(false) }
+
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        uploadingPhoto = true
+        scope.launch {
+            val file = withContext(Dispatchers.IO) { compressAvatar(context, uri) }
+            if (file == null) {
+                uploadingPhoto = false
+                toast(str(R.string.account_photo_unreadable))
+                return@launch
+            }
+            zunoViewModel.uploadAvatar(file) { ok ->
+                uploadingPhoto = false
+                if (ok) toasts.show(ToastEvent(str(R.string.account_photo_updated), ToastIcon.Check))
+            }
+        }
+    }
+
+    fun contactSupport() {
+        val body = str(
+            R.string.support_email_body,
+            BuildConfig.VERSION_NAME,
+            "${Build.MANUFACTURER} ${Build.MODEL}",
+            Build.VERSION.RELEASE,
+        )
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+            .putExtra(Intent.EXTRA_EMAIL, arrayOf(SUPPORT_EMAIL))
+            .putExtra(Intent.EXTRA_SUBJECT, str(R.string.support_email_subject))
+            .putExtra(Intent.EXTRA_TEXT, body)
+        try {
+            context.startActivity(intent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            toast(str(R.string.support_no_email_app, SUPPORT_EMAIL))
+        }
+    }
+
+    // ── Grammar explanations ────────────────────────────────────────────────
     var explanation by remember { mutableStateOf<ExplanationState?>(null) }
     fun explain(message: Message) {
         explanation = ExplanationState(message.text, null)
         scope.launch {
             val result = zunoViewModel.explain(message.id)
             explanation = explanation?.takeIf { it.source == message.text }?.copy(
-                text = result.getOrElse { it.message ?: "Couldn't explain this right now." },
+                text = result.getOrElse { it.message ?: str(R.string.explain_failed) },
                 loaded = true,
             )
         }
@@ -571,6 +815,7 @@ fun ZunoApp(
 
     val activeDestination = when (route) {
         ZunoRoute.Home -> DrawerDestination.FreeTalk
+        ZunoRoute.Scheduled, is ZunoRoute.NewSchedule -> DrawerDestination.Scheduled
         ZunoRoute.Topics, ZunoRoute.NewTopic, is ZunoRoute.Topic -> DrawerDestination.Topics
         ZunoRoute.Roleplays, ZunoRoute.NewRoleplay -> DrawerDestination.Roleplays
         is ZunoRoute.Chat -> when (chats[route.conversationId]?.conversation?.kind) {
@@ -586,6 +831,10 @@ fun ZunoApp(
         else -> null
     }
 
+    CompositionLocalProvider(
+        LocalContext provides localizedContext,
+        LocalConfiguration provides localizedContext.resources.configuration,
+    ) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = route.hasDrawer,
@@ -594,36 +843,41 @@ fun ZunoApp(
         drawerContent = {
             AppDrawer(
                 userName = profile?.displayName.orEmpty(),
-                userDetail = profile?.detail ?: "",
+                userDetail = profile?.let { "${language.displayName(appLanguage)} · ${it.level}" }.orEmpty(),
+                userImage = profile?.imageUrl,
+                showUpgrade = profile?.isPro != true,
                 activeDestination = activeDestination,
                 sessions = recent,
                 selectedSessionId = selectedSessionId,
-                onProfile = { closeDrawerThen { showAccount = true } },
-                onNotifications = { comingSoon("Notifications") },
+                onProfile = { closeDrawerThen { navigate(ZunoRoute.Settings) } },
+                onNotifications = { closeDrawerThen { navigate(ZunoRoute.SettingsNotifications) } },
                 onDestination = { destination ->
                     closeDrawerThen {
                         if (voiceConversationId != null) endVoice()
                         when (destination) {
                             DrawerDestination.FreeTalk -> navigate(ZunoRoute.Home, clearStack = true)
+                            DrawerDestination.Scheduled -> openSection(ZunoRoute.Scheduled)
                             DrawerDestination.Topics -> openSection(ZunoRoute.Topics)
                             DrawerDestination.Roleplays -> openSection(ZunoRoute.Roleplays)
-                            else -> comingSoon(destination.label)
+                            else -> comingSoon(str(destination.labelRes))
                         }
                     }
                 },
-                onSearchSessions = { comingSoon("Search") },
+                onSearchSessions = { comingSoon(str(R.string.drawer_search_sessions)) },
                 onSession = { session ->
                     closeDrawerThen {
                         if (voiceConversationId != null) endVoice()
-                        when (session.kind) {
-                            RecentKind.Topic -> navigate(ZunoRoute.Topic(session.id))
-                            RecentKind.Roleplay -> zunoViewModel.openRoleplay(session.id) { openChat(it.id) }
-                            RecentKind.FreeTalk -> openChat(session.id)
+                        val pinnedChat = session.conversationId.takeIf { session.pinned && session.kind != RecentKind.FreeTalk }
+                        when {
+                            pinnedChat != null -> openChat(pinnedChat)
+                            session.kind == RecentKind.Topic -> navigate(ZunoRoute.Topic(session.id))
+                            session.kind == RecentKind.Roleplay -> zunoViewModel.openRoleplay(session.id) { openChat(it.id) }
+                            else -> openChat(session.id)
                         }
                     }
                 },
                 onUpgrade = { comingSoon("Zuno Pro") },
-                onSettings = { closeDrawerThen { showAccount = true } },
+                onSettings = { closeDrawerThen { navigate(ZunoRoute.Settings) } },
                 onNewChat = { closeDrawerThen { startFreeTalk(null) } },
             )
         },
@@ -645,8 +899,8 @@ fun ZunoApp(
 
                 ZunoRoute.Onboarding -> OnboardingScreen(
                     onGetStarted = { navigate(ZunoRoute.Auth(AuthMode.SignIn)) },
-                    onOpenTerms = { comingSoon("Terms") },
-                    onOpenPrivacy = { comingSoon("Privacy Policy") },
+                    onOpenTerms = { openUrl(TERMS_URL) },
+                    onOpenPrivacy = { openUrl(PRIVACY_URL) },
                     modifier = screenModifier,
                 )
 
@@ -654,7 +908,7 @@ fun ZunoApp(
                     mode = screen.mode,
                     onBack = {
                         authViewModel.clearError()
-                        pop()
+                        if (backStack.size > 1) pop() else replace(ZunoRoute.Onboarding)
                     },
                     onSubmit = { email -> authViewModel.sendMagicLink(email) },
                     onContinueWithGoogle = { authViewModel.signInWithGoogle(context) },
@@ -671,27 +925,32 @@ fun ZunoApp(
                 )
 
                 ZunoRoute.Home -> HomeScreen(
-                    copy = HomeCopy.forLanguage(language, profile?.firstName.orEmpty()),
+                    copy = HomeCopy.forLanguage(
+                        language,
+                        profile?.firstName.orEmpty(),
+                        profile?.firstName?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.home_greeting_named, it) }
+                            ?: stringResource(R.string.home_greeting),
+                    ),
                     voiceState = homeVoiceState,
                     liveTranscript = speech.partial,
                     audioLevel = { speech.level },
                     micBlocked = micBlocked,
                     busy = busy,
                     typingHint = typingHint,
-                    selector = profile?.detail ?: "${language.label} · …",
+                    selector = profile?.let { "${language.displayName(appLanguage)} · ${it.level}" } ?: "${language.displayName(appLanguage)} · …",
                     onOpenDrawer = { openDrawer() },
-                    onSelector = { showAccount = true },
+                    onSelector = { navigate(ZunoRoute.SettingsLearning) },
                     onHoldStart = {
                         when {
                             !micGranted() -> requestMicrophone()
-                            !speech.isAvailable -> toast("Speech recognition isn't available on this device. Type instead.")
+                            !speech.isAvailable -> toast(str(R.string.home_speech_unavailable))
                             else -> {
                                 tts.stop()
                                 homeVoiceState = HomeVoiceState.Listening
-                                speech.start(language.speechTag) { transcript ->
+                                speech.start(language.speechTag(accent)) { transcript ->
                                     if (transcript.isNullOrBlank()) {
                                         homeVoiceState = HomeVoiceState.Idle
-                                        toast("Didn't catch that — try again")
+                                        toast(str(R.string.home_didnt_catch))
                                     } else {
                                         homeVoiceState = HomeVoiceState.Sending
                                         startFreeTalk(transcript, viaVoice = true)
@@ -714,7 +973,7 @@ fun ZunoApp(
                         }
                     },
                     onAllowMicrophone = ::requestMicrophone,
-                    onDraftChanged = zunoViewModel::onDraftChanged,
+                    onDraftChanged = { if (preferences?.suggestReplies != false) zunoViewModel.onDraftChanged(it) },
                     onSendText = { text -> startFreeTalk(text) },
                     onTypeModeChanged = { if (!it) zunoViewModel.clearHint() },
                     drafts = drafts[HOME_DRAFT_KEY].orEmpty(),
@@ -723,6 +982,55 @@ fun ZunoApp(
                     onRetryAttachment = { zunoViewModel.retryAttachment(HOME_DRAFT_KEY, it.localId) },
                     modifier = screenModifier,
                 )
+
+                ZunoRoute.Scheduled -> {
+                    LaunchedEffect(Unit) { zunoViewModel.loadSchedules() }
+                    ScheduledScreen(
+                        schedules = schedules,
+                        highlightId = highlightSchedule,
+                        onBack = ::pop,
+                        onRetry = zunoViewModel::loadSchedules,
+                        onCreate = { navigate(ZunoRoute.NewSchedule()) },
+                        onOpen = { scheduleSheet = it.id },
+                        onStart = ::startScheduled,
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.NewSchedule -> {
+                    LaunchedEffect(Unit) { zunoViewModel.loadScheduleTargets() }
+                    val editing = screen.editId?.let { id -> schedules.items?.firstOrNull { it.id == id } }
+                    NewScheduleScreen(
+                        targets = scheduleTargets,
+                        editing = editing,
+                        busy = busy,
+                        onBack = ::pop,
+                        onRetry = zunoViewModel::loadScheduleTargets,
+                        onSave = { draft ->
+                            withNotificationPermission {
+                                zunoViewModel.saveSchedule(screen.editId, draft) { saved ->
+                                    highlightSchedule = saved.id
+                                    if (backStack.lastOrNull() is ZunoRoute.NewSchedule) pop()
+                                    if (backStack.lastOrNull() != ZunoRoute.Scheduled) navigate(ZunoRoute.Scheduled)
+                                    val phrase = ScheduleFormat.phrase(localizedContext, saved)
+                                    toasts.show(
+                                        if (screen.editId == null) {
+                                            ToastEvent(
+                                                message = str(R.string.schedule_added_toast, phrase),
+                                                icon = ToastIcon.Check,
+                                                actionLabel = str(R.string.common_undo),
+                                                onAction = { zunoViewModel.deleteSchedule(saved.id) },
+                                            )
+                                        } else {
+                                            ToastEvent(str(R.string.schedule_updated_toast, phrase), ToastIcon.Check)
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                        modifier = screenModifier,
+                    )
+                }
 
                 ZunoRoute.Topics -> {
                     LaunchedEffect(Unit) { zunoViewModel.loadTopics() }
@@ -820,36 +1128,65 @@ fun ZunoApp(
                     }
                     val menu = buildList {
                         if (conversation != null) {
-                            add(ZunoMenuAction("Remind me to continue") {
-                                customReminder = null
-                                reminderTarget = screen.conversationId
+                            add(ZunoMenuAction(stringResource(R.string.chat_menu_rename), icon = R.drawable.zuno_ic_t_pencil) {
+                                renameTarget = screen.conversationId
                             })
-                            add(ZunoMenuAction("Turn into a topic") {
-                                if (inVoice) endVoice()
-                                topicPrefill = zunoViewModel.prefillTopicFromChat(screen.conversationId)
-                                navigate(ZunoRoute.NewTopic)
+                            add(
+                                ZunoMenuAction(
+                                    stringResource(if (conversation.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin),
+                                    icon = if (conversation.pinned) R.drawable.zuno_ic_t_pin_off else R.drawable.zuno_ic_t_pin,
+                                ) {
+                                    zunoViewModel.setPinned(screen.conversationId, !conversation.pinned) { pinned ->
+                                        toasts.show(
+                                            ToastEvent(str(if (pinned) R.string.chat_pinned_toast else R.string.chat_unpinned_toast), ToastIcon.Pin),
+                                        )
+                                    }
+                                },
+                            )
+                            add(ZunoMenuAction(stringResource(R.string.chat_menu_share), icon = R.drawable.zuno_ic_t_share) {
+                                shareTarget = screen.conversationId
                             })
+                            add(ZunoMenuAction(stringResource(R.string.chat_menu_report), icon = R.drawable.zuno_ic_t_flag) {
+                                reportTarget = screen.conversationId
+                            })
+                            add(
+                                ZunoMenuAction(
+                                    stringResource(R.string.chat_menu_turn_into_topic),
+                                    icon = R.drawable.zuno_ic_t_book_open,
+                                    dividerBefore = true,
+                                ) {
+                                    if (inVoice) endVoice()
+                                    topicPrefill = zunoViewModel.prefillTopicFromChat(screen.conversationId)
+                                    navigate(ZunoRoute.NewTopic)
+                                },
+                            )
                         }
                         if (conversation?.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
-                            add(ZunoMenuAction("Mark lesson complete") {
+                            add(ZunoMenuAction(stringResource(R.string.chat_menu_complete_lesson), icon = R.drawable.zuno_ic_t_check_circle) {
                                 zunoViewModel.completeLesson(conversation.topicId, conversation.lessonId)
                             })
-                            add(ZunoMenuAction("Back to topic") { navigate(ZunoRoute.Topic(conversation.topicId)) })
+                            add(ZunoMenuAction(stringResource(R.string.chat_menu_back_to_topic), icon = R.drawable.zuno_ic_t_arrow_right) {
+                                navigate(ZunoRoute.Topic(conversation.topicId))
+                            })
                         }
                         if (conversation?.kind == ConversationKind.Roleplay && conversation.roleplayId != null) {
-                            add(ZunoMenuAction("Start over") {
+                            add(ZunoMenuAction(stringResource(R.string.chat_menu_start_over), icon = R.drawable.zuno_ic_t_rotate_ccw) {
                                 if (inVoice) endVoice()
                                 zunoViewModel.openRoleplay(conversation.roleplayId, restart = true) { replace(ZunoRoute.Chat(it.id)) }
                             })
                         }
-                        add(ZunoMenuAction("Delete conversation") {
-                            if (inVoice) endVoice(commit = false)
-                            zunoViewModel.deleteConversation(screen.conversationId) { pop() }
-                        })
+                        add(
+                            ZunoMenuAction(
+                                stringResource(R.string.chat_menu_delete),
+                                icon = R.drawable.zuno_ic_t_trash,
+                                destructive = true,
+                                dividerBefore = true,
+                            ) { deleteTarget = screen.conversationId },
+                        )
                     }
                     ChatScreen(
                         title = conversation?.title.orEmpty(),
-                        sessionLabel = conversation?.let(::sessionLabel).orEmpty(),
+                        sessionLabel = conversation?.let { sessionLabel(localizedContext, it) }.orEmpty(),
                         messages = chat?.messages,
                         pendingText = chat?.pendingText,
                         pendingAttachments = chat?.pendingAttachments.orEmpty(),
@@ -865,7 +1202,7 @@ fun ZunoApp(
                             else viewModel.userAudioLevel.value
                         },
                         isMuted = isMuted,
-                        placeholder = HomeCopy.forLanguage(language, "").placeholder,
+                        placeholder = language.placeholder,
                         typingHint = typingHint,
                         menu = menu,
                         onBack = {
@@ -874,12 +1211,12 @@ fun ZunoApp(
                         },
                         onRetryLoad = { zunoViewModel.loadConversation(screen.conversationId) },
                         onSend = { text -> zunoViewModel.send(screen.conversationId, text) },
-                        onDraftChanged = zunoViewModel::onDraftChanged,
+                        onDraftChanged = { if (preferences?.suggestReplies != false) zunoViewModel.onDraftChanged(it) },
                         savedDraft = { zunoViewModel.draftText(screen.conversationId) },
                         onSaveDraft = { zunoViewModel.saveDraftText(screen.conversationId, it) },
                         onStartVoice = {
                             if (chat?.pendingText == null) startVoice(screen.conversationId)
-                            else toast("One moment — Zuno is still replying")
+                            else toast(str(R.string.chat_still_replying))
                         },
                         onSwitchToText = { endVoice() },
                         onToggleMute = { viewModel.toggleMute() },
@@ -890,6 +1227,106 @@ fun ZunoApp(
                         onRemoveAttachment = { zunoViewModel.removeAttachment(screen.conversationId, it.localId) },
                         onRetryAttachment = { zunoViewModel.retryAttachment(screen.conversationId, it.localId) },
                         onOpenAttachment = ::openAttachment,
+                        showTranslations = preferences?.showTranslations != false,
+                        modifier = screenModifier,
+                    )
+                }
+
+                ZunoRoute.Settings -> SettingsOverviewScreen(
+                    profile = profile,
+                    appLanguage = appLanguage,
+                    onBack = ::pop,
+                    onUpgrade = { comingSoon("Zuno Pro") },
+                    onAccount = { navigate(ZunoRoute.SettingsAccount) },
+                    onLearning = { navigate(ZunoRoute.SettingsLearning) },
+                    onAppLanguage = { navigate(ZunoRoute.SettingsAppLanguage) },
+                    onPreferences = { navigate(ZunoRoute.SettingsPreferences) },
+                    onNotifications = { navigate(ZunoRoute.SettingsNotifications) },
+                    onAbout = { showAbout = true },
+                    onContactSupport = ::contactSupport,
+                    onSignOut = { confirmSignOut = true },
+                    onDeleteAccount = { confirmDeleteAccount = true },
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsPreferences -> SettingsPreferencesScreen(
+                    preferences = preferences ?: com.talkie.ai.data.Preferences(),
+                    targetLanguage = language,
+                    appLanguage = appLanguage,
+                    onChange = zunoViewModel::updatePreferences,
+                    onBack = ::pop,
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsAppLanguage -> SettingsAppLanguageScreen(
+                    selectedLanguage = appLanguage,
+                    onSelectLanguage = ::selectAppLanguage,
+                    onBack = ::pop,
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsLearning -> SettingsLearningScreen(
+                    profile = profile,
+                    appLanguage = appLanguage,
+                    onOpenLanguages = { navigate(ZunoRoute.SettingsLearningLanguage) },
+                    onAccentChange = { zunoViewModel.updateProfile(accent = it) },
+                    onLevelChange = { zunoViewModel.updateProfile(level = it) },
+                    onFindLevel = ::startLevelCheck,
+                    onPreferencesChange = zunoViewModel::updatePreferences,
+                    onBack = ::pop,
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsLearningLanguage -> SettingsLearningLanguageScreen(
+                    languages = languages,
+                    profile = profile,
+                    appLanguage = appLanguage,
+                    busy = busy,
+                    onSwitch = { target ->
+                        if (voiceConversationId != null) endVoice()
+                        zunoViewModel.switchLearningLanguage(target.code) { updated ->
+                            if (backStack.lastOrNull() == ZunoRoute.SettingsLearningLanguage) pop()
+                            toasts.show(
+                                ToastEvent(str(R.string.learning_language_switched, updated.language.displayName(localizedContext, appLanguage)), ToastIcon.Check),
+                            )
+                        }
+                    },
+                    onBack = ::pop,
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsAccount -> SettingsAccountScreen(
+                    profile = profile,
+                    uploadingPhoto = uploadingPhoto,
+                    onUpdateName = { zunoViewModel.updateProfile(name = it) },
+                    onChangePhoto = { avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onPlanClick = { comingSoon("Zuno Pro") },
+                    onDownloadData = { comingSoon(str(R.string.settings_acc_download_data)) },
+                    onDeleteAccount = { confirmDeleteAccount = true },
+                    onBack = ::pop,
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsNotifications -> {
+                    LaunchedEffect(Unit) { zunoViewModel.loadNotificationPrefs() }
+                    SettingsNotificationsScreen(
+                        prefs = notificationPrefs,
+                        onChange = { transform ->
+                            val before = notificationPrefs
+                            zunoViewModel.updateNotificationPrefs(transform)
+                            val after = before?.let(transform)
+                            val turnedOnPush = before != null && after != null &&
+                                ((!before.dailyReminder && after.dailyReminder) || (!before.scheduledSessions && after.scheduledSessions) ||
+                                    (!before.progressMilestones && after.progressMilestones))
+                            if (turnedOnPush) withNotificationPermission {}
+                        },
+                        onOpenSystemSettings = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            runCatching { context.startActivity(intent) }
+                        },
+                        onBack = ::pop,
                         modifier = screenModifier,
                     )
                 }
@@ -901,7 +1338,7 @@ fun ZunoApp(
         // Conversations get "Remind me to continue"; Home and topic material have no chat to come back to yet.
         val isConversation = key != HOME_DRAFT_KEY && key != TOPIC_DRAFT_KEY
         ZunoAttachSheet(
-            title = if (key == TOPIC_DRAFT_KEY) "Add learning material" else "Add to this chat",
+            title = stringResource(if (key == TOPIC_DRAFT_KEY) R.string.attach_title_material else R.string.attach_title_chat),
             onDismiss = { attachTarget = null },
             onCamera = { pick(::launchCamera) },
             onPhotos = { pick(::launchPhotos) },
@@ -934,7 +1371,7 @@ fun ZunoApp(
 
     reminderTarget?.let { conversationId ->
         ZunoReminderSheet(
-            options = remember(conversationId) { reminderOptions(context) },
+            options = remember(conversationId) { reminderOptions(localizedContext) },
             custom = customReminder,
             onPickTime = ::pickReminderTime,
             onDismiss = { reminderTarget = null },
@@ -945,58 +1382,201 @@ fun ZunoApp(
         )
     }
 
-    toastState?.let { state ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(bottom = 80.dp, start = ZunoSpace.s24, end = ZunoSpace.s24),
-            contentAlignment = Alignment.BottomCenter,
+    renameTarget?.let { id ->
+        val current = chats[id]?.conversation
+        if (current == null) {
+            renameTarget = null
+        } else {
+            ZunoInputDialog(
+                title = stringResource(R.string.chat_rename_title),
+                initialValue = current.title,
+                confirmLabel = stringResource(R.string.common_save),
+                onConfirm = { title ->
+                    renameTarget = null
+                    zunoViewModel.renameConversation(id, title) {
+                        toasts.show(ToastEvent(str(R.string.chat_renamed_toast), ToastIcon.Check))
+                    }
+                },
+                onDismiss = { renameTarget = null },
+            )
+        }
+    }
+
+    shareTarget?.let { id ->
+        val current = chats[id]?.conversation
+        ZunoShareSheet(
+            isPublic = current?.public == true,
+            shareUrl = current?.shareUrl,
+            busy = shareBusy,
+            onSelectPublic = { public ->
+                shareBusy = true
+                scope.launch {
+                    runCatching { zunoViewModel.setShare(id, public) }
+                    shareBusy = false
+                }
+            },
+            onShare = { current?.shareUrl?.let(::shareLink) },
+            onCopyLink = { current?.shareUrl?.let(::copyLink) },
+            onDismiss = { shareTarget = null },
+        )
+    }
+
+    reportTarget?.let { id ->
+        ZunoReportSheet(
+            busy = busy,
+            onSubmit = { reason, details ->
+                zunoViewModel.reportConversation(id, reason, details) {
+                    reportTarget = null
+                    toasts.show(ToastEvent(str(R.string.report_sent_toast), ToastIcon.Check))
+                }
+            },
+            onDismiss = { reportTarget = null },
+        )
+    }
+
+    deleteTarget?.let { id ->
+        val title = chats[id]?.conversation?.title.orEmpty()
+        ZunoDialog(
+            title = stringResource(R.string.chat_delete_title),
+            body = stringResource(R.string.chat_delete_body, title),
+            confirmLabel = stringResource(R.string.common_delete),
+            destructive = true,
+            onConfirm = {
+                deleteTarget = null
+                deleteChat(id)
+            },
+            onDismiss = { deleteTarget = null },
+        )
+    }
+
+    scheduleSheet?.let { id ->
+        val schedule = schedules.items?.firstOrNull { it.id == id }
+        if (schedule == null) {
+            scheduleSheet = null
+        } else {
+            ScheduleActionsSheet(
+                schedule = schedule,
+                onDismiss = { scheduleSheet = null },
+                onStart = {
+                    scheduleSheet = null
+                    startScheduled(schedule)
+                },
+                onEdit = {
+                    scheduleSheet = null
+                    navigate(ZunoRoute.NewSchedule(schedule.id))
+                },
+                onSkip = {
+                    scheduleSheet = null
+                    zunoViewModel.skipNextSchedule(schedule.id) { updated ->
+                        val next = updated.nextRunAtMillis
+                        toasts.show(
+                            ToastEvent(
+                                if (next != null) {
+                                    str(R.string.schedule_skipped_toast, ScheduleFormat.date(localizedContext, ScheduleFormat.localDate(next)))
+                                } else {
+                                    str(R.string.schedule_skipped_done_toast)
+                                },
+                                ToastIcon.Calendar,
+                            ),
+                        )
+                    }
+                },
+                onDelete = {
+                    scheduleSheet = null
+                    scheduleDelete = schedule.id
+                },
+            )
+        }
+    }
+
+    scheduleDelete?.let { id ->
+        val title = schedules.items?.firstOrNull { it.id == id }?.title.orEmpty()
+        ZunoDialog(
+            title = stringResource(R.string.schedule_delete_title),
+            body = stringResource(R.string.schedule_delete_body, title),
+            confirmLabel = stringResource(R.string.common_delete),
+            destructive = true,
+            onConfirm = {
+                scheduleDelete = null
+                zunoViewModel.deleteSchedule(id) { toasts.show(ToastEvent(str(R.string.schedule_deleted_toast), ToastIcon.Trash)) }
+            },
+            onDismiss = { scheduleDelete = null },
+        )
+    }
+
+    if (confirmSignOut) {
+        ZunoDialog(
+            title = stringResource(R.string.signout_title),
+            body = stringResource(R.string.signout_body),
+            confirmLabel = stringResource(R.string.settings_sign_out),
+            destructive = true,
+            onConfirm = {
+                confirmSignOut = false
+                signOutReason = SignOutReason.User
+                authViewModel.signOut()
+            },
+            onDismiss = { confirmSignOut = false },
+        )
+    }
+
+    if (confirmDeleteAccount) {
+        ZunoDialog(
+            title = stringResource(R.string.account_delete_title),
+            body = stringResource(R.string.account_delete_body),
+            confirmLabel = stringResource(R.string.common_delete),
+            destructive = true,
+            confirmLoading = busy,
+            onConfirm = {
+                zunoViewModel.deleteAccount {
+                    confirmDeleteAccount = false
+                    signOutReason = SignOutReason.Deleted
+                    authViewModel.forgetSession()
+                }
+            },
+            onDismiss = { confirmDeleteAccount = false },
+        )
+    }
+
+    if (showAbout) {
+        ZunoDialog(
+            title = stringResource(R.string.about_title),
+            body = stringResource(R.string.about_body, BuildConfig.VERSION_NAME),
+            confirmLabel = stringResource(R.string.common_done),
+            showDismiss = false,
+            onConfirm = { showAbout = false },
+            onDismiss = { showAbout = false },
         ) {
-            ZunoToast(state.message, action = state.action, onAction = state.onAction)
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                ZunoSheetAction(R.drawable.zuno_ic_t_external_link, stringResource(R.string.about_terms), { openUrl(TERMS_URL) })
+                ZunoSheetAction(R.drawable.zuno_ic_t_external_link, stringResource(R.string.about_privacy), { openUrl(PRIVACY_URL) })
+            }
         }
     }
 
     viewing?.let { ZunoImageViewer(it, onDismiss = { viewing = null }) }
 
-    val currentProfile = profile
-    if (showAccount && currentProfile != null) {
-        AccountSheet(
-            profile = currentProfile,
-            onDismiss = { showAccount = false },
-            onLanguage = { zunoViewModel.updateProfile(targetLanguage = it) },
-            onLevel = { zunoViewModel.updateProfile(level = it) },
-            onSignOut = {
-                showAccount = false
-                authViewModel.signOut()
-            },
-        )
-    }
-
     explanation?.let { state ->
-        AlertDialog(
-            onDismissRequest = { explanation = null },
-            containerColor = ZunoColors.BgElevated,
-            title = { Text("Grammar", style = ZunoType.Headline, color = ZunoColors.TextPrimary) },
-            text = {
+        ZunoDialog(
+            title = stringResource(R.string.explain_title),
+            confirmLabel = stringResource(R.string.common_got_it),
+            onConfirm = { explanation = null },
+            onDismiss = { explanation = null },
+            showDismiss = false,
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4)) {
                 Text(
-                    if (state.loaded) state.text.orEmpty() else "Thinking…",
+                    if (state.loaded) state.text.orEmpty() else stringResource(R.string.explain_thinking),
                     style = ZunoType.BodySmall,
                     color = ZunoColors.TextSecondary,
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = { explanation = null }) {
-                    Text("Got it", style = ZunoType.LabelMedium, color = ZunoColors.TextPrimary)
-                }
-            },
-        )
+            }
+        }
+    }
+
+    ZunoToastHost(toasts)
     }
 }
 
-/** "New Free Talk · Just now", "Roleplay · 3 hours ago", … */
 /** Live call → glow. The mic stays open between turns, so an idle call still listens to the user. */
 private fun voiceGlowState(agentState: AgentState, isMuted: Boolean): AgentGlowState = when (agentState) {
     AgentState.DISCONNECTED, AgentState.CONNECTING, AgentState.THINKING -> AgentGlowState.Thinking
@@ -1004,14 +1584,18 @@ private fun voiceGlowState(agentState: AgentState, isMuted: Boolean): AgentGlowS
     AgentState.IDLE, AgentState.LISTENING -> if (isMuted) AgentGlowState.Disabled else AgentGlowState.Listening
 }
 
-private fun sessionLabel(conversation: Conversation): String {
+/** "New Free Talk · Just now", "Roleplay · 3 hours ago", … */
+private fun sessionLabel(context: Context, conversation: Conversation): String {
     val age = System.currentTimeMillis() - conversation.createdAtMillis
-    val kind = when (conversation.kind) {
-        ConversationKind.FreeTalk -> "Free Talk"
-        ConversationKind.Roleplay -> "Roleplay"
-        ConversationKind.Lesson -> "Lesson"
-    }
-    if (age < 5 * DateUtils.MINUTE_IN_MILLIS) return "New $kind · Just now"
+    val kind = context.getString(
+        when {
+            conversation.levelCheck -> R.string.session_kind_level_check
+            conversation.kind == ConversationKind.Roleplay -> R.string.session_kind_roleplay
+            conversation.kind == ConversationKind.Lesson -> R.string.session_kind_lesson
+            else -> R.string.session_kind_free_talk
+        },
+    )
+    if (age < 5 * DateUtils.MINUTE_IN_MILLIS) return context.getString(R.string.session_label_new, kind)
     val relative = DateUtils.getRelativeTimeSpanString(
         conversation.createdAtMillis,
         System.currentTimeMillis(),
@@ -1020,11 +1604,16 @@ private fun sessionLabel(conversation: Conversation): String {
     return "$kind · $relative"
 }
 
+/** The learning language's name in the app language, outside composition. */
+private fun LearningLanguage.displayName(context: Context, appLanguage: AppLanguage): String {
+    val locale = Locale.forLanguageTag(appLanguage.bcp47)
+    return Locale.forLanguageTag(code).getDisplayLanguage(locale)
+        .takeIf { it.isNotBlank() && it != code }
+        ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+        ?: englishName
+}
+
 private data class ExplanationState(val source: String, val text: String?, val loaded: Boolean = false)
-
-private data class ToastState(val message: String, val action: String? = null, val onAction: () -> Unit = {})
-
-private const val TOAST_DURATION_MS = 4_000L
 
 private fun timeLabel(context: Context, millis: Long): String = DateFormat.getTimeFormat(context).format(Date(millis))
 
@@ -1042,34 +1631,53 @@ private fun reminderOptions(context: Context): List<ReminderOption> {
     val tonight = atTime(0, 21)
     val tomorrow = atTime(1, 8)
     return buildList {
-        add(ReminderOption("In 1 hour", "In 1 hour", now + DateUtils.HOUR_IN_MILLIS))
+        val inAnHour = context.getString(R.string.reminder_in_one_hour)
+        add(ReminderOption(inAnHour, inAnHour, now + DateUtils.HOUR_IN_MILLIS))
         if (tonight - now >= DateUtils.HOUR_IN_MILLIS) {
             val time = timeLabel(context, tonight)
-            add(ReminderOption("Tonight · $time", "Tonight $time", tonight))
+            add(ReminderOption(context.getString(R.string.reminder_tonight_chip, time), context.getString(R.string.reminder_tonight, time), tonight, isTonight = true))
         }
         val time = timeLabel(context, tomorrow)
-        add(ReminderOption("Tomorrow · $time", "Tomorrow $time", tomorrow))
+        add(ReminderOption(context.getString(R.string.reminder_tomorrow_chip, time), context.getString(R.string.reminder_tomorrow, time), tomorrow))
     }
 }
 
 /** The next [hour]:[minute] — today if it's still ahead, otherwise tomorrow. */
 private fun customReminderOption(context: Context, hour: Int, minute: Int): ReminderOption {
     val today = atTime(0, hour, minute)
-    val (at, day) = if (today > System.currentTimeMillis()) today to "Today" else atTime(1, hour, minute) to "Tomorrow"
+    val isToday = today > System.currentTimeMillis()
+    val at = if (isToday) today else atTime(1, hour, minute)
     val time = timeLabel(context, at)
-    return ReminderOption("$day · $time", "$day $time", at, icon = R.drawable.zuno_ic_clock_small)
-}
-
-private fun reminderSummary(context: Context, millis: Long): String {
-    val day = if (DateUtils.isToday(millis)) "Today" else "Tomorrow"
-    return "$day ${timeLabel(context, millis)}"
-}
-
-private val TargetLanguage.speechTag: String
-    get() = when (this) {
-        TargetLanguage.Spanish -> "es-ES"
-        TargetLanguage.English -> "en-US"
+    return if (isToday) {
+        ReminderOption(context.getString(R.string.reminder_today_chip, time), context.getString(R.string.reminder_today, time), at, icon = R.drawable.zuno_ic_clock_small)
+    } else {
+        ReminderOption(context.getString(R.string.reminder_tomorrow_chip, time), context.getString(R.string.reminder_tomorrow, time), at, icon = R.drawable.zuno_ic_clock_small)
     }
+}
+
+/** Reads, downsizes (max 1024px) and re-encodes a picked photo as JPEG for the avatar upload. */
+private fun compressAvatar(context: Context, uri: Uri): File? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    val largest = maxOf(bounds.outWidth, bounds.outHeight).takeIf { it > 0 } ?: return null
+    var sample = 1
+    while (largest / (sample * 2) >= 1024) sample *= 2
+    val decoded = context.contentResolver.openInputStream(uri)?.use {
+        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+    } ?: return null
+    val scale = 1024f / maxOf(decoded.width, decoded.height)
+    val bitmap = if (scale < 1f) {
+        Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt(), (decoded.height * scale).toInt(), true)
+    } else {
+        decoded
+    }
+    // Centre-crop to a square so the round avatar isn't distorted.
+    val side = minOf(bitmap.width, bitmap.height)
+    val square = Bitmap.createBitmap(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side)
+    val file = File(context.cacheDir, "avatar-${System.currentTimeMillis()}.jpg")
+    file.outputStream().use { square.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+    file
+}.getOrNull()
 
 private fun Context.findActivity(): Activity? {
     var current: Context? = this
@@ -1107,9 +1715,8 @@ private class TutorTts(context: Context, private var locale: Locale) : TextToSpe
 }
 
 @Composable
-private fun rememberTutorTts(language: TargetLanguage): TutorTts {
+private fun rememberTutorTts(locale: Locale): TutorTts {
     val context = LocalContext.current
-    val locale = if (language == TargetLanguage.Spanish) Locale("es", "ES") else Locale.US
     val holder = remember { TutorTts(context, locale) }
     LaunchedEffect(locale) { holder.setLocale(locale) }
     DisposableEffect(holder) {
