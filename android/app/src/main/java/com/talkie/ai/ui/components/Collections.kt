@@ -38,12 +38,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.talkie.ai.R
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoRadius
@@ -99,13 +102,13 @@ fun ZunoSearchTopBar(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = ZunoType.BodyLarge.copy(color = ZunoColors.TextPrimary),
+            textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
             cursorBrush = SolidColor(ZunoColors.TextPrimary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             modifier = Modifier.weight(1f).focusRequester(focusRequester),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) EllipsizedText(placeholder, ZunoType.BodyLarge, ZunoColors.TextPlaceholder)
+                    if (query.isEmpty()) EllipsizedText(placeholder, ZunoType.BodyMedium, ZunoColors.TextPlaceholder)
                     inner()
                 }
             },
@@ -117,7 +120,7 @@ fun ZunoSearchTopBar(
 @Composable
 fun ZunoListGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xxl)),
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xl)),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
         content = content,
     )
@@ -150,19 +153,19 @@ fun ZunoCollectionCard(
             .fillMaxWidth()
             .background(ZunoColors.SurfaceDefault)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s16, end = ZunoSpace.s12, top = ZunoSpace.s16, bottom = ZunoSpace.s16),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+            .padding(start = ZunoSpace.s16, end = ZunoSpace.s8, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(ZunoRadius.lg)).background(ZunoColors.SurfaceStrong),
+            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(ZunoRadius.md)).background(ZunoColors.SurfaceStrong),
             contentAlignment = Alignment.Center,
         ) {
-            ZunoIcon(icon, 20.dp)
+            ZunoIcon(icon, 18.dp)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-            EllipsizedText(title, ZunoType.Headline, ZunoColors.TextPrimary)
-            EllipsizedText(subtitle, ZunoType.BodySmall, ZunoColors.TextSecondary)
+            EllipsizedText(title, ZunoType.BodyMediumStrong, ZunoColors.TextPrimary)
+            EllipsizedText(subtitle, ZunoType.FootnoteRegular, ZunoColors.TextTertiary)
         }
         ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Small)
     }
@@ -187,7 +190,7 @@ fun ZunoOverflowMenu(
     }
 }
 
-/** Overflow Menu — elevated card (16dp radius, strong border) of 48dp icon rows. */
+/** Overflow Menu — elevated card (16dp radius, strong border) of 44dp icon rows. */
 @Composable
 fun ZunoDropdownMenu(
     expanded: Boolean,
@@ -199,34 +202,57 @@ fun ZunoDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         containerColor = ZunoColors.BgElevated,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
         shape = RoundedCornerShape(ZunoRadius.lg),
         border = BorderStroke(1.dp, ZunoColors.BorderStrong),
-        shadowElevation = 8.dp,
-        modifier = Modifier.padding(horizontal = ZunoSpace.s6),
+        modifier = Modifier
+            .layout { measurable, constraints ->
+                val trim = ZunoSpace.s4.roundToPx()
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, (placeable.height - trim * 2).coerceAtLeast(0)) {
+                    placeable.placeRelative(0, -trim)
+                }
+            }
+            .padding(horizontal = ZunoSpace.s4),
     ) {
         actions.forEach { action ->
             if (action.dividerBefore) {
-                Box(Modifier.padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s6).width(188.dp).height(1.dp).background(ZunoColors.Divider))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s4)
+                        .height(1.dp)
+                        .background(ZunoColors.Divider)
+                )
             }
             val color = if (action.destructive) ZunoColors.TextDanger else ZunoColors.TextPrimary
             Row(
                 modifier = Modifier
-                    .widthIn(min = 208.dp)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(ZunoRadius.md))
+                    .fillMaxWidth()
+                    .widthIn(min = 176.dp, max = 248.dp)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
                     .clickable(role = Role.Button) {
                         onDismiss()
                         action.onClick()
                     }
-                    .padding(horizontal = ZunoSpace.s16),
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                    .padding(horizontal = ZunoSpace.s12),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                action.icon?.let { ZunoIcon(it, 20.dp, tint = color) }
-                Text(action.label, style = ZunoType.BodyLarge, color = color, modifier = Modifier.weight(1f, fill = false))
+                action.icon?.let { ZunoIcon(it, 18.dp, tint = color) }
+                Text(
+                    text = action.label,
+                    style = ZunoType.BodyMedium.copy(lineHeight = 20.sp),
+                    color = color,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 if (action == selected) {
                     Box(Modifier.weight(1f))
-                    ZunoIcon(R.drawable.zuno_ic_t_check, 18.dp, tint = ZunoColors.IconPrimary)
+                    ZunoIcon(R.drawable.zuno_ic_t_check, 16.dp, tint = ZunoColors.IconPrimary)
                 }
             }
         }

@@ -119,7 +119,7 @@ fun ZunoAssistantBubble(
                 .padding(ZunoSpace.s16),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         ) {
-            Text(message, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
+            Text(message, style = ZunoType.BodyMedium, color = ZunoColors.TextPrimary)
             if (!translation.isNullOrBlank()) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
                 Text(translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary)

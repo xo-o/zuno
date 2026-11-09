@@ -143,19 +143,19 @@ private fun SheetRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(ZunoRadius.md))
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+            .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIcon(icon, 22.dp)
+        ZunoIcon(icon, 18.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-            Text(title, style = ZunoType.BodyLarge, color = ZunoColors.TextPrimary)
+            Text(title, style = ZunoType.BodyMedium, color = ZunoColors.TextPrimary)
             Text(description, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
         }
-        if (chevron) ZunoIcon(R.drawable.zuno_ic_chevron_right_muted, 20.dp)
+        if (chevron) ZunoIcon(R.drawable.zuno_ic_chevron_right_muted, 18.dp)
     }
 }
 

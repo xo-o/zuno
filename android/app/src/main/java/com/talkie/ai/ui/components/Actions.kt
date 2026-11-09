@@ -214,7 +214,7 @@ fun ZunoTextField(
             onValueChange = onValueChange,
             enabled = enabled,
             singleLine = true,
-            textStyle = ZunoType.BodyLarge.copy(color = ZunoColors.TextPrimary),
+            textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
             cursorBrush = SolidColor(ZunoColors.TextPrimary),
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
@@ -232,7 +232,7 @@ fun ZunoTextField(
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     if (value.isEmpty()) {
-                        Text(placeholder, style = ZunoType.BodyLarge, color = ZunoColors.TextPlaceholder, maxLines = 1)
+                        Text(placeholder, style = ZunoType.BodyMedium, color = ZunoColors.TextPlaceholder, maxLines = 1)
                     }
                     inner()
                 }
@@ -261,7 +261,7 @@ fun ZunoTextFieldValue(
         value = value,
         onValueChange = onValueChange,
         singleLine = singleLine,
-        textStyle = ZunoType.BodyLarge.copy(color = ZunoColors.TextPrimary),
+        textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
         cursorBrush = SolidColor(ZunoColors.TextPrimary),
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
@@ -279,7 +279,7 @@ fun ZunoTextFieldValue(
                 contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
             ) {
                 if (value.text.isEmpty()) {
-                    Text(placeholder, style = ZunoType.BodyLarge, color = ZunoColors.TextPlaceholder)
+                    Text(placeholder, style = ZunoType.BodyMedium, color = ZunoColors.TextPlaceholder)
                 }
                 inner()
             }

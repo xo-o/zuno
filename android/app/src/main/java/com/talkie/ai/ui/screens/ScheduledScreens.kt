@@ -237,7 +237,7 @@ fun ScheduledScreen(
                                     modifier = Modifier.padding(top = ZunoSpace.s4),
                                 )
                                 Column(
-                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xxl)),
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xl)),
                                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
                                 ) {
                                     rows.forEach { schedule ->
@@ -518,7 +518,7 @@ fun NewScheduleScreen(
                         )
                     } else {
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xxl)),
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xl)),
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
                         ) {
                             rows.forEach { row ->
@@ -811,13 +811,13 @@ private fun FormRow(@DrawableRes icon: Int, label: String, trailing: @Composable
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s10),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIcon(icon, 22.dp, tint = ZunoColors.IconSecondary)
-        Text(label, style = ZunoType.BodyLarge, color = ZunoColors.TextPrimary, modifier = Modifier.weight(1f))
+        ZunoIcon(icon, 18.dp, tint = ZunoColors.IconSecondary)
+        Text(label, style = ZunoType.BodyMedium, color = ZunoColors.TextPrimary, modifier = Modifier.weight(1f))
         trailing()
     }
 }

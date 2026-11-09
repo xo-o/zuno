@@ -183,18 +183,18 @@ fun ZunoMenuItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(ZunoRadius.md))
+            .height(42.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(if (active) ZunoColors.SurfaceDefault else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIcon(icon, 22.dp)
+        ZunoIcon(icon, 18.dp, tint = if (active) ZunoColors.IconPrimary else ZunoColors.IconSecondary)
         Text(
             label,
-            style = ZunoType.BodyLarge,
+            style = if (active) ZunoType.BodyMediumStrong else ZunoType.BodyMedium,
             color = if (active) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
         )
     }

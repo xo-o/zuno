@@ -99,7 +99,7 @@ import kotlin.math.roundToInt
 // ── Shared Settings Components (Form Row, Card Group, Switch) ────────────────
 
 /**
- * Rounded 24dp card group (`bg-surface-default`, `border-subtle`) with an optional section label above it.
+ * Rounded 20dp card group (`bg-surface-default`, `border-subtle`) with an optional section label above it.
  */
 @Composable
 fun ZunoSettingsGroup(
@@ -119,7 +119,7 @@ fun ZunoSettingsGroup(
                 modifier = Modifier.padding(start = ZunoSpace.s4, top = ZunoSpace.s8),
             )
         }
-        val shape = RoundedCornerShape(ZunoRadius.xxl)
+        val shape = RoundedCornerShape(ZunoRadius.xl)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -132,8 +132,8 @@ fun ZunoSettingsGroup(
 }
 
 /**
- * Figma `Form Row` (node 2120:1859): 64dp min height, 16dp horizontal / 12dp vertical padding,
- * optional 22dp leading icon, primary title + optional 12sp subtitle, and trailing value/chevron/switch/check.
+ * Figma `Form Row` (node 2120:1859): 52dp min height, 16dp horizontal / 10dp vertical padding,
+ * optional 18dp leading icon, Body/Medium title + optional 12sp subtitle, and trailing value/chevron/switch/check.
  */
 @Composable
 fun ZunoSettingsRow(
@@ -164,7 +164,7 @@ fun ZunoSettingsRow(
         }
         val rowModifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp)
+            .heightIn(min = 52.dp)
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -176,17 +176,17 @@ fun ZunoSettingsRow(
                     Modifier
                 }
             )
-            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12)
+            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s10)
 
         Row(
             modifier = rowModifier,
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
                 leading()
             } else if (icon != null) {
-                ZunoIcon(icon = icon, size = 22.dp)
+                ZunoIcon(icon = icon, size = 18.dp)
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -194,7 +194,7 @@ fun ZunoSettingsRow(
             ) {
                 Text(
                     text = title,
-                    style = ZunoType.BodyLarge,
+                    style = ZunoType.BodyMedium,
                     color = if (muted) ZunoColors.TextTertiary else ZunoColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -210,7 +210,7 @@ fun ZunoSettingsRow(
             if (value != null) {
                 Text(
                     text = value,
-                    style = ZunoType.BodyMedium,
+                    style = ZunoType.BodySmall,
                     color = ZunoColors.TextSecondary,
                     maxLines = 1,
                 )
@@ -220,9 +220,9 @@ fun ZunoSettingsRow(
             } else if (checked != null) {
                 ZunoSwitch(checked = checked, onCheckedChange = { if (enabled) onClick?.invoke() })
             } else if (selected) {
-                ZunoIcon(icon = R.drawable.zuno_ic_check_20, size = 20.dp)
+                ZunoIcon(icon = R.drawable.zuno_ic_check_20, size = 18.dp)
             } else if (showChevron) {
-                ZunoIcon(icon = R.drawable.zuno_ic_chevron_right_muted, size = 20.dp)
+                ZunoIcon(icon = R.drawable.zuno_ic_chevron_right_muted, size = 18.dp)
             }
         }
     }
@@ -1134,7 +1134,7 @@ fun ZunoSearchField(query: String, onQueryChange: (String) -> Unit, placeholder:
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        textStyle = ZunoType.BodyLarge.copy(color = ZunoColors.TextPrimary),
+        textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
         cursorBrush = SolidColor(ZunoColors.TextPrimary),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         interactionSource = interactionSource,
@@ -1151,9 +1151,9 @@ fun ZunoSearchField(query: String, onQueryChange: (String) -> Unit, placeholder:
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ZunoIcon(R.drawable.zuno_ic_t_search, 20.dp, tint = ZunoColors.IconSecondary)
+                ZunoIcon(R.drawable.zuno_ic_t_search, 18.dp, tint = ZunoColors.IconSecondary)
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) Text(placeholder, style = ZunoType.BodyLarge, color = ZunoColors.TextPlaceholder, maxLines = 1)
+                    if (query.isEmpty()) Text(placeholder, style = ZunoType.BodyMedium, color = ZunoColors.TextPlaceholder, maxLines = 1)
                     inner()
                 }
                 if (query.isNotEmpty()) {

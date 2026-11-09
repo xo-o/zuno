@@ -165,6 +165,7 @@ private val ZunoColorScheme = darkColorScheme(
     onSurface = ZunoColors.TextPrimary,
     surfaceVariant = ZunoColors.SurfaceDefault,
     onSurfaceVariant = ZunoColors.TextSecondary,
+    surfaceTint = Color.Transparent,
     outline = ZunoColors.BorderDefault,
     scrim = ZunoColors.BgScrim,
 )

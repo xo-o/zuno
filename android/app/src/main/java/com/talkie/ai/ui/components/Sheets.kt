@@ -94,7 +94,7 @@ fun ZunoSheet(
     }
 }
 
-/** Sheet action — 20dp icon and Body/Large label (Start now, Edit time & repeat, Delete schedule…). */
+/** Sheet action — 18dp icon and Body/Medium label (Start now, Edit time & repeat, Delete schedule…). */
 @Composable
 fun ZunoSheetAction(
     @DrawableRes icon: Int,
@@ -107,21 +107,21 @@ fun ZunoSheetAction(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(ZunoRadius.md))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIcon(icon, 22.dp, tint = if (enabled) ZunoColors.IconPrimary else ZunoColors.IconTertiary)
+        ZunoIcon(icon, 18.dp, tint = if (enabled) ZunoColors.IconPrimary else ZunoColors.IconTertiary)
         Text(
             label,
-            style = ZunoType.BodyLarge,
+            style = ZunoType.BodyMedium,
             color = if (enabled) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
             modifier = Modifier.weight(1f),
         )
-        if (chevron) ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 20.dp, tint = ZunoColors.IconTertiary)
+        if (chevron) ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 18.dp, tint = ZunoColors.IconTertiary)
     }
 }
 
@@ -139,7 +139,7 @@ fun ZunoChoiceGroup(modifier: Modifier = Modifier, content: @Composable ColumnSc
     )
 }
 
-/** Choice Row — 40dp icon badge, title + description, check when [selected]. */
+/** Choice Row — 36dp icon badge, title + description, check when [selected]. */
 @Composable
 fun ZunoChoiceRow(
     @DrawableRes icon: Int,
@@ -155,42 +155,42 @@ fun ZunoChoiceRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(60.dp)
                 .clickable(role = Role.RadioButton, onClick = onClick)
-                .padding(ZunoSpace.s16),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+                .padding(horizontal = ZunoSpace.s16),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(ZunoColors.SurfaceDefault),
+                Modifier.size(36.dp).clip(CircleShape).background(ZunoColors.SurfaceDefault),
                 contentAlignment = Alignment.Center,
             ) {
-                ZunoIcon(icon, 20.dp, tint = ZunoColors.IconSecondary)
+                ZunoIcon(icon, 18.dp, tint = ZunoColors.IconSecondary)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-                Text(title, style = ZunoType.BodyLarge, color = ZunoColors.TextPrimary)
+                Text(title, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
                 Text(description, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
             }
-            if (selected) ZunoIcon(R.drawable.zuno_ic_t_check, 20.dp, tint = ZunoColors.IconPrimary)
+            if (selected) ZunoIcon(R.drawable.zuno_ic_t_check, 18.dp, tint = ZunoColors.IconPrimary)
         }
     }
 }
 
-/** Radio Row — 22dp radio and Body/Large label (Report reasons). */
+/** Radio Row — 20dp radio and Body/Medium label (Report reasons). */
 @Composable
 fun ZunoRadioRow(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(44.dp)
             .clip(RoundedCornerShape(ZunoRadius.md))
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = ZunoSpace.s4),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoRadio(selected)
-        Text(label, style = ZunoType.BodyLarge, color = ZunoColors.TextPrimary)
+        ZunoRadio(selected, size = 20.dp)
+        Text(label, style = ZunoType.BodyMedium, color = ZunoColors.TextPrimary)
     }
 }
 
