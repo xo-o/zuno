@@ -128,8 +128,29 @@ def create_tts(provider: str, voice_id: str, language: str = "en"):
         )
 
 
-def create_stt(language: str = "en"):
-    if language == "en":
+# Deepgram Nova-3 language codes for accents that have their own model variant.
+STT_ACCENT_CODES = {
+    ("en", "uk"): "en-GB",
+    ("en", "australia"): "en-AU",
+    ("es", "latam"): "es-419",
+    ("fr", "canada"): "fr-CA",
+    ("de", "switzerland"): "de-CH",
+    ("nl", "belgium"): "nl-BE",
+    ("pt", "brazil"): "pt-BR",
+    ("pt", "portugal"): "pt-PT",
+    ("zh", "taiwan"): "zh-TW",
+}
+
+# Preferences · Tutor voice → Breeze voice (used when the tutor speaks with Breeze, the default).
+BREEZE_TUTOR_VOICES = {
+    "warm": "voc_9f5gtax4x5ac",  # Miles
+    "calm": "voc_bd9xj6jwrsr5",  # Asher
+    "energetic": "voc_8a4jbpgm3a3e",  # Chloe
+}
+
+
+def create_stt(language: str = "en", accent: str | None = None):
+    if language == "en" and accent in (None, "us"):
         return dg.STTv2(
             model="flux-general-en",
             eager_eot_threshold=0.7,
@@ -141,7 +162,7 @@ def create_stt(language: str = "en"):
         # Native language recognition with fast 25ms endpointing
         return dg.STT(
             model="nova-3",
-            language=language,
+            language=STT_ACCENT_CODES.get((language, accent or ""), language),
             endpointing_ms=25,
             interim_results=True,
             api_key=os.environ.get("DEEPGRAM_API_KEY"),
@@ -214,6 +235,8 @@ async def entrypoint(ctx: JobContext) -> None:
     current_provider = "breeze"
     current_voice = "voc_9f5gtax4x5ac"
     current_language = "en"
+    current_accent = None
+    hands_free = True
     tutor_instructions = None
     resume = False
     opening = None
@@ -228,6 +251,11 @@ async def entrypoint(ctx: JobContext) -> None:
                 current_voice = meta["voice"]
             if "language" in meta:
                 current_language = meta["language"]
+            current_accent = meta.get("accent") or None
+            hands_free = bool(meta.get("handsFree", True))
+            tutor_voice = meta.get("tutorVoice")
+            if current_provider in ("breeze", "breezeblue") and tutor_voice in BREEZE_TUTOR_VOICES:
+                current_voice = BREEZE_TUTOR_VOICES[tutor_voice]
             tutor_instructions = meta.get("instructions") or None
             resume = bool(meta.get("resume", False))
             opening = meta.get("opening") or None
@@ -239,7 +267,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     # Fast VAD for instant barge-in cut-off
     vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
-    stt = create_stt(current_language)
+    stt = create_stt(current_language, current_accent)
     llm = gg.LLM(
         model="gemini-2.5-flash",
         temperature=0.4,
@@ -256,11 +284,13 @@ async def entrypoint(ctx: JobContext) -> None:
         opening=opening,
     )
 
+    # Hands-free off gives the learner more thinking time before Zuno takes its turn.
     session = AgentSession(
         stt=stt,
         vad=vad,
         llm=llm,
         tts=tts,
+        min_endpointing_delay=0.5 if hands_free else 1.6,
     )
 
     last_user_speech_end = 0.0
@@ -349,7 +379,7 @@ async def entrypoint(ctx: JobContext) -> None:
                 current_language = lang
 
                 new_tts = create_tts(current_provider, current_voice, current_language)
-                new_stt = create_stt(current_language)
+                new_stt = create_stt(current_language, current_accent if lang == current_language else None)
 
                 # 1. Update session default references
                 session._tts = new_tts

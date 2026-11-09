@@ -63,6 +63,15 @@ export function serializeRoleplay(row: typeof roleplay.$inferSelect) {
   };
 }
 
+export function publicBaseUrl() {
+  return (process.env.PUBLIC_BASE_URL || process.env.BETTER_AUTH_URL || "http://localhost:3000").replace(/\/+$/, "");
+}
+
+/** Public read-only link for a shared chat, or null while it's private. */
+export function shareUrlOf(row: typeof conversation.$inferSelect) {
+  return row.visibility === "public" && row.shareToken ? `${publicBaseUrl()}/s/${row.shareToken}` : null;
+}
+
 export function serializeConversation(row: typeof conversation.$inferSelect) {
   return {
     id: row.id,
@@ -72,6 +81,11 @@ export function serializeConversation(row: typeof conversation.$inferSelect) {
     roleplayId: row.roleplayId,
     topicId: row.topicId,
     lessonId: row.lessonId,
+    pinned: row.pinnedAt !== null,
+    pinnedAt: row.pinnedAt?.toISOString() ?? null,
+    visibility: row.visibility,
+    shareUrl: shareUrlOf(row),
+    levelCheck: row.levelCheck,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

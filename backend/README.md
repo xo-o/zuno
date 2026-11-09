@@ -41,17 +41,28 @@ docker run -p 3000:3000 --env-file .env zuno-backend
 | Redeem Magic Link | `GET /api/auth/magic-link/verify?token=…` | Issues session token in `set-auth-token` header |
 | Google Sign-In | `POST /api/auth/sign-in/social` | `{ "provider": "google", "idToken": { "token": "..." } }` |
 | Current Session | `GET /api/auth/get-session` | With `Authorization: Bearer <token>` |
-| User Profile | `GET /api/me` | `{ user, profile: { targetLanguage, nativeLanguage, level } }` |
-| Update Profile | `PATCH /api/me` | `{ name?, targetLanguage?: "es" \| "en", level?: "A1"…"C2" }` |
-| Recent Sessions | `GET /api/conversations/recent` | Drawer list: Free Talk threads, topics and roleplays by latest activity |
+| Languages | `GET /api/languages` | Learning languages (code, English/native name, accents, RTL). Public |
+| User Profile | `GET /api/me` | `{ user, profile, languages, providers }` — profile has language, level, accent, `levelChecked`, preferences and plan; `languages` is per-language progress |
+| Update Profile | `PATCH /api/me` | `{ name?, targetLanguage?, nativeLanguage?, level?, accent?, tutorVoice?, teachingStyle?, strictMode?, handsFree?, suggestReplies?, showTranslations?, teachInTarget?, dailyGoalMin?, focus? }`. Switching language saves the old language's level/accent and restores the new one's |
+| Notifications | `GET` · `PATCH /api/me/notifications` | Daily reminder (+ local `reminderTime`, `timezone`), scheduled sessions, milestones, new content, weekly summary and news emails |
+| Avatar | `POST /api/me/avatar` → PUT to R2 → `POST /api/me/avatar/complete` · `DELETE /api/me/avatar` | Change photo (JPEG/PNG/WebP ≤ 5 MB) |
+| Delete Account | `DELETE /api/me` | Deletes R2 files and the user (all app data cascades), emails a confirmation |
+| Devices | `POST /api/devices` · `DELETE /api/devices/:pushToken` | Register / remove this install's FCM token (`{ pushToken, platform, timezone, appLanguage }`) |
+| Recent Sessions | `GET /api/conversations/recent` | Drawer list for the current language: pinned rows first, then Free Talk threads, topics and roleplays by latest activity |
 | Topics | `GET /api/topics` · `POST /api/topics` | List · create from `{ prompt, attachmentIds?, parts? }` (Gemini builds 5 lessons, optionally from learning material) |
 | Topic Material | `POST /api/topics/analyze` | `{ prompt?, attachmentIds }` → `{ parts: [{ label, suggested }] }` sub-topics found in the material |
 | Topic | `GET` · `DELETE /api/topics/:id` · `POST /api/topics/:id/reset` | Detail with lesson states · delete · reset progress |
 | Lesson | `POST /api/topics/:id/lessons/:lessonId/start` · `…/complete` | Open (or resume) the lesson conversation · mark done |
 | Roleplays | `GET /api/roleplays` · `POST /api/roleplays` | List · create from `{ scenario, userRole?, aiRole? }` and open the first run |
 | Roleplay | `POST /api/roleplays/:id/open` · `…/restart` · `DELETE /api/roleplays/:id` | Resume latest run · new run · delete |
-| Free Talk | `POST /api/conversations` | New Free Talk thread (titled after the first reply) |
-| Conversation | `GET` · `DELETE /api/conversations/:id` | Thread with messages · delete |
+| Free Talk | `POST /api/conversations` | New Free Talk thread (titled after the first reply). `{ levelCheck: true }` starts "Find my level" |
+| Conversation | `GET` · `PATCH` · `DELETE /api/conversations/:id` | Thread with messages · rename / pin `{ title?, pinned? }` · delete |
+| Share | `PUT /api/conversations/:id/share` | `{ visibility: "private" \| "public" }` → `{ visibility, shareUrl }`; public chats render at `GET /s/:token` |
+| Report | `POST /api/conversations/:id/report` | `{ reason, details? }` (10/hour); emailed to `REPORTS_EMAIL` when set |
+| Remind Me | `POST /api/conversations/:id/reminders` · `GET /api/reminders?status=pending` · `DELETE /api/reminders/:id` | "Remind me to continue" push at `{ remindAt }` · list · undo |
+| Draft | `GET` · `PUT /api/conversations/:id/draft` | Unsent composer text and attachment ids, synced across devices |
+| Schedules | `GET` · `POST /api/schedules` · `PATCH` · `DELETE /api/schedules/:id` | Scheduled practice (topic lesson or roleplay; once/daily/weekdays/weekly/monthly, time zone aware) |
+| Schedule Actions | `GET /api/schedules/targets` · `POST /api/schedules/:id/skip-next` · `…/snooze` · `…/start` | Pickable topics/roleplays · skip the next occurrence · remind again later · open the session |
 | Send Message | `POST /api/conversations/:id/messages` | `{ text, viaVoice?, attachmentIds? }` → `{ userMessage (with feedback), reply, lessonCompleted }` |
 | Attachments | `POST /api/attachments` · `…/:id/complete` · `GET` · `DELETE /api/attachments/:id` | Presigned R2 upload → complete → poll until `ready` |
 | Shared Link | `POST /api/attachments/link` | `{ url }` article or YouTube link; read in the background like a file (poll `GET` until `ready`) |
@@ -68,8 +79,14 @@ In addition to the auth, database and LiveKit variables in `.env.example`:
 
 - `GEMINI_API_KEY` (required): Google AI Studio key used for all tutor features.
 - `GEMINI_MODEL` (optional, default `gemini-3.8-flash`).
+- `PUBLIC_BASE_URL` (required in production): public origin used in share and unsubscribe links, e.g. `https://api.usezuno.rest`.
+- `FIREBASE_SERVICE_ACCOUNT` (optional): Firebase Admin service account JSON (raw or base64). Without it push notifications are skipped.
+- `REPORTS_EMAIL` (optional): receives an email for every chat report.
+- `DISABLE_JOBS=1` (local only): don't run the background job queue (reminders, schedules, daily reminder, weekly summary).
 
-Schema changes: run `npm run db:push` against the target database (tables: `user_profile`, `topic`, `topic_lesson`, `roleplay`, `conversation`, `message`).
+Background jobs live in the `job` table and are polled every 30 s with `FOR UPDATE SKIP LOCKED`, so several instances can share the queue. Run `npm test` for the schedule recurrence tests.
+
+Schema changes: run `npm run db:push` against the target database.
 
 For local testing without email, `npx tsx scripts/dev-session.ts create` prints a bearer token for a throwaway user (`delete` removes it).
 | Asset Links | `GET /.well-known/assetlinks.json` | Android App Links verification |

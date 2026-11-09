@@ -11,6 +11,8 @@
 !*credentials*.example.json
 *service_account*.json
 designcombo-*.json
+*firebase-adminsdk*.json
+google-services.json
 *.pem
 *.key
 *.p12

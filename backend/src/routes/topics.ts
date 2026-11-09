@@ -15,6 +15,7 @@ import {
 } from "../lib/attachments.js";
 import { conversationIdsWhere, createConversation, listMessages } from "../lib/conversations.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
+import { checkTopicCompleted } from "./conversations.js";
 import { getProfile } from "../lib/profile.js";
 import {
   serializeConversation,
@@ -52,8 +53,10 @@ const aiLimit = rateLimit({ windowMs: 60_000, max: 10 });
 export const topicRoutes = new Hono<AuthEnv>()
   .use(requireAuth)
   .get("/", async (c) => {
+    const userId = c.get("user").id;
+    const { targetLanguage } = await getProfile(userId);
     const rows = await db.query.topic.findMany({
-      where: eq(topic.userId, c.get("user").id),
+      where: and(eq(topic.userId, userId), eq(topic.language, targetLanguage)),
       with: { lessons: true },
       orderBy: [desc(topic.updatedAt)],
     });
@@ -161,6 +164,7 @@ export const topicRoutes = new Hono<AuthEnv>()
       .set({ completedAt: new Date() })
       .where(and(eq(topicLesson.id, lessonId), eq(topicLesson.topicId, row.id), isNull(topicLesson.completedAt)));
     await db.update(topic).set({ updatedAt: new Date() }).where(eq(topic.id, row.id));
+    await checkTopicCompleted(row.id);
     const fresh = await loadTopic(row.userId, row.id);
     return c.json({ topic: serializeTopicDetail(fresh, fresh.lessons) });
   });

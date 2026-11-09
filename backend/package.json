@@ -10,7 +10,8 @@
     "auth:generate": "npx @better-auth/cli generate --config src/lib/auth.ts --output src/db/auth-schema.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1164.0",
@@ -19,6 +20,7 @@
     "better-auth": "^1.7.18",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.4",
+    "firebase-admin": "^13.10.0",
     "hono": "^4.7.4",
     "livekit-server-sdk": "^2.19.2",
     "mammoth": "^1.13.0",

@@ -10,7 +10,7 @@ import {
   type AttachmentRow,
 } from "./attachments.js";
 import type { GeminiTurn } from "./gemini.js";
-import type { LearnerProfile } from "./profile.js";
+import { updateProfile, type LearnerProfile } from "./profile.js";
 import { generateOpening, generateReply, LESSONS_PER_TOPIC, type ConversationContext } from "./tutor.js";
 
 export type ConversationRow = typeof conversation.$inferSelect;
@@ -63,7 +63,7 @@ export async function contextFor(row: ConversationRow): Promise<ConversationCont
       };
     }
   }
-  return { kind: "freetalk" };
+  return row.levelCheck ? { kind: "levelcheck" } : { kind: "freetalk" };
 }
 
 /** Bumps the conversation and its parent topic/roleplay so they float to the top of "Recent sessions". */
@@ -87,7 +87,7 @@ export async function createConversation(
       conversationId: row.id,
       role: "assistant",
       text: opening.reply,
-      translation: opening.translation,
+      translation: opening.translation.trim() || null,
       glossary: opening.glossary,
     });
   }
@@ -131,7 +131,7 @@ export async function sendUserMessage(
   const history = await listMessages(row.id);
   const turns = await buildTurns(history.slice(-HISTORY_LIMIT), text, attachments);
 
-  const needsTitle = row.kind === "freetalk" && row.title === DEFAULT_FREE_TALK_TITLE;
+  const needsTitle = row.kind === "freetalk" && !row.titleEdited && row.title === DEFAULT_FREE_TALK_TITLE;
   const reply = await generateReply({
     context: await contextFor(row),
     profile,
@@ -158,7 +158,7 @@ export async function sendUserMessage(
           conversationId: row.id,
           role: "assistant",
           text: reply.reply,
-          translation: reply.translation,
+          translation: reply.translation.trim() || null,
           glossary: reply.glossary,
           contextNote: attachments.length ? reply.contextNote.trim() || null : null,
           createdAt: sql`now() + interval '1 millisecond'`,
@@ -186,7 +186,12 @@ export async function sendUserMessage(
   let updated = row;
   const title = reply.title.trim();
   if (needsTitle && title) {
-    [updated] = await db.update(conversation).set({ title }).where(eq(conversation.id, row.id)).returning();
+    const [titled] = await db
+      .update(conversation)
+      .set({ title })
+      .where(and(eq(conversation.id, row.id), eq(conversation.titleEdited, false)))
+      .returning();
+    updated = titled ?? row;
   }
 
   let lessonCompleted = false;
@@ -199,6 +204,13 @@ export async function sendUserMessage(
     lessonCompleted = done.length > 0;
   }
 
+  // A level check ends once the tutor has assessed the learner: that becomes their level for this language.
+  let levelAssessed: string | null = null;
+  if (row.levelCheck && reply.assessedLevel && row.language === profile.targetLanguage) {
+    await updateProfile(row.userId, { level: reply.assessedLevel, markLevelChecked: true });
+    levelAssessed = reply.assessedLevel;
+  }
+
   await touch(updated);
   const ordered = attachments.map((a) => linked.find((l) => l.id === a.id) ?? a);
   return {
@@ -206,6 +218,7 @@ export async function sendUserMessage(
     assistantMessage: { ...assistantMessage, attachments: [] as AttachmentRow[] },
     conversation: updated,
     lessonCompleted,
+    levelAssessed,
   };
 }
 

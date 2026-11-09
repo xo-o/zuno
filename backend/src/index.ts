@@ -8,15 +8,26 @@ import { HTTPException } from "hono/http-exception";
 import { AccessToken } from "livekit-server-sdk";
 import { describeAttachment, startAttachmentJobs } from "./lib/attachments.js";
 import { auth } from "./lib/auth.js";
+import { eq } from "drizzle-orm";
+import { conversation } from "./db/app-schema.js";
+import { db } from "./db/index.js";
 import { contextFor, findConversation, listMessages } from "./lib/conversations.js";
 import { GeminiError } from "./lib/gemini.js";
+import { startJobRunner } from "./lib/jobs.js";
+import { languageList } from "./lib/languages.js";
+import { applyUnsubscribe, verifyUnsubscribe } from "./lib/notifications.js";
+import "./lib/schedule-service.js";
+import { publicBaseUrl } from "./lib/serializers.js";
+import { renderMessagePage, renderNotFoundPage, renderSharePage } from "./lib/share-page.js";
 import { completeFlow, consumeFlow, getFlow, isFlowVerified } from "./lib/magic-link-flows.js";
 import { getProfile } from "./lib/profile.js";
 import { voiceInstructions } from "./lib/tutor.js";
 import { attachmentRoutes } from "./routes/attachments.js";
-import { conversationRoutes, messageRoutes, tutorRoutes } from "./routes/conversations.js";
+import { conversationRoutes, messageRoutes, reminderRoutes, tutorRoutes } from "./routes/conversations.js";
+import { deviceRoutes } from "./routes/devices.js";
 import { profileRoutes } from "./routes/profile.js";
 import { roleplayRoutes } from "./routes/roleplays.js";
+import { scheduleRoutes } from "./routes/schedules.js";
 import { topicRoutes } from "./routes/topics.js";
 
 const app = new Hono();
@@ -84,6 +95,40 @@ app.route("/api/conversations", conversationRoutes);
 app.route("/api/messages", messageRoutes);
 app.route("/api/tutor", tutorRoutes);
 app.route("/api/attachments", attachmentRoutes);
+app.route("/api/devices", deviceRoutes);
+app.route("/api/reminders", reminderRoutes);
+app.route("/api/schedules", scheduleRoutes);
+
+/** Learning languages (Settings · Learning language). Public so the app can cache it before sign-in. */
+app.get("/api/languages", (c) => {
+  c.header("Cache-Control", "public, max-age=3600");
+  return c.json({ languages: languageList() });
+});
+
+/** One-click unsubscribe from summary / news / schedule emails. */
+app.on(["GET", "POST"], "/api/email/unsubscribe", async (c) => {
+  const target = verifyUnsubscribe(c.req.query("token") ?? "");
+  if (!target) return c.html(renderMessagePage("Link not valid", "This unsubscribe link is invalid or incomplete."), 400);
+  await applyUnsubscribe(target.userId, target.kind);
+  return c.html(renderMessagePage("You're unsubscribed", "You won't get these emails anymore. You can turn them back on in Zuno's notification settings."));
+});
+
+/** Read-only page for a chat shared with "Public access". */
+app.get("/s/:token", async (c) => {
+  const row = await db.query.conversation.findFirst({ where: eq(conversation.shareToken, c.req.param("token")) });
+  if (!row || row.visibility !== "public") return c.html(renderNotFoundPage(), 404);
+  const messages = await listMessages(row.id);
+  c.header("Cache-Control", "no-store");
+  return c.html(
+    renderSharePage({
+      title: row.title,
+      kind: row.kind,
+      language: row.language,
+      messages,
+      url: `${publicBaseUrl()}/s/${row.shareToken}`,
+    }),
+  );
+});
 
 // 3. LiveKit token generation
 type TokenRequest = {
@@ -138,6 +183,10 @@ app.post("/api/livekit/token", async (c) => {
       provider: body.provider ?? "breeze",
       voice: body.voice ?? "voc_9f5gtax4x5ac",
       language: body.language ?? profile.targetLanguage,
+      accent: profile.accent,
+      // Preferences · Tutor voice ("warm" / "calm" / "energetic") and Hands-free (auto turn-taking).
+      tutorVoice: profile.tutorVoice,
+      handsFree: profile.handsFree,
       instructions,
       // The agent stays quiet until the learner speaks when the conversation is already under way.
       resume: history.length > 0,
@@ -380,3 +429,5 @@ serve({
   port,
 });
 startAttachmentJobs();
+// DISABLE_JOBS=1 keeps a local dev server from claiming production jobs.
+if (process.env.DISABLE_JOBS !== "1") startJobRunner();

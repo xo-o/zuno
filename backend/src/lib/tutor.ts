@@ -1,17 +1,61 @@
 import { z } from "zod";
 import { generateJson, type GeminiFile, type GeminiTurn } from "./gemini.js";
-import { LANGUAGE_NAMES } from "./languages.js";
+import { accentLabel, languageInfo, languageName } from "./languages.js";
 import type { LearnerProfile } from "./profile.js";
 
 export const LESSONS_PER_TOPIC = 5;
 
 function names(profile: LearnerProfile) {
-  return { target: LANGUAGE_NAMES[profile.targetLanguage], native: LANGUAGE_NAMES[profile.nativeLanguage] };
+  return { target: languageName(profile.targetLanguage), native: languageName(profile.nativeLanguage) };
 }
+
+/** "Latin America Spanish", or just "Japanese" for single-variety languages. */
+function variety(profile: LearnerProfile) {
+  const info = languageInfo(profile.targetLanguage);
+  const target = languageName(profile.targetLanguage);
+  return info.accents.length > 1 ? `${accentLabel(profile.targetLanguage, profile.accent)} ${target}` : target;
+}
+
+const FOCUS_LINES: Record<LearnerProfile["focus"], string> = {
+  conversation: "Their goal is everyday conversation.",
+  travel: "Their goal is travel: lean examples toward trips, transport, hotels, food and getting around.",
+  work: "Their goal is work: lean examples toward meetings, email, colleagues and professional situations.",
+  exams: "They are preparing for an exam: favour accurate grammar, varied vocabulary and exam-style tasks.",
+};
 
 function learnerLine(profile: LearnerProfile) {
   const { target, native } = names(profile);
-  return `The learner is a native ${native} speaker learning ${target} at CEFR level ${profile.level}.`;
+  return [
+    `The learner is a native ${native} speaker learning ${target} at CEFR level ${profile.level}.`,
+    `Use ${variety(profile)} vocabulary, spelling and expressions.`,
+    FOCUS_LINES[profile.focus],
+  ].join(" ");
+}
+
+/** Romanisation for beginners in non-Latin scripts (e.g. "こんにちは (konnichiwa)"). */
+function scriptLine(profile: LearnerProfile) {
+  const romanize = languageInfo(profile.targetLanguage).romanize && (profile.level === "A1" || profile.level === "A2");
+  return romanize
+    ? `The learner is a beginner in the ${languageName(profile.targetLanguage)} script: after each ${languageName(profile.targetLanguage)} sentence add its romanisation in parentheses.`
+    : null;
+}
+
+/** Explanations (feedback, glossary, grammar) go in the target language when "Teach in …" is on. */
+function explanationLanguage(profile: LearnerProfile) {
+  const { target, native } = names(profile);
+  return profile.teachInTarget ? target : native;
+}
+
+function styleLines(profile: LearnerProfile) {
+  const lines: Record<LearnerProfile["teachingStyle"], string> = {
+    balanced: "Correct important mistakes and keep the conversation flowing.",
+    gentle: "Be encouraging; point out only the most important mistake and celebrate progress.",
+    immersive: "Keep the learner immersed: avoid switching languages and model the right phrasing naturally.",
+  };
+  return [
+    lines[profile.teachingStyle],
+    ...(profile.strictMode ? ["Strict mode is on: point out every mistake, including small ones, bluntly and precisely."] : []),
+  ];
 }
 
 // ── Topics ──────────────────────────────────────────────────────────────────
@@ -131,6 +175,7 @@ export function generateRoleplay(
 
 export type ConversationContext =
   | { kind: "freetalk" }
+  | { kind: "levelcheck" }
   | { kind: "roleplay"; scenario: string; userRole: string; aiRole: string; setting: string }
   | {
       kind: "lesson";
@@ -148,6 +193,12 @@ function contextInstructions(context: ConversationContext, profile: LearnerProfi
   switch (context.kind) {
     case "freetalk":
       return `This is Free Talk: chat naturally about whatever the learner brings up, asking one follow-up question to keep them talking in ${target}.`;
+    case "levelcheck":
+      return [
+        `This is a 5-minute level check in ${target}. Ask one short question at a time, starting simple and getting harder`,
+        "(introductions → daily routine → past events → opinions → hypotheticals), adapting to how the learner copes.",
+        "Ignore the learner's stated level while assessing; speak simply at first.",
+      ].join(" ");
     case "roleplay":
       return [
         `This is a roleplay. Stay fully in character as "${context.aiRole}". The learner plays "${context.userRole}".`,
@@ -174,16 +225,20 @@ function tutorSystem(context: ConversationContext, profile: LearnerProfile) {
   return [
     `You are Zuno, a warm, patient ${target} tutor.`,
     learnerLine(profile),
+    ...styleLines(profile),
     contextInstructions(context, profile),
     `Always reply in ${target}, with 1–3 short sentences suited to level ${profile.level}.`,
-    `"translation": the reply translated into ${native}.`,
-    `"glossary": 0–2 entries like "para llevar — to go" for words in your reply the learner may not know (${target} — ${native}). Empty if none.`,
+    ...[scriptLine(profile)].filter((line) => line !== null),
+    profile.showTranslations
+      ? `"translation": the reply translated into ${native}.`
+      : `"translation": empty string (the learner has translations turned off).`,
+    `"glossary": 0–2 entries like "para llevar — to go" for words in your reply the learner may not know (${target} — ${explanationLanguage(profile)}). Empty if none.`,
   ].join("\n");
 }
 
 const openingSchema = z.object({
   reply: z.string().min(1).max(600),
-  translation: z.string().min(1).max(600),
+  translation: z.string().max(600),
   glossary: z.array(z.string().max(80)).max(2),
 });
 
@@ -202,11 +257,12 @@ export function generateOpening(context: ConversationContext, profile: LearnerPr
 const replySchema = z.object({
   feedback: z.string().min(1).max(120),
   reply: z.string().min(1).max(600),
-  translation: z.string().min(1).max(600),
+  translation: z.string().max(600),
   glossary: z.array(z.string().max(80)).max(2),
   objectiveMet: z.boolean(),
   title: z.string().max(40),
   contextNote: z.string().max(60),
+  assessedLevel: z.enum(["", "A1", "A2", "B1", "B2", "C1", "C2"]),
 });
 
 export type TutorReply = z.infer<typeof replySchema>;
@@ -220,10 +276,11 @@ export function generateReply(options: {
   withAttachments?: boolean;
 }) {
   const { target, native } = names(options.profile);
+  const explain = explanationLanguage(options.profile);
   return generateJson({
     system: [
       tutorSystem(options.context, options.profile),
-      `"feedback": one short line (max ~70 characters, in ${native}, quotes in ${target}) about the learner's LAST message.`,
+      `"feedback": one short line (max ~70 characters, in ${explain}, quotes in ${target}) about the learner's LAST message.`,
       `  If it was correct and natural: e.g. "Natural ${target} · Native tip: “¿Me pones un café…?”".`,
       `  If it had a mistake: name the fix, e.g. "Use “quiero” instead of “quero”". Never invent mistakes.`,
       `"objectiveMet": ${
@@ -235,6 +292,11 @@ export function generateReply(options: {
         options.needsTitle
           ? `a 2–4 word ${target} title for this conversation (e.g. "Pedir un café").`
           : "empty string."
+      }`,
+      `"assessedLevel": ${
+        options.context.kind === "levelcheck"
+          ? "empty string until you have heard enough (usually after 5–7 learner messages); then the learner's CEFR level, and wrap up warmly in the reply by telling them their level."
+          : "always empty string."
       }`,
       ATTACHMENT_RULES,
       `"contextNote": ${
@@ -312,7 +374,8 @@ export function digestAttachment(
 const hintSchema = z.object({ hint: z.string().max(80).nullable() });
 
 export async function generateTypingHint(draft: string, profile: LearnerProfile): Promise<string | null> {
-  const { target, native } = names(profile);
+  const { target } = names(profile);
+  const native = explanationLanguage(profile);
   const result = await generateJson({
     system: [
       `You help a learner while they type a message in ${target}.`,
@@ -331,7 +394,8 @@ export async function generateTypingHint(draft: string, profile: LearnerProfile)
 const explanationSchema = z.object({ explanation: z.string().min(1).max(1200) });
 
 export async function explainGrammar(text: string, profile: LearnerProfile): Promise<string> {
-  const { target, native } = names(profile);
+  const { target } = names(profile);
+  const native = explanationLanguage(profile);
   const result = await generateJson({
     system: [
       `You explain ${target} grammar to a learner.`,
@@ -352,9 +416,12 @@ export function voiceInstructions(context: ConversationContext, profile: Learner
   return [
     `You are Zuno, a warm ${target} tutor speaking live with the learner over a voice call.`,
     learnerLine(profile),
+    ...styleLines(profile),
     contextInstructions(context, profile),
-    `Speak only ${target}, in 1–2 short natural sentences suited to level ${profile.level}.`,
-    "If the learner makes a mistake, briefly model the correct phrasing, then keep the conversation going.",
+    `Speak only ${target} with a ${variety(profile)} accent and vocabulary, in 1–2 short natural sentences suited to level ${profile.level}.`,
+    profile.strictMode
+      ? "When the learner makes a mistake, say the correct phrasing explicitly, then keep the conversation going."
+      : "If the learner makes a mistake, briefly model the correct phrasing, then keep the conversation going.",
     "Never use markdown, lists, emojis or stage directions.",
   ].join("\n");
 }

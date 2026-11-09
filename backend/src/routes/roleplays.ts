@@ -40,8 +40,10 @@ const aiLimit = rateLimit({ windowMs: 60_000, max: 10 });
 export const roleplayRoutes = new Hono<AuthEnv>()
   .use(requireAuth)
   .get("/", async (c) => {
+    const userId = c.get("user").id;
+    const { targetLanguage } = await getProfile(userId);
     const rows = await db.query.roleplay.findMany({
-      where: eq(roleplay.userId, c.get("user").id),
+      where: and(eq(roleplay.userId, userId), eq(roleplay.language, targetLanguage)),
       orderBy: [desc(roleplay.updatedAt)],
     });
     return c.json({ roleplays: rows.map(serializeRoleplay) });
