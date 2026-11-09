@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -305,8 +307,10 @@ fun SettingsOverviewScreen(
         if (!scrollState.isScrollInProgress) {
             val current = scrollState.value
             if (current > 0 && current < collapseRangePx.roundToInt()) {
-                val target = if (rawProgress < 0.5f) 0 else collapseRangePx.roundToInt()
-                scrollState.animateScrollTo(target)
+                // Clamp to the real scroll range: short content can't reach the collapsed offset, and
+                // snapping past maxValue would restart this effect forever (swallowing taps).
+                val target = (if (rawProgress < 0.5f) 0 else collapseRangePx.roundToInt()).coerceAtMost(scrollState.maxValue)
+                if (target != current) scrollState.animateScrollTo(target)
             }
         }
     }
@@ -1009,6 +1013,16 @@ fun SettingsLearningLanguageScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var confirming by rememberSaveable { mutableStateOf<String?>(null) }
+    var switching by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // The dialog stays open with a spinner until the switch is saved.
+    LaunchedEffect(busy) { if (!busy && switching) { switching = false; confirming = null } }
+    fun ask(code: String) {
+        keyboard?.hide()
+        focusManager.clearFocus()
+        confirming = code
+    }
     val current = profile?.language
     val results = remember(query, languages) { languages.filter { it.matches(query) } }
     val searching = query.isNotBlank()
@@ -1053,7 +1067,7 @@ fun SettingsLearningLanguageScreen(
                     ZunoSettingsGroup {
                         results.forEachIndexed { index, language ->
                             LanguageRow(language, selected = language.code == current?.code, showDivider = index > 0) {
-                                if (language.code != current?.code) confirming = language.code
+                                if (language.code != current?.code) ask(language.code)
                             }
                         }
                     }
@@ -1071,7 +1085,7 @@ fun SettingsLearningLanguageScreen(
                 ZunoSettingsGroup(sectionLabel = stringResource(R.string.learning_language_all)) {
                     languages.forEachIndexed { index, language ->
                         LanguageRow(language, selected = language.code == current?.code, showDivider = index > 0) {
-                            if (language.code != current?.code) confirming = language.code
+                            if (language.code != current?.code) ask(language.code)
                         }
                     }
                 }
@@ -1088,12 +1102,14 @@ fun SettingsLearningLanguageScreen(
             body = stringResource(R.string.learning_language_switch_body, current.displayName(appLanguage)) +
                 if (learnedBefore) "" else " " + stringResource(R.string.learning_language_switch_level, targetName),
             confirmLabel = stringResource(R.string.learning_language_switch),
-            confirmLoading = busy,
+            confirmLoading = switching,
             onConfirm = {
-                confirming = null
-                onSwitch(target)
+                if (!switching) {
+                    switching = true
+                    onSwitch(target)
+                }
             },
-            onDismiss = { confirming = null },
+            onDismiss = { if (!switching) confirming = null },
         )
     }
 }

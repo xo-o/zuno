@@ -214,11 +214,6 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Registers this install's FCM token with the backend (after sign-in and on token refresh). */
-    fun registerPushToken(token: String, appLanguage: String) = launchSafely(silent = true) {
-        api.registerDevice(token, java.util.TimeZone.getDefault().id, appLanguage)
-    }
-
     // ── Scheduled sessions ──────────────────────────────────────────────────
 
     fun loadSchedules() {

@@ -15,7 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -37,6 +40,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.talkie.ai.R
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoSpace
@@ -134,11 +139,21 @@ fun ZunoToastHost(controller: ToastController, modifier: Modifier = Modifier) {
         }
     }
     val atTop = shown?.atTop == true
+    // Read the status bar height from the view as well: the Compose insets can arrive as zero for a
+    // root-level overlay during a navigation transition.
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val statusBar = with(density) {
+        maxOf(
+            WindowInsets.statusBars.getTop(this),
+            ViewCompat.getRootWindowInsets(view)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0,
+        ).toDp()
+    }
     Box(
         modifier = modifier
             .fillMaxSize()
             .then(
-                if (atTop) Modifier.statusBarsPadding().padding(top = ZunoSpace.s12)
+                if (atTop) Modifier.padding(top = statusBar + ZunoSpace.s12)
                 else Modifier.navigationBarsPadding().imePadding().padding(bottom = 80.dp)
             )
             .padding(horizontal = ZunoSpace.s24),
