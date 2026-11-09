@@ -82,7 +82,7 @@ In addition to the auth, database and LiveKit variables in `.env.example`:
 - `PUBLIC_BASE_URL` (required in production): public origin used in share and unsubscribe links, e.g. `https://api.usezuno.rest`.
 - `FIREBASE_SERVICE_ACCOUNT` (optional): Firebase Admin service account JSON (raw or base64). Without it push notifications are skipped.
 - `REPORTS_EMAIL` (optional): receives an email for every chat report.
-- `DISABLE_JOBS=1` (local only): don't run the background job queue (reminders, schedules, daily reminder, weekly summary).
+- Background jobs (reminders, schedules, daily reminder, weekly summary) run only with `NODE_ENV=production` (set in the Dockerfile) or `RUN_JOBS=1`, so a local dev server never claims production jobs. `DISABLE_JOBS=1` turns them off in production.
 
 Background jobs live in the `job` table and are polled every 30 s with `FOR UPDATE SKIP LOCKED`, so several instances can share the queue. Run `npm test` for the schedule recurrence tests.
 

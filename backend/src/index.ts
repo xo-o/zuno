@@ -429,5 +429,7 @@ serve({
   port,
 });
 startAttachmentJobs();
-// DISABLE_JOBS=1 keeps a local dev server from claiming production jobs.
-if (process.env.DISABLE_JOBS !== "1") startJobRunner();
+// The queue only runs in production (or with RUN_JOBS=1), so a local dev server pointed at the same
+// database doesn't claim jobs it can't deliver (e.g. without Firebase credentials).
+const runJobs = process.env.RUN_JOBS === "1" || (process.env.NODE_ENV === "production" && process.env.DISABLE_JOBS !== "1");
+if (runJobs) startJobRunner();
