@@ -74,8 +74,8 @@ export const auth = betterAuth({
           } catch {}
         }
 
-        if (flowId) {
-          registerFlow(flowId, email);
+        if (flowId && !registerFlow(flowId, email)) {
+          flowId = undefined;
         }
 
         await sendMagicLinkEmail({ to: email, url: magicLinkUrl(token, flowId) });

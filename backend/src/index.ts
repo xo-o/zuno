@@ -20,7 +20,8 @@ import { applyUnsubscribe, verifyUnsubscribe } from "./lib/notifications.js";
 import "./lib/schedule-service.js";
 import { publicBaseUrl } from "./lib/serializers.js";
 import { renderMessagePage, renderNotFoundPage, renderSharePage } from "./lib/share-page.js";
-import { completeFlow, consumeFlow, getFlow, isFlowVerified } from "./lib/magic-link-flows.js";
+import { completeFlow, consumeFlow, getFlow } from "./lib/magic-link-flows.js";
+import { renderVerifyLandingPage, renderVerifyResultPage } from "./lib/verify-page.js";
 import { getProfile } from "./lib/profile.js";
 import { voiceInstructions } from "./lib/tutor.js";
 import { attachmentRoutes } from "./routes/attachments.js";
@@ -51,7 +52,11 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: (origin) => origin || "*",
+    // The app sends bearer tokens and needs no CORS; only Zuno's own web origins may call from a browser.
+    origin: (process.env.CORS_ORIGINS ?? "https://usezuno.rest,https://www.usezuno.rest")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
@@ -66,13 +71,12 @@ app.get("/api/auth/magic-link/poll", (c) => {
     return c.json({ error: "Missing flowId" }, 400);
   }
 
-  const flow = getFlow(flowId);
+  const flow = consumeFlow(flowId);
   if (!flow) {
     return c.json({ status: "expired" }, 404);
   }
 
   if (flow.status === "verified" && flow.sessionToken) {
-    consumeFlow(flowId);
     return c.json({
       status: "verified",
       token: flow.sessionToken,
@@ -231,193 +235,52 @@ app.get("/.well-known/assetlinks.json", (c) => {
   ]);
 });
 
-// 5. Cross-Device & Mobile verify endpoint for Magic Links
-app.get("/auth/verify", async (c) => {
+// 5. Magic link landing page. GET never redeems the token (see renderVerifyLandingPage);
+// confirming a waiting phone's sign-in from another device is an explicit POST.
+const noStore = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
+
+app.get("/auth/verify", (c) => {
   const token = c.req.query("token");
-  const flowId = c.req.query("flowId");
-
   if (!token) {
-    return c.html(
-      `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Sign in to Zuno</title>
-  <style>
-    body { margin: 0; background: #0b0b0c; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    p { color: #a1a1aa; font-size: 16px; }
-  </style>
-</head>
-<body>
-  <p>This sign-in link is invalid or expired. Please request a new one from the app.</p>
-</body>
-</html>`,
-      400
-    );
+    return c.html(renderVerifyResultPage("Link not valid", "This sign-in link is invalid or incomplete. Request a new one from the app."), 400, noStore);
   }
-
-  // Attempt to redeem the magic link token server-side
-  let sessionResult: any = null;
-  try {
-    sessionResult = await auth.api.magicLinkVerify({
-      query: { token, callbackURL: "" },
-      headers: c.req.raw.headers,
-    });
-  } catch (err: any) {
-    // If token was already consumed or invalid, check if the flow was already verified
-    if (!flowId || !isFlowVerified(flowId)) {
-      console.warn("Magic link token redemption failed:", err?.message || err);
-    }
-  }
-
-  const sessionToken: string | undefined = sessionResult?.token || sessionResult?.session?.token;
-  if (sessionToken && flowId) {
-    // The bearer plugin requires signed tokens, the same form it returns in `set-auth-token`.
-    const { secret } = await auth.$context;
-    completeFlow(flowId, `${sessionToken}.${await makeSignature(sessionToken, secret)}`, sessionResult?.user);
-  }
-
-  const verified = Boolean(sessionToken || (flowId && isFlowVerified(flowId)));
-  // The token is spent once this page redeemed it; the flowId lets the app pick up the session instead.
-  const appUrl = `zuno://auth/verify?token=${encodeURIComponent(token)}${flowId ? `&flowId=${encodeURIComponent(flowId)}` : ""}`;
-
-  if (verified) {
-    return c.html(
-      `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Signed In · Zuno</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 24px;
-      background: #0b0b0c;
-      color: #ffffff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 90vh;
-    }
-    .card {
-      background: #161618;
-      border: 1px solid #2a2a2d;
-      border-radius: 24px;
-      padding: 40px 32px;
-      max-width: 440px;
-      width: 100%;
-      text-align: center;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-    }
-    .badge {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      background: rgba(34, 197, 94, 0.15);
-      border: 1px solid rgba(34, 197, 94, 0.4);
-      color: #22c55e;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 20px;
-      font-size: 28px;
-    }
-    h1 { margin: 0 0 12px; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
-    p { color: #a1a1aa; font-size: 15px; line-height: 1.6; margin: 0 0 28px; }
-    .highlight { color: #ffffff; font-weight: 600; }
-    a.button {
-      display: inline-block;
-      background: #ffffff;
-      color: #000000;
-      font-weight: 600;
-      font-size: 15px;
-      padding: 14px 28px;
-      border-radius: 9999px;
-      text-decoration: none;
-      transition: opacity 0.15s ease;
-    }
-    a.button:hover { opacity: 0.9; }
-    .hint { font-size: 12px; color: #71717a; margin-top: 24px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="badge">✓</div>
-    <h1>You're signed in!</h1>
-    <p>Your identity has been verified. The <span class="highlight">Zuno app on your phone</span> is signing in automatically.</p>
-    <a class="button" href="${appUrl}">Open Zuno</a>
-    <div class="hint">You can safely close this browser window.</div>
-  </div>
-  <script>
-    // Auto-forward if opened in mobile browser
-    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      window.location.href = "${appUrl}";
-    }
-  </script>
-</body>
-</html>`
-    );
-  }
-
-  // Fallback for invalid or expired tokens
+  const flowId = c.req.query("flowId");
+  const flow = flowId ? getFlow(flowId) : undefined;
+  const pending = flow?.status === "pending";
   return c.html(
-    `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign in to Zuno</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 24px;
-      background: #0b0b0c;
-      color: #ffffff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 90vh;
-    }
-    .card {
-      background: #161618;
-      border: 1px solid #2a2a2d;
-      border-radius: 20px;
-      padding: 32px;
-      max-width: 420px;
-      width: 100%;
-      text-align: center;
-    }
-    h1 { margin-top: 0; font-size: 22px; font-weight: 600; }
-    p { color: #a1a1aa; font-size: 15px; line-height: 1.5; margin-bottom: 24px; }
-    a.button {
-      display: inline-block;
-      background: #ffffff;
-      color: #000000;
-      font-weight: 600;
-      font-size: 15px;
-      padding: 14px 28px;
-      border-radius: 9999px;
-      text-decoration: none;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Sign in to Zuno</h1>
-    <p>Open this link on the phone where Zuno is installed to finish signing in.</p>
-    <a class="button" href="${appUrl}">Open Zuno</a>
-  </div>
-  <script>
-    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      window.location.href = "${appUrl}";
-    }
-  </script>
-</body>
-</html>`
+    renderVerifyLandingPage({ token, flowId: pending ? flowId : undefined, email: pending ? flow?.email : undefined }),
+    200,
+    noStore,
   );
+});
+
+app.post("/auth/verify", async (c) => {
+  const form = await c.req.parseBody();
+  const token = typeof form.token === "string" ? form.token : "";
+  const flowId = typeof form.flowId === "string" ? form.flowId : "";
+  const flow = flowId ? getFlow(flowId) : undefined;
+  if (!token || flow?.status !== "pending") {
+    return c.html(renderVerifyResultPage("Request expired", "This sign-in request is no longer waiting. Request a new link from the app."), 400, noStore);
+  }
+
+  let result: Awaited<ReturnType<typeof auth.api.magicLinkVerify>> | undefined;
+  try {
+    result = await auth.api.magicLinkVerify({ query: { token, callbackURL: "" }, headers: c.req.raw.headers });
+  } catch (err: any) {
+    console.warn("Magic link token redemption failed:", err?.message || err);
+  }
+  const session = result as { token?: string; user?: { email?: string } } | undefined;
+  if (!session?.token) {
+    return c.html(renderVerifyResultPage("Link expired", "This sign-in link has expired or was already used. Request a new one from the app."), 400, noStore);
+  }
+  if (session.user?.email?.toLowerCase() !== flow.email.toLowerCase()) {
+    return c.html(renderVerifyResultPage("Link not valid", "This link doesn't match the sign-in request. Request a new one from the app."), 400, noStore);
+  }
+
+  // The bearer plugin requires signed tokens, the same form it returns in `set-auth-token`.
+  const { secret } = await auth.$context;
+  completeFlow(flowId, `${session.token}.${await makeSignature(session.token, secret)}`, session.user);
+  return c.html(renderVerifyResultPage("You're signed in", "Zuno on your phone is signing in now."), 200, noStore);
 });
 
 // 6. Health check & Root

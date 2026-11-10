@@ -90,4 +90,4 @@ Schema changes: run `npm run db:push` against the target database.
 
 For local testing without email, `npx tsx scripts/dev-session.ts create` prints a bearer token for a throwaway user (`delete` removes it).
 | Asset Links | `GET /.well-known/assetlinks.json` | Android App Links verification |
-| Verify Fallback | `GET /auth/verify?token=…` | Web landing fallback redirecting to `zuno://` |
+| Verify Fallback | `GET /auth/verify?token=…&flowId=…` · `POST /auth/verify` | Browser landing page: forwards phones to `zuno://` without redeeming the token; "Confirm sign-in on my phone" (POST) redeems it for the waiting app |

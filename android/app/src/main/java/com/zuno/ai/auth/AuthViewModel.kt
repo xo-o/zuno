@@ -88,20 +88,20 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Handles https://<host>/auth/verify?token=… and zuno://auth/verify?token=…&flowId=… links. */
+    /** Handles https://<host>/auth/verify?token=… and zuno://auth/verify?token=… links. */
     fun handleMagicLink(uri: Uri?): Boolean {
-        val link = uri?.takeIf { it.path?.endsWith("/verify") == true } ?: return false
-        val token = link.getQueryParameter("token")
+        val token = uri?.takeIf { it.path?.endsWith("/verify") == true }?.getQueryParameter("token")
         if (token.isNullOrBlank()) return false
-        val flowId = link.getQueryParameter("flowId")?.takeIf { it.isNotBlank() } ?: activeFlowId
+        // Only the flow this app instance started is trusted, never one supplied by a link.
+        val flowId = activeFlowId
         pollingJob?.cancel()
         pollingJob = null
         runFormAction(allowWhileBusy = true) {
             val session = try {
                 api.verifyMagicLink(token)
             } catch (e: AuthException) {
-                // The browser's verify page may have already redeemed the single-use token
-                // for this flow; pick up that session instead of failing.
+                // The link may already have been confirmed in a browser for the sign-in this
+                // app is waiting on; pick up that session instead of failing.
                 flowId?.let { awaitVerifiedFlow(it) } ?: throw e
             }
             completeSignIn(session)
@@ -135,6 +135,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun clearMagicLinkSent() {
         pollingJob?.cancel()
         pollingJob = null
+        activeFlowId = null
         _form.update { it.copy(linkSentTo = null, error = null) }
     }
 

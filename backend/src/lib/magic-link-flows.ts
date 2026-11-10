@@ -21,7 +21,10 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref?.();
 
-export function registerFlow(flowId: string, email: string): MagicLinkFlow {
+export function registerFlow(flowId: string, email: string): MagicLinkFlow | undefined {
+  // A flow belongs to the email it was first requested for; never let another request take it over.
+  const existing = getFlow(flowId);
+  if (existing && existing.email.toLowerCase() !== email.toLowerCase()) return undefined;
   const flow: MagicLinkFlow = {
     flowId,
     email,
@@ -53,16 +56,9 @@ export function getFlow(flowId: string): MagicLinkFlow | undefined {
   return flow;
 }
 
-export function isFlowVerified(flowId: string): boolean {
-  const flow = getFlow(flowId);
-  return flow?.status === "verified";
-}
-
+/** Hands out a verified flow's session exactly once. */
 export function consumeFlow(flowId: string): MagicLinkFlow | undefined {
   const flow = getFlow(flowId);
-  if (flow && flow.status === "verified") {
-    // Keep for a short 30-second grace window in case of retry, then delete
-    setTimeout(() => flows.delete(flowId), 30000).unref?.();
-  }
+  if (flow?.status === "verified") flows.delete(flowId);
   return flow;
 }
