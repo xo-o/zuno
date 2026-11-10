@@ -22,7 +22,7 @@ val firebaseConfig: Map<String, String>? = file("google-services.json").takeIf {
     val project = root["project_info"] as Map<String, Any?>
     val clients = root["client"] as List<Map<String, Any?>>
     val client = clients.firstOrNull {
-        ((it["client_info"] as Map<String, Any?>)["android_client_info"] as Map<String, Any?>)["package_name"] == "com.talkie.ai"
+        ((it["client_info"] as Map<String, Any?>)["android_client_info"] as Map<String, Any?>)["package_name"] == "com.zuno.ai"
     } ?: return@let null
     val clientInfo = client["client_info"] as Map<String, Any?>
     val apiKey = (client["api_key"] as List<Map<String, Any?>>).first()["current_key"] as String
@@ -37,11 +37,11 @@ val firebaseConfig: Map<String, String>? = file("google-services.json").takeIf {
 }
 
 android {
-    namespace = "com.talkie.ai"
+    namespace = "com.zuno.ai"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.talkie.ai"
+        applicationId = "com.zuno.ai"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

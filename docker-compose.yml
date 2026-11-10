@@ -4,7 +4,7 @@ services:
   # 1. PostgreSQL Database for Better Auth & app data
   postgres:
     image: postgres:16-alpine
-    container_name: talkie-postgres
+    container_name: zuno-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: zuno
@@ -25,7 +25,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: talkie-backend
+    container_name: zuno-backend
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -44,7 +44,7 @@ services:
     build:
       context: ./voice-agent
       dockerfile: Dockerfile
-    container_name: talkie-voice-agent
+    container_name: zuno-voice-agent
     restart: unless-stopped
     env_file:
       - ./voice-agent/.env

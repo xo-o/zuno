@@ -71,7 +71,7 @@ def get_token(
     room_name: Optional[str] = Query(None),
     participant_name: Optional[str] = Query(None),
 ):
-    room = room_name or f"talkie-{str(uuid.uuid4())[:8]}"
+    room = room_name or f"zuno-{str(uuid.uuid4())[:8]}"
     name = participant_name or f"user-{str(uuid.uuid4())[:4]}"
     token = generate_token(room, name)
     return {
@@ -84,7 +84,7 @@ def get_token(
 
 @app.post("/api/token")
 def create_token(req: TokenRequest):
-    room = req.room_name or f"talkie-{str(uuid.uuid4())[:8]}"
+    room = req.room_name or f"zuno-{str(uuid.uuid4())[:8]}"
     name = req.participant_name or f"user-{str(uuid.uuid4())[:4]}"
     metadata = None
     if req.provider or req.voice or req.language:

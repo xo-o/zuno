@@ -1,4 +1,4 @@
-# Talkie AI - Real-Time Conversational Voice AI
+# Zuno AI - Real-Time Conversational Voice AI
 
 A low-latency, real-time Voice AI conversational system featuring a native Android application (**Kotlin & Jetpack Compose**), an Auth & API server (**Node.js, TypeScript, Hono, Better Auth & Drizzle ORM**), a real-time Voice AI worker (**Python LiveKit Agents, Silero VAD, Deepgram STT, Google Gemini 2.5 Flash LLM, and Multi-Provider TTS**), and WebRTC transport via **LiveKit Cloud**.
 
@@ -34,12 +34,12 @@ player/
 │   ├── settings.gradle.kts        # Project settings
 │   └── app/
 │       ├── build.gradle.kts       # App dependencies (LiveKit Android SDK, Compose)
-│       └── src/main/java/com/talkie/ai/
+│       └── src/main/java/com/zuno/ai/
 │           ├── MainActivity.kt    # App entry point & screen navigation
 │           ├── auth/              # Google & Magic Link Auth
 │           ├── model/             # State, voice catalog, and transcript models
 │           ├── service/           # Token fetcher & client-side fallback
-│           ├── viewmodel/         # TalkieViewModel (LiveKit room & data channel)
+│           ├── viewmodel/         # VoiceSessionViewModel (LiveKit room & data channel), ZunoViewModel
 │           └── ui/                # Jetpack Compose screens & components
 │
 ├── backend/                       # Auth & API Server (Node.js TypeScript + Hono + Better Auth)

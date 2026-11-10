@@ -6,7 +6,7 @@ Each task is self-contained and must ship **fully functional**: backend (schema 
 
 ## Codebase primer (read first)
 
-**Android** — `android/app/src/main/java/com/talkie/ai/`
+**Android** — `android/app/src/main/java/com/zuno/ai/`
 - Jetpack Compose only, Material3, **no** navigation lib: routes are `sealed interface ZunoRoute` in `ui/ZunoApp.kt` (helpers `navigate`, `replace`, `openSection`, `pop`).
 - No DI. ViewModels: `viewmodel/ZunoViewModel.kt`, `viewmodel/VoiceSessionViewModel.kt`, `auth/AuthViewModel.kt` (StateFlow + SharedFlow).
 - Networking: OkHttp + `org.json` in `data/ZunoApi.kt` (base `${AUTH_BASE_URL}/api`, Bearer token). Models in `data/ZunoModels.kt`.

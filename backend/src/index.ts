@@ -6,6 +6,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { HTTPException } from "hono/http-exception";
 import { AccessToken } from "livekit-server-sdk";
+import { makeSignature } from "better-auth/crypto";
 import { describeAttachment, startAttachmentJobs } from "./lib/attachments.js";
 import { auth } from "./lib/auth.js";
 import { eq } from "drizzle-orm";
@@ -157,7 +158,7 @@ app.post("/api/livekit/token", async (c) => {
 
   const body = (await c.req.json().catch(() => ({}))) as TokenRequest;
   const { user } = session;
-  const room = `talkie-${randomUUID().slice(0, 8)}`;
+  const room = `zuno-${randomUUID().slice(0, 8)}`;
 
   const profile = await getProfile(user.id);
   const thread = body.conversationId ? await findConversation(user.id, body.conversationId) : undefined;
@@ -212,7 +213,7 @@ app.post("/api/livekit/token", async (c) => {
 
 // 4. Digital Asset Links (for Android App Links verification)
 app.get("/.well-known/assetlinks.json", (c) => {
-  const packageName = process.env.ANDROID_PACKAGE_NAME ?? "com.talkie.ai";
+  const packageName = process.env.ANDROID_PACKAGE_NAME ?? "com.zuno.ai";
   const fingerprints = (process.env.ANDROID_SHA256_CERT_FINGERPRINTS ?? "")
     .split(",")
     .map((value) => value.trim())
@@ -269,13 +270,16 @@ app.get("/auth/verify", async (c) => {
     }
   }
 
-  const sessionToken = sessionResult?.token || sessionResult?.session?.token;
+  const sessionToken: string | undefined = sessionResult?.token || sessionResult?.session?.token;
   if (sessionToken && flowId) {
-    completeFlow(flowId, sessionToken, sessionResult?.user);
+    // The bearer plugin requires signed tokens, the same form it returns in `set-auth-token`.
+    const { secret } = await auth.$context;
+    completeFlow(flowId, `${sessionToken}.${await makeSignature(sessionToken, secret)}`, sessionResult?.user);
   }
 
   const verified = Boolean(sessionToken || (flowId && isFlowVerified(flowId)));
-  const appUrl = `zuno://auth/verify?token=${encodeURIComponent(token)}`;
+  // The token is spent once this page redeemed it; the flowId lets the app pick up the session instead.
+  const appUrl = `zuno://auth/verify?token=${encodeURIComponent(token)}${flowId ? `&flowId=${encodeURIComponent(flowId)}` : ""}`;
 
   if (verified) {
     return c.html(
@@ -418,7 +422,7 @@ app.get("/auth/verify", async (c) => {
 
 // 6. Health check & Root
 app.get("/health", (c) => c.json({ status: "ok" }));
-app.get("/", (c) => c.json({ name: "Zuno / Talkie Backend API", status: "running" }));
+app.get("/", (c) => c.json({ name: "Zuno Backend API", status: "running" }));
 
 // Server launch
 const port = Number(process.env.PORT) || 3000;
