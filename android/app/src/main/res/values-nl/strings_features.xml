@@ -17,9 +17,6 @@
 
     <!-- Home -->
     <string name="home_greeting">Hoi, wat gaan we vandaag oefenen?</string>
-    <string name="home_mic_on">Microfoon aan — houd de gloed ingedrukt om te praten</string>
-    <string name="home_speech_unavailable">Spraakherkenning is niet beschikbaar op dit apparaat. Typ je bericht.</string>
-    <string name="home_didnt_catch">Niet verstaan — probeer het opnieuw</string>
     <string name="voice_call_ended">Spraakgesprek beëindigd</string>
 
     <!-- Chat actions -->
@@ -199,4 +196,21 @@
     <string name="learning_language_switched">Je leert nu %1$s</string>
     <string name="level_check_first_message">Hoi Zuno! Laten we mijn niveau bepalen.</string>
     <string name="level_check_done">Je niveau: %1$s</string>
+    <!-- Home voice orb & voice mode -->
+    <string name="home_tap_to_talk">Tik op de bol om te praten</string>
+    <string name="mic_dialog_title">Toegang tot microfoon toestaan?</string>
+    <string name="mic_dialog_body">ZunoAI heeft je microfoon nodig om je te horen en je uitspraak te verbeteren.</string>
+    <string name="mic_dialog_allow">Toestaan</string>
+    <string name="common_not_now">Niet nu</string>
+    <string name="voice_live_title">Live · %1$s</string>
+    <string name="voice_connecting">Verbinden…</string>
+    <string name="voice_listening">Luistert…</string>
+    <string name="voice_muted">Gedempt</string>
+    <string name="voice_thinking">Denkt na…</string>
+    <string name="voice_tap_to_interrupt">Tik op de bol om te onderbreken</string>
+    <string name="voice_end_call">Ophangen</string>
+    <string name="voice_mute">Dempen</string>
+    <string name="voice_unmute">Dempen opheffen</string>
+    <string name="voice_show_captions">Ondertiteling tonen</string>
+    <string name="voice_hide_captions">Ondertiteling verbergen</string>
 </resources>

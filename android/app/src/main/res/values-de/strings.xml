@@ -24,18 +24,7 @@
     <string name="drawer_new_chat">Neuer Chat</string>
 
     <!-- Home -->
-    <string name="home_hold_to_talk">Gedrückt halten zum Sprechen</string>
-    <string name="home_listening">Höre zu…</string>
-    <string name="home_release_to_cancel">Loslassen zum Abbrechen</string>
-    <string name="home_sending">Wird gesendet…</string>
-    <string name="home_release_to_send">Loslassen zum Senden</string>
-    <string name="home_slide_to_cancel">Nach unten wischen zum Abbrechen</string>
     <string name="home_type_instead">Lieber tippen</string>
-    <string name="home_ai_tutor">KI-Tutor</string>
-    <string name="home_mic_off">Mikrofon ist aus</string>
-    <string name="home_mic_prompt">Erlaube Mikrofonzugriff, um mit deinem Tutor zu sprechen</string>
-    <string name="home_allow_mic">Mikrofon erlauben</string>
-    <string name="home_mic_settings_hint">Du kannst dies jederzeit in den Einstellungen ändern</string>
     <string name="home_greeting_named">Hallo %1$s, was üben wir heute?</string>
     <string name="home_greeting_unnamed">Hallo, was üben wir heute?</string>
 

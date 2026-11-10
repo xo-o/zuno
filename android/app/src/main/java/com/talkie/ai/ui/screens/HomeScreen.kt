@@ -7,12 +7,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,8 +19,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,36 +32,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import com.talkie.ai.R
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
+import com.talkie.ai.R
 import com.talkie.ai.data.LearningLanguage
-import com.talkie.ai.ui.components.AgentGlowState
-import com.talkie.ai.ui.components.ZunoSelectorTopBar
-import com.talkie.ai.ui.components.ZunoAgentGlow
-import com.talkie.ai.ui.components.ZunoButton
-import com.talkie.ai.ui.components.ZunoButtonSize
+import com.talkie.ai.ui.components.VoiceOrbState
 import com.talkie.ai.ui.components.ZunoComposer
 import com.talkie.ai.ui.components.ZunoDraftAttachment
-import com.talkie.ai.ui.components.ZunoSpinner
+import com.talkie.ai.ui.components.ZunoIcon
+import com.talkie.ai.ui.components.ZunoSelectorTopBar
 import com.talkie.ai.ui.components.ZunoTutorHint
+import com.talkie.ai.ui.components.ZunoVoiceOrb
 import com.talkie.ai.ui.theme.ZunoColors
 import com.talkie.ai.ui.theme.ZunoRadius
 import com.talkie.ai.ui.theme.ZunoSpace
@@ -78,30 +74,19 @@ data class HomeCopy(val prompt: String, val translation: String, val placeholder
     }
 }
 
-/** Voice states for the glow; drives caption, prompt and footer hints. */
-enum class HomeVoiceState { Idle, Listening, Cancelling, Sending }
-
 /**
- * Home — V3 Glow. Hold the glow to talk (release sends, slide down cancels) or type instead.
- * Both paths open a new Free Talk session.
+ * Home — voice orb. Tap the orb to start a live call in a new Free Talk, or type instead.
  */
 @Composable
 fun HomeScreen(
     copy: HomeCopy,
-    voiceState: HomeVoiceState,
-    liveTranscript: String,
-    audioLevel: () -> Float,
-    micBlocked: Boolean,
     busy: Boolean,
     typingHint: String?,
     /** "Spanish · B1" — active language and level. */
     selector: String,
     onOpenDrawer: () -> Unit,
     onSelector: () -> Unit,
-    onHoldStart: () -> Unit,
-    onHoldMove: (cancelling: Boolean) -> Unit,
-    onHoldEnd: () -> Unit,
-    onAllowMicrophone: () -> Unit,
+    onOrbTap: () -> Unit,
     onDraftChanged: (String) -> Unit,
     onSendText: (String) -> Unit,
     onTypeModeChanged: (Boolean) -> Unit,
@@ -141,17 +126,10 @@ fun HomeScreen(
                     onRetryAttachment = onRetryAttachment,
                 )
             } else {
-                GlowMode(
+                OrbMode(
                     copy = copy,
-                    voiceState = voiceState,
-                    liveTranscript = liveTranscript,
-                    audioLevel = audioLevel,
-                    micBlocked = micBlocked,
                     busy = busy,
-                    onHoldStart = onHoldStart,
-                    onHoldMove = onHoldMove,
-                    onHoldEnd = onHoldEnd,
-                    onAllowMicrophone = onAllowMicrophone,
+                    onOrbTap = onOrbTap,
                     onTypeInstead = { setTyping(true) },
                 )
             }
@@ -159,181 +137,72 @@ fun HomeScreen(
     }
 }
 
+/** Visible sphere of the Home / call orb (Figma 190dp); the canvas around it leaves room to bulge. */
+internal val OrbSphereSize = 190.dp
+internal val OrbCanvasSize = 296.dp
+
 @Composable
-private fun GlowMode(
+private fun OrbMode(
     copy: HomeCopy,
-    voiceState: HomeVoiceState,
-    liveTranscript: String,
-    audioLevel: () -> Float,
-    micBlocked: Boolean,
     busy: Boolean,
-    onHoldStart: () -> Unit,
-    onHoldMove: (Boolean) -> Unit,
-    onHoldEnd: () -> Unit,
-    onAllowMicrophone: () -> Unit,
+    onOrbTap: () -> Unit,
     onTypeInstead: () -> Unit,
 ) {
-    val holding = voiceState == HomeVoiceState.Listening || voiceState == HomeVoiceState.Cancelling
-    val cancelThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
-    val currentStart by rememberUpdatedState(onHoldStart)
-    val currentMove by rememberUpdatedState(onHoldMove)
-    val currentEnd by rememberUpdatedState(onHoldEnd)
-    val interactive = !micBlocked && !busy && voiceState != HomeVoiceState.Sending
-
-    Column(Modifier.fillMaxSize()) {
-        BoxWithConstraints(
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s8),
-            contentAlignment = Alignment.BottomCenter,
+                .padding(top = maxHeight * OrbTopFraction),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val horizonHeight = min(600.dp, maxHeight)
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(horizonHeight)
-                    .clip(RoundedCornerShape(ZunoRadius.xxxl))
-                    .semantics { contentDescription = "Hold to talk" }
-                    .then(
-                        if (interactive) {
-                            Modifier.pointerInput(Unit) {
-                                awaitEachGesture {
-                                    val down = awaitFirstDown()
-                                    currentStart()
-                                    var cancelling = false
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                        if (!change.pressed) break
-                                        val shouldCancel = change.position.y - down.position.y > cancelThresholdPx
-                                        if (shouldCancel != cancelling) {
-                                            cancelling = shouldCancel
-                                            currentMove(cancelling)
-                                        }
-                                        change.consume()
-                                    }
-                                    currentEnd()
-                                }
-                            }
-                        } else {
-                            Modifier
-                        }
-                    ),
+                    .size(OrbSphereSize)
+                    .clip(CircleShape)
+                    .clickable(enabled = !busy, role = Role.Button, onClick = onOrbTap)
+                    .semantics { contentDescription = "Start a voice call" },
+                contentAlignment = Alignment.Center,
             ) {
-                ZunoAgentGlow(
-                    state = when {
-                        micBlocked -> AgentGlowState.Disabled
-                        voiceState == HomeVoiceState.Sending || busy -> AgentGlowState.Thinking
-                        voiceState == HomeVoiceState.Cancelling -> AgentGlowState.Cancelling
-                        voiceState == HomeVoiceState.Listening -> AgentGlowState.Listening
-                        else -> AgentGlowState.Idle
-                    },
-                    audioLevel = audioLevel,
-                    modifier = Modifier.fillMaxSize(),
+                ZunoVoiceOrb(
+                    state = if (busy) VoiceOrbState.Thinking else VoiceOrbState.Idle,
+                    size = OrbCanvasSize,
+                    modifier = Modifier.requiredSize(OrbCanvasSize),
                 )
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = horizonHeight * 0.36f)
-                        .width(300.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-                ) {
-                    when {
-                        micBlocked -> MicBlockedContent(onAllowMicrophone)
-                        voiceState == HomeVoiceState.Sending || busy -> {
-                            Caption(stringResource(R.string.home_sending))
-                            Prompt(liveTranscript.ifBlank { copy.prompt })
-                            ZunoSpinner(Modifier.padding(top = ZunoSpace.s8))
-                        }
-                        holding -> {
-                            Caption(
-                                if (voiceState == HomeVoiceState.Cancelling) {
-                                    stringResource(R.string.home_release_to_cancel)
-                                } else {
-                                    stringResource(R.string.home_listening)
-                                }
-                            )
-                            ListeningPrompt(liveTranscript)
-                        }
-                        else -> {
-                            Caption(stringResource(R.string.home_hold_to_talk))
-                            Prompt(copy.prompt)
-                        }
-                    }
-                }
+            }
+            Spacer(Modifier.height(ZunoSpace.s40))
+            Column(
+                modifier = Modifier.width(300.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+            ) {
+                Prompt(copy.prompt)
+                Text(
+                    stringResource(if (busy) R.string.voice_connecting else R.string.home_tap_to_talk),
+                    style = ZunoType.CaptionRegular,
+                    color = ZunoColors.TextTertiary,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
-        Column(
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = ZunoSpace.s16)
+                .clip(RoundedCornerShape(ZunoRadius.sm))
+                .clickable(role = Role.Button, onClick = onTypeInstead)
+                .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (holding) {
-                Text(stringResource(R.string.home_release_to_send), style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
-                Spacer(Modifier.height(ZunoSpace.s4))
-                Text(stringResource(R.string.home_slide_to_cancel), style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
-            } else {
-                Text(
-                    stringResource(R.string.home_type_instead),
-                    style = ZunoType.LabelSmall,
-                    color = if (micBlocked) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(ZunoRadius.sm))
-                        .clickable(role = Role.Button, onClick = onTypeInstead)
-                        .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
-                )
-            }
+            ZunoIcon(R.drawable.zuno_ic_keyboard, 16.dp, tint = ZunoColors.IconPrimary)
+            Text(stringResource(R.string.home_type_instead), style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
         }
     }
-}
-
-@Composable
-private fun MicBlockedContent(onAllowMicrophone: () -> Unit) {
-    Caption(stringResource(R.string.home_mic_off))
-    Prompt(stringResource(R.string.home_mic_prompt))
-    Spacer(Modifier.height(ZunoSpace.s8))
-    ZunoButton(stringResource(R.string.home_allow_mic), onAllowMicrophone, size = ZunoButtonSize.Medium)
-    Text(
-        stringResource(R.string.home_mic_settings_hint),
-        style = ZunoType.FootnoteRegular,
-        color = ZunoColors.TextTertiary,
-        textAlign = TextAlign.Center,
-    )
-}
-
-@Composable
-private fun Caption(text: String) {
-    Text(text, style = ZunoType.FootnoteStrong, color = ZunoColors.TextSecondary, textAlign = TextAlign.Center)
 }
 
 @Composable
 private fun Prompt(text: String) {
     Text(text, style = ZunoType.Display, color = ZunoColors.TextPrimary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-}
-
-/** Live transcript: settled words bright, the trailing words dimmed while speech is still arriving. */
-@Composable
-private fun ListeningPrompt(transcript: String) {
-    if (transcript.isBlank()) {
-        Text("…", style = ZunoType.Display, color = ZunoColors.TextTertiary, textAlign = TextAlign.Center)
-        return
-    }
-    val words = transcript.trim().split(Regex("\\s+"))
-    val settled = words.dropLast(2).joinToString(" ")
-    val trailing = words.takeLast(2).joinToString(" ")
-    Text(
-        text = buildAnnotatedString {
-            withStyle(SpanStyle(color = ZunoColors.TextPrimary)) { append(settled) }
-            if (settled.isNotEmpty()) append(" ")
-            withStyle(SpanStyle(color = ZunoColors.TextTertiary)) { append("$trailing…") }
-        },
-        style = ZunoType.Display,
-        textAlign = TextAlign.Center,
-        maxLines = 4,
-        modifier = Modifier.fillMaxWidth(),
-    )
 }
 
 @Composable
@@ -354,37 +223,38 @@ private fun TypeMode(
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    Box(
+    Column(
         Modifier
             .fillMaxSize()
-            .imePadding()
-            .padding(horizontal = ZunoSpace.s8),
+            .imePadding(),
     ) {
-        ZunoAgentGlow(
-            state = if (busy) AgentGlowState.Thinking else AgentGlowState.Idle,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = ZunoSpace.s4),
-        )
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 116.dp)
-                .width(300.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-        ) {
-            Caption(stringResource(R.string.home_ai_tutor))
-            Prompt(copy.prompt)
-            Text(copy.translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary, textAlign = TextAlign.Center)
+        GreetingArea(Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.width(300.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+            ) {
+                Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
+                    ZunoVoiceOrb(
+                        state = if (busy) VoiceOrbState.Thinking else VoiceOrbState.Idle,
+                        size = 150.dp,
+                        dots = 360,
+                        modifier = Modifier.requiredSize(150.dp),
+                    )
+                }
+                Spacer(Modifier.height(ZunoSpace.s20))
+                Prompt(copy.prompt)
+                if (copy.translation.isNotBlank()) {
+                    Text(copy.translation, style = ZunoType.BodySmall, color = ZunoColors.TextTertiary, textAlign = TextAlign.Center)
+                }
+            }
         }
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, bottom = ZunoSpace.s12),
+                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, bottom = ZunoSpace.s8),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         ) {
             AnimatedVisibility(visible = typingHint != null && draft.isNotBlank(), enter = fadeIn(), exit = fadeOut()) {
                 ZunoTutorHint(typingHint.orEmpty())
@@ -404,7 +274,6 @@ private fun TypeMode(
                 placeholder = copy.placeholder,
                 focusRequester = focusRequester,
                 enabled = !busy,
-                elevated = true,
                 attachments = if (drafts.isEmpty()) null else {
                     {
                         drafts.forEach { attachment ->
@@ -420,6 +289,23 @@ private fun TypeMode(
                 },
                 sendEnabled = attachmentsReady,
             )
+        }
+    }
+}
+
+/**
+ * Space above the composer: the greeting sits 120dp down and rises as the keyboard and a growing
+ * composer take room, so it never runs under the input. When it no longer fits, its top (the orb)
+ * slides out of view first, keeping the text readable.
+ */
+@Composable
+private fun GreetingArea(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = modifier.fillMaxWidth().clipToBounds()) { measurables, constraints ->
+        val placeable = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity))
+        val top = (constraints.maxHeight - placeable.height - 24.dp.roundToPx())
+            .coerceAtMost(120.dp.roundToPx())
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            placeable.place((constraints.maxWidth - placeable.width) / 2, top)
         }
     }
 }

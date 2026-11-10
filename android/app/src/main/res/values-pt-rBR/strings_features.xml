@@ -17,9 +17,6 @@
 
     <!-- Home -->
     <string name="home_greeting">Oi, o que vamos praticar hoje?</string>
-    <string name="home_mic_on">Microfone ligado — segure o brilho para falar</string>
-    <string name="home_speech_unavailable">O reconhecimento de voz não está disponível neste dispositivo. Digite sua mensagem.</string>
-    <string name="home_didnt_catch">Não entendi — tente de novo</string>
     <string name="voice_call_ended">Chamada de voz encerrada</string>
 
     <!-- Chat actions -->
@@ -199,4 +196,21 @@
     <string name="learning_language_switched">Agora aprendendo %1$s</string>
     <string name="level_check_first_message">Oi, Zuno! Vamos descobrir meu nível.</string>
     <string name="level_check_done">Seu nível: %1$s</string>
+    <!-- Home voice orb & voice mode -->
+    <string name="home_tap_to_talk">Toque na esfera para falar</string>
+    <string name="mic_dialog_title">Permitir acesso ao microfone?</string>
+    <string name="mic_dialog_body">O ZunoAI precisa do seu microfone para ouvir você e corrigir sua pronúncia.</string>
+    <string name="mic_dialog_allow">Permitir</string>
+    <string name="common_not_now">Agora não</string>
+    <string name="voice_live_title">Ao vivo · %1$s</string>
+    <string name="voice_connecting">Conectando…</string>
+    <string name="voice_listening">Ouvindo…</string>
+    <string name="voice_muted">Microfone desativado</string>
+    <string name="voice_thinking">Pensando…</string>
+    <string name="voice_tap_to_interrupt">Toque na esfera para interromper</string>
+    <string name="voice_end_call">Encerrar</string>
+    <string name="voice_mute">Silenciar</string>
+    <string name="voice_unmute">Ativar microfone</string>
+    <string name="voice_show_captions">Mostrar legendas</string>
+    <string name="voice_hide_captions">Ocultar legendas</string>
 </resources>

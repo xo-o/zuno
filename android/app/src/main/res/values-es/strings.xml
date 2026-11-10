@@ -24,18 +24,7 @@
     <string name="drawer_new_chat">Nuevo chat</string>
 
     <!-- Home -->
-    <string name="home_hold_to_talk">Mantén pulsado para hablar</string>
-    <string name="home_listening">Escuchando…</string>
-    <string name="home_release_to_cancel">Suelta para cancelar</string>
-    <string name="home_sending">Enviando…</string>
-    <string name="home_release_to_send">Suelta para enviar</string>
-    <string name="home_slide_to_cancel">Desliza hacia abajo para cancelar</string>
     <string name="home_type_instead">Escribir en su lugar</string>
-    <string name="home_ai_tutor">Tutor IA</string>
-    <string name="home_mic_off">El micrófono está desactivado</string>
-    <string name="home_mic_prompt">Permite el acceso al micrófono para hablar con tu tutor</string>
-    <string name="home_allow_mic">Permitir micrófono</string>
-    <string name="home_mic_settings_hint">Puedes cambiar esto cuando quieras en Ajustes</string>
     <string name="home_greeting_named">Hola %1$s, ¿qué practicamos hoy?</string>
     <string name="home_greeting_unnamed">Hola, ¿qué practicamos hoy?</string>
 

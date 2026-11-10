@@ -24,18 +24,7 @@
     <string name="drawer_new_chat">New chat</string>
 
     <!-- Home -->
-    <string name="home_hold_to_talk">Hold the glow to talk</string>
-    <string name="home_listening">Listening…</string>
-    <string name="home_release_to_cancel">Release to cancel</string>
-    <string name="home_sending">Sending…</string>
-    <string name="home_release_to_send">Release to send</string>
-    <string name="home_slide_to_cancel">Slide down to cancel</string>
     <string name="home_type_instead">Type instead</string>
-    <string name="home_ai_tutor">AI Tutor</string>
-    <string name="home_mic_off">Microphone is off</string>
-    <string name="home_mic_prompt">Allow mic access to talk with your tutor</string>
-    <string name="home_allow_mic">Allow microphone</string>
-    <string name="home_mic_settings_hint">You can change this anytime in Settings</string>
     <string name="home_greeting_named">Hi %1$s, what shall we practice today?</string>
     <string name="home_greeting_unnamed">Hi, what shall we practice today?</string>
 

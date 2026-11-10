@@ -1,19 +1,13 @@
 package com.talkie.ai.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -39,16 +33,12 @@ import androidx.compose.ui.unit.dp
 import com.talkie.ai.R
 import com.talkie.ai.data.Attachment
 import com.talkie.ai.data.Message
-import com.talkie.ai.ui.components.AgentGlowState
-import com.talkie.ai.ui.components.CallControlState
 import com.talkie.ai.ui.components.ZunoAssistantBubble
-import com.talkie.ai.ui.components.ZunoCallControl
 import com.talkie.ai.ui.components.ZunoComposer
 import com.talkie.ai.ui.components.ZunoDraftAttachment
 import com.talkie.ai.ui.components.ZunoMessageAttachments
 import com.talkie.ai.ui.components.ZunoPendingAttachments
 import com.talkie.ai.ui.components.ZunoFeedbackPill
-import com.talkie.ai.ui.components.ZunoLiveIndicator
 import com.talkie.ai.ui.components.ZunoLoadState
 import com.talkie.ai.ui.components.ZunoMenuAction
 import com.talkie.ai.ui.components.ZunoOverflowMenu
@@ -64,10 +54,7 @@ import com.talkie.ai.ui.theme.ZunoType
 import com.talkie.ai.viewmodel.DraftAttachment
 import com.talkie.ai.viewmodel.DraftUploadState
 
-/** A line spoken in the current live voice session (not yet saved to history). */
-data class LiveLine(val isUser: Boolean, val text: String)
-
-/** Free Talk / roleplay / lesson conversation — text chat with an optional live voice footer. */
+/** Free Talk / roleplay / lesson conversation. The mic opens voice mode ([VoiceModeScreen]) for it. */
 @Composable
 fun ChatScreen(
     title: String,
@@ -77,12 +64,6 @@ fun ChatScreen(
     pendingAttachments: List<DraftAttachment>,
     drafts: List<DraftAttachment>,
     error: String?,
-    liveLines: List<LiveLine>,
-    voiceMode: Boolean,
-    voiceConnecting: Boolean,
-    glowState: AgentGlowState,
-    glowLevel: () -> Float,
-    isMuted: Boolean,
     placeholder: String,
     typingHint: String?,
     menu: List<ZunoMenuAction>,
@@ -94,9 +75,6 @@ fun ChatScreen(
     savedDraft: () -> String,
     onSaveDraft: (String) -> Unit,
     onStartVoice: () -> Unit,
-    onSwitchToText: () -> Unit,
-    onToggleMute: () -> Unit,
-    onEndVoice: () -> Unit,
     onListen: (String) -> Unit,
     onExplain: (Message) -> Unit,
     onAttach: () -> Unit,
@@ -108,11 +86,10 @@ fun ChatScreen(
     showTranslations: Boolean = true,
 ) {
     val listState = rememberLazyListState()
-    var focusComposer by remember { mutableStateOf(false) }
     // Re-scroll whenever content at the bottom changes — including the typing bubble being replaced by the reply.
-    LaunchedEffect(messages?.size, pendingText, error, liveLines.size, liveLines.lastOrNull()?.text) {
+    LaunchedEffect(messages?.size, pendingText, error) {
         if (messages == null) return@LaunchedEffect
-        val lastIndex = messages.size + liveLines.size +
+        val lastIndex = messages.size +
             (if (pendingText != null) 2 else 0) +
             (if (error != null && pendingText == null) 1 else 0)
         if (lastIndex > 0) listState.animateScrollToItem(lastIndex)
@@ -162,10 +139,6 @@ fun ChatScreen(
                             )
                         }
                     }
-                    items(liveLines.size, key = { "live-$it" }) { index ->
-                        val line = liveLines[index]
-                        if (line.isUser) UserTurn(line.text, null) else ZunoAssistantBubble(message = line.text)
-                    }
                     if (pendingText != null) {
                         item(key = "pending-user") {
                             UserTurn(pendingText, null) {
@@ -188,46 +161,20 @@ fun ChatScreen(
                 }
             }
 
-            AnimatedContent(
-                targetState = voiceMode,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "chatFooter",
-            ) { voice ->
-                if (voice) {
-                    VoiceFooter(
-                        glowState = glowState,
-                        glowLevel = glowLevel,
-                        isMuted = isMuted,
-                        connecting = voiceConnecting,
-                        liveCaption = liveLines.lastOrNull { !it.isUser }?.text,
-                        onType = {
-                            focusComposer = true
-                            onSwitchToText()
-                        },
-                        onToggleMute = onToggleMute,
-                        onEnd = onEndVoice,
-                    )
-                } else {
-                    ComposerFooter(
-                        autoFocus = focusComposer,
-                        enabled = messages != null && pendingText == null,
-                        placeholder = placeholder,
-                        typingHint = typingHint,
-                        drafts = drafts,
-                        onAttach = onAttach,
-                        onRemoveAttachment = onRemoveAttachment,
-                        onRetryAttachment = onRetryAttachment,
-                        onDraftChanged = onDraftChanged,
-                        savedDraft = savedDraft,
-                        onSaveDraft = onSaveDraft,
-                        onSend = onSend,
-                        onVoice = {
-                            focusComposer = false
-                            onStartVoice()
-                        },
-                    )
-                }
-            }
+            ComposerFooter(
+                enabled = messages != null && pendingText == null,
+                placeholder = placeholder,
+                typingHint = typingHint,
+                drafts = drafts,
+                onAttach = onAttach,
+                onRemoveAttachment = onRemoveAttachment,
+                onRetryAttachment = onRetryAttachment,
+                onDraftChanged = onDraftChanged,
+                savedDraft = savedDraft,
+                onSaveDraft = onSaveDraft,
+                onSend = onSend,
+                onVoice = onStartVoice,
+            )
         }
     }
 }
@@ -249,7 +196,6 @@ private fun UserTurn(text: String, feedback: String?, attachments: @Composable (
 
 @Composable
 private fun ComposerFooter(
-    autoFocus: Boolean,
     enabled: Boolean,
     placeholder: String,
     typingHint: String?,
@@ -266,11 +212,8 @@ private fun ComposerFooter(
     var draft by rememberSaveable { mutableStateOf(savedDraft()) }
     val attachmentsReady = drafts.all { it.state == DraftUploadState.Ready }
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(autoFocus) {
-        if (autoFocus) focusRequester.requestFocus()
-    }
     Column(
-        modifier = Modifier.padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s8),
+        modifier = Modifier.padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s8),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
@@ -311,62 +254,5 @@ private fun ComposerFooter(
             },
             sendEnabled = attachmentsReady,
         )
-    }
-}
-
-@Composable
-private fun VoiceFooter(
-    glowState: AgentGlowState,
-    glowLevel: () -> Float,
-    isMuted: Boolean,
-    connecting: Boolean,
-    liveCaption: String?,
-    onType: () -> Unit,
-    onToggleMute: () -> Unit,
-    onEnd: () -> Unit,
-) {
-    var captionsOn by rememberSaveable { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s8),
-        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-    ) {
-        AnimatedVisibility(visible = connecting || (captionsOn && !liveCaption.isNullOrBlank())) {
-            Text(
-                text = if (connecting) "Connecting…" else liveCaption.orEmpty(),
-                style = ZunoType.BodyMedium,
-                color = ZunoColors.TextSecondary,
-                textAlign = TextAlign.Center,
-                maxLines = 3,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ZunoCallControl(icon = R.drawable.zuno_ic_keyboard, onClick = onType, contentDescription = "Type instead")
-            ZunoCallControl(
-                icon = R.drawable.zuno_ic_captions,
-                onClick = { captionsOn = !captionsOn },
-                contentDescription = if (captionsOn) "Hide captions" else "Show captions",
-                state = if (captionsOn) CallControlState.Active else CallControlState.Default,
-            )
-            ZunoLiveIndicator(state = glowState, audioLevel = glowLevel, modifier = Modifier.weight(1f))
-            ZunoCallControl(
-                icon = R.drawable.zuno_ic_mic_off,
-                onClick = onToggleMute,
-                contentDescription = if (isMuted) "Unmute" else "Mute",
-                state = if (isMuted) CallControlState.Active else CallControlState.Default,
-            )
-            ZunoCallControl(
-                icon = R.drawable.zuno_ic_x_inverse,
-                onClick = onEnd,
-                contentDescription = "End voice session",
-                state = CallControlState.End,
-            )
-        }
     }
 }

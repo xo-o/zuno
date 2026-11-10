@@ -84,7 +84,6 @@ import com.talkie.ai.push.DeepLink
 import com.talkie.ai.push.Push
 import com.talkie.ai.reminders.Reminder
 import com.talkie.ai.reminders.Reminders
-import com.talkie.ai.ui.components.AgentGlowState
 import com.talkie.ai.ui.components.ReminderOption
 import com.talkie.ai.ui.components.ZunoAttachSheet
 import com.talkie.ai.ui.components.ZunoDialog
@@ -105,8 +104,8 @@ import com.talkie.ai.ui.screens.ChatScreen
 import com.talkie.ai.ui.screens.DrawerDestination
 import com.talkie.ai.ui.screens.HomeCopy
 import com.talkie.ai.ui.screens.HomeScreen
-import com.talkie.ai.ui.screens.HomeVoiceState
-import com.talkie.ai.ui.screens.LiveLine
+import com.talkie.ai.ui.screens.VoiceCallStatus
+import com.talkie.ai.ui.screens.VoiceModeScreen
 import com.talkie.ai.ui.screens.NewRoleplayScreen
 import com.talkie.ai.ui.screens.NewScheduleScreen
 import com.talkie.ai.ui.screens.NewTopicScreen
@@ -136,7 +135,6 @@ import com.talkie.ai.viewmodel.ToastEvent
 import com.talkie.ai.viewmodel.ToastIcon
 import com.talkie.ai.viewmodel.VoiceSessionViewModel
 import com.talkie.ai.viewmodel.ZunoViewModel
-import com.talkie.ai.voice.rememberSpeechCapture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -160,6 +158,8 @@ sealed interface ZunoRoute {
     data object Roleplays : ZunoRoute
     data object NewRoleplay : ZunoRoute
     data class Chat(val conversationId: String) : ZunoRoute
+    /** Live voice call for a conversation (voice mode). */
+    data class Voice(val conversationId: String) : ZunoRoute
     data object Settings : ZunoRoute
     data object SettingsPreferences : ZunoRoute
     data object SettingsAppLanguage : ZunoRoute
@@ -185,6 +185,7 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.Roleplays -> "roleplays"
     ZunoRoute.NewRoleplay -> "new-roleplay"
     is ZunoRoute.Chat -> "chat:$conversationId"
+    is ZunoRoute.Voice -> "voice:$conversationId"
     ZunoRoute.Settings -> "settings"
     ZunoRoute.SettingsPreferences -> "settings:preferences"
     ZunoRoute.SettingsAppLanguage -> "settings:app-language"
@@ -206,6 +207,7 @@ private fun decodeRoute(value: String): ZunoRoute = when {
     value == "roleplays" -> ZunoRoute.Roleplays
     value == "new-roleplay" -> ZunoRoute.NewRoleplay
     value.startsWith("chat:") -> ZunoRoute.Chat(value.removePrefix("chat:"))
+    value.startsWith("voice:") -> ZunoRoute.Voice(value.removePrefix("voice:"))
     value == "settings" -> ZunoRoute.Settings
     value == "settings:preferences" -> ZunoRoute.SettingsPreferences
     value == "settings:app-language" -> ZunoRoute.SettingsAppLanguage
@@ -363,6 +365,11 @@ fun ZunoApp(
     val voiceError by viewModel.errorMessage.collectAsStateWithLifecycle()
     var voiceConversationId by rememberSaveable { mutableStateOf<String?>(null) }
     var voiceMessageStart by rememberSaveable { mutableIntStateOf(0) }
+    /** The call was started from the Home orb in a brand-new conversation. */
+    var voiceFromHome by rememberSaveable { mutableStateOf<String?>(null) }
+    /** A Home call that ended before anyone spoke; its empty conversation is deleted. */
+    var discardedVoice by remember { mutableStateOf<String?>(null) }
+    var callStartedAt by rememberSaveable { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(voiceError) {
         val message = voiceError
@@ -372,12 +379,17 @@ fun ZunoApp(
         }
     }
 
-    /** Starts a live LiveKit voice call with the tutor for [conversationId]. */
+    /**
+     * Starts a live LiveKit voice call with the tutor for [conversationId] and opens voice mode.
+     * The tutor gets the conversation so far, so a call from a chat picks up where it left off.
+     */
     fun startVoice(conversationId: String, speakLastReply: Boolean = false) {
         runWithVoicePermissions {
             tts.stop()
             voiceMessageStart = viewModel.messages.value.size
             voiceConversationId = conversationId
+            callStartedAt = null
+            navigate(ZunoRoute.Voice(conversationId))
             if (viewModel.agentState.value == AgentState.DISCONNECTED) {
                 viewModel.connect(
                     sessionToken = authViewModel.sessionToken,
@@ -398,10 +410,32 @@ fun ZunoApp(
             val spoken = viewModel.messages.value.drop(voiceMessageStart)
                 .filter { it.isFinal && it.text.isNotBlank() }
                 .map { (it.speaker == Speaker.USER) to it.text }
-            zunoViewModel.saveVoiceTurns(conversationId, spoken)
+            val emptyHomeCall = spoken.isEmpty() && voiceFromHome == conversationId &&
+                chats[conversationId]?.messages.isNullOrEmpty()
+            if (emptyHomeCall) {
+                discardedVoice = conversationId
+                zunoViewModel.deleteConversation(conversationId) {}
+            } else {
+                zunoViewModel.saveVoiceTurns(conversationId, spoken)
+            }
         }
         viewModel.disconnect()
         voiceConversationId = null
+        voiceFromHome = null
+        callStartedAt = null
+    }
+
+    /** Voice mode closes into the conversation's transcript (or Home, for a discarded empty call). */
+    fun leaveVoice(conversationId: String) {
+        val below = backStack.getOrNull(backStack.lastIndex - 1)
+        when {
+            discardedVoice == conversationId -> {
+                discardedVoice = null
+                pop()
+            }
+            below == ZunoRoute.Chat(conversationId) -> pop()
+            else -> replace(ZunoRoute.Chat(conversationId))
+        }
     }
 
     // A call that drops after connecting (network, agent left) ends the voice session.
@@ -416,7 +450,10 @@ fun ZunoApp(
                 }
                 callWasLive = false
             }
-            else -> callWasLive = true
+            else -> {
+                callWasLive = true
+                if (voiceConversationId != null && callStartedAt == null) callStartedAt = System.currentTimeMillis()
+            }
         }
     }
 
@@ -480,22 +517,26 @@ fun ZunoApp(
         backStack.removeAt(backStack.lastIndex)
     }
 
-    // ── Home: hold-to-talk with on-device speech recognition ────────────────
-    val speech = rememberSpeechCapture()
+    // ── Microphone: in-app "Allow microphone access?" dialog before the system prompt ──
     val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     fun micGranted() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-    var micBlocked by remember { mutableStateOf(!micGranted() && prefs.getBoolean(KEY_MIC_ASKED, false)) }
-    var homeVoiceState by remember { mutableStateOf(HomeVoiceState.Idle) }
-    LaunchedEffect(busy) {
-        if (!busy && homeVoiceState == HomeVoiceState.Sending) homeVoiceState = HomeVoiceState.Idle
-    }
+    var showMicDialog by rememberSaveable { mutableStateOf(false) }
+    /** What to do once the mic is allowed (start the call that asked for it). */
+    var afterMicGranted by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var micSentToSettings by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (micGranted()) micBlocked = false
+        if (micSentToSettings) {
+            micSentToSettings = false
+            val action = afterMicGranted
+            afterMicGranted = null
+            if (micGranted()) action?.invoke()
+        }
     }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         prefs.edit { putBoolean(KEY_MIC_ASKED, true) }
-        micBlocked = !granted
-        if (granted) toast(str(R.string.home_mic_on), ToastIcon.Check)
+        val action = afterMicGranted
+        afterMicGranted = null
+        if (granted) action?.invoke()
     }
 
     fun requestMicrophone() {
@@ -505,6 +546,8 @@ fun ZunoApp(
         if (canAsk) {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
+            // Denied for good: only Settings can turn the mic back on.
+            micSentToSettings = true
             context.startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -512,31 +555,29 @@ fun ZunoApp(
         }
     }
 
+    /** Runs [action] now if the mic is allowed, otherwise after the user allows it from the dialog. */
+    fun withMicrophone(action: () -> Unit) {
+        if (micGranted()) {
+            action()
+        } else {
+            afterMicGranted = action
+            showMicDialog = true
+        }
+    }
+
     fun openChat(conversationId: String) = navigate(ZunoRoute.Chat(conversationId))
 
-    fun startFreeTalk(text: String?, viaVoice: Boolean = false) {
+    fun startFreeTalk(text: String?) {
         if (voiceConversationId != null) endVoice()
-        if (!viaVoice) {
-            zunoViewModel.startFreeTalk(text) { openChat(it.id) }
-            return
-        }
-        // Spoken from Home: the chat opens straight into the live call. The first turn goes through
-        // the API (for feedback), then the call connects and the tutor speaks its reply.
-        var conversationId: String? = null
-        zunoViewModel.startFreeTalk(
-            firstMessage = text,
-            viaVoice = true,
-            onReplied = { replied ->
-                val id = conversationId
-                if (id != null && voiceConversationId == id) {
-                    if (replied) startVoice(id, speakLastReply = true) else voiceConversationId = null
-                }
-            },
-        ) { conversation ->
-            conversationId = conversation.id
-            voiceMessageStart = viewModel.messages.value.size
-            voiceConversationId = conversation.id
-            openChat(conversation.id)
+        zunoViewModel.startFreeTalk(text) { openChat(it.id) }
+    }
+
+    /** Home orb: a new Free Talk that opens straight into a live call; the tutor greets first. */
+    fun startHomeCall() {
+        if (voiceConversationId != null) endVoice()
+        zunoViewModel.startFreeTalk(viaVoice = true) { conversation ->
+            voiceFromHome = conversation.id
+            startVoice(conversation.id)
         }
     }
 
@@ -813,6 +854,71 @@ fun ZunoApp(
         }
     }
 
+    /** The conversation's overflow menu, shared by the chat and its voice mode. */
+    @Composable
+    fun conversationMenu(conversationId: String): List<ZunoMenuAction> {
+        val conversation = chats[conversationId]?.conversation
+        val inVoice = voiceConversationId == conversationId
+        return buildList {
+            if (conversation != null) {
+                add(ZunoMenuAction(stringResource(R.string.chat_menu_rename), icon = R.drawable.zuno_ic_t_pencil) {
+                    renameTarget = conversationId
+                })
+                add(
+                    ZunoMenuAction(
+                        stringResource(if (conversation.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin),
+                        icon = if (conversation.pinned) R.drawable.zuno_ic_t_pin_off else R.drawable.zuno_ic_t_pin,
+                    ) {
+                        zunoViewModel.setPinned(conversationId, !conversation.pinned) { pinned ->
+                            toasts.show(
+                                ToastEvent(str(if (pinned) R.string.chat_pinned_toast else R.string.chat_unpinned_toast), ToastIcon.Pin),
+                            )
+                        }
+                    },
+                )
+                add(ZunoMenuAction(stringResource(R.string.chat_menu_share), icon = R.drawable.zuno_ic_t_share) {
+                    shareTarget = conversationId
+                })
+                add(ZunoMenuAction(stringResource(R.string.chat_menu_report), icon = R.drawable.zuno_ic_t_flag) {
+                    reportTarget = conversationId
+                })
+                add(
+                    ZunoMenuAction(
+                        stringResource(R.string.chat_menu_turn_into_topic),
+                        icon = R.drawable.zuno_ic_t_book_open,
+                        dividerBefore = true,
+                    ) {
+                        if (inVoice) endVoice()
+                        topicPrefill = zunoViewModel.prefillTopicFromChat(conversationId)
+                        navigate(ZunoRoute.NewTopic)
+                    },
+                )
+            }
+            if (conversation?.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
+                add(ZunoMenuAction(stringResource(R.string.chat_menu_complete_lesson), icon = R.drawable.zuno_ic_t_check_circle) {
+                    zunoViewModel.completeLesson(conversation.topicId, conversation.lessonId)
+                })
+                add(ZunoMenuAction(stringResource(R.string.chat_menu_back_to_topic), icon = R.drawable.zuno_ic_t_arrow_right) {
+                    navigate(ZunoRoute.Topic(conversation.topicId))
+                })
+            }
+            if (conversation?.kind == ConversationKind.Roleplay && conversation.roleplayId != null) {
+                add(ZunoMenuAction(stringResource(R.string.chat_menu_start_over), icon = R.drawable.zuno_ic_t_rotate_ccw) {
+                    if (inVoice) endVoice()
+                    zunoViewModel.openRoleplay(conversation.roleplayId, restart = true) { replace(ZunoRoute.Chat(it.id)) }
+                })
+            }
+            add(
+                ZunoMenuAction(
+                    stringResource(R.string.chat_menu_delete),
+                    icon = R.drawable.zuno_ic_t_trash,
+                    destructive = true,
+                    dividerBefore = true,
+                ) { deleteTarget = conversationId },
+            )
+        }
+    }
+
     val activeDestination = when (route) {
         ZunoRoute.Home -> DrawerDestination.FreeTalk
         ZunoRoute.Scheduled, is ZunoRoute.NewSchedule -> DrawerDestination.Scheduled
@@ -837,7 +943,7 @@ fun ZunoApp(
     ) {
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = route.hasDrawer,
+        gesturesEnabled = route.hasDrawer && route !is ZunoRoute.Voice,
         scrimColor = ZunoColors.BgScrim,
         modifier = modifier,
         drawerContent = {
@@ -931,48 +1037,12 @@ fun ZunoApp(
                         profile?.firstName?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.home_greeting_named, it) }
                             ?: stringResource(R.string.home_greeting),
                     ),
-                    voiceState = homeVoiceState,
-                    liveTranscript = speech.partial,
-                    audioLevel = { speech.level },
-                    micBlocked = micBlocked,
                     busy = busy,
                     typingHint = typingHint,
                     selector = profile?.let { "${language.displayName(appLanguage)} · ${it.level}" } ?: "${language.displayName(appLanguage)} · …",
                     onOpenDrawer = { openDrawer() },
                     onSelector = { navigate(ZunoRoute.SettingsLearning) },
-                    onHoldStart = {
-                        when {
-                            !micGranted() -> requestMicrophone()
-                            !speech.isAvailable -> toast(str(R.string.home_speech_unavailable))
-                            else -> {
-                                tts.stop()
-                                homeVoiceState = HomeVoiceState.Listening
-                                speech.start(language.speechTag(accent)) { transcript ->
-                                    if (transcript.isNullOrBlank()) {
-                                        homeVoiceState = HomeVoiceState.Idle
-                                        toast(str(R.string.home_didnt_catch))
-                                    } else {
-                                        homeVoiceState = HomeVoiceState.Sending
-                                        startFreeTalk(transcript, viaVoice = true)
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    onHoldMove = { cancelling ->
-                        if (speech.listening) homeVoiceState = if (cancelling) HomeVoiceState.Cancelling else HomeVoiceState.Listening
-                    },
-                    onHoldEnd = {
-                        when (homeVoiceState) {
-                            HomeVoiceState.Cancelling -> {
-                                speech.cancel()
-                                homeVoiceState = HomeVoiceState.Idle
-                            }
-                            HomeVoiceState.Listening -> speech.stop()
-                            else -> Unit
-                        }
-                    },
-                    onAllowMicrophone = ::requestMicrophone,
+                    onOrbTap = { withMicrophone(::startHomeCall) },
                     onDraftChanged = { if (preferences?.suggestReplies != false) zunoViewModel.onDraftChanged(it) },
                     onSendText = { text -> startFreeTalk(text) },
                     onTypeModeChanged = { if (!it) zunoViewModel.clearHint() },
@@ -1120,70 +1190,6 @@ fun ZunoApp(
                         zunoViewModel.restoreDraft(screen.conversationId)
                     }
                     val conversation = chat?.conversation
-                    val inVoice = voiceConversationId == screen.conversationId
-                    val liveLines = if (inVoice) {
-                        voiceMessages.drop(voiceMessageStart).map { LiveLine(it.speaker == Speaker.USER, it.text) }
-                    } else {
-                        emptyList()
-                    }
-                    val menu = buildList {
-                        if (conversation != null) {
-                            add(ZunoMenuAction(stringResource(R.string.chat_menu_rename), icon = R.drawable.zuno_ic_t_pencil) {
-                                renameTarget = screen.conversationId
-                            })
-                            add(
-                                ZunoMenuAction(
-                                    stringResource(if (conversation.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin),
-                                    icon = if (conversation.pinned) R.drawable.zuno_ic_t_pin_off else R.drawable.zuno_ic_t_pin,
-                                ) {
-                                    zunoViewModel.setPinned(screen.conversationId, !conversation.pinned) { pinned ->
-                                        toasts.show(
-                                            ToastEvent(str(if (pinned) R.string.chat_pinned_toast else R.string.chat_unpinned_toast), ToastIcon.Pin),
-                                        )
-                                    }
-                                },
-                            )
-                            add(ZunoMenuAction(stringResource(R.string.chat_menu_share), icon = R.drawable.zuno_ic_t_share) {
-                                shareTarget = screen.conversationId
-                            })
-                            add(ZunoMenuAction(stringResource(R.string.chat_menu_report), icon = R.drawable.zuno_ic_t_flag) {
-                                reportTarget = screen.conversationId
-                            })
-                            add(
-                                ZunoMenuAction(
-                                    stringResource(R.string.chat_menu_turn_into_topic),
-                                    icon = R.drawable.zuno_ic_t_book_open,
-                                    dividerBefore = true,
-                                ) {
-                                    if (inVoice) endVoice()
-                                    topicPrefill = zunoViewModel.prefillTopicFromChat(screen.conversationId)
-                                    navigate(ZunoRoute.NewTopic)
-                                },
-                            )
-                        }
-                        if (conversation?.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
-                            add(ZunoMenuAction(stringResource(R.string.chat_menu_complete_lesson), icon = R.drawable.zuno_ic_t_check_circle) {
-                                zunoViewModel.completeLesson(conversation.topicId, conversation.lessonId)
-                            })
-                            add(ZunoMenuAction(stringResource(R.string.chat_menu_back_to_topic), icon = R.drawable.zuno_ic_t_arrow_right) {
-                                navigate(ZunoRoute.Topic(conversation.topicId))
-                            })
-                        }
-                        if (conversation?.kind == ConversationKind.Roleplay && conversation.roleplayId != null) {
-                            add(ZunoMenuAction(stringResource(R.string.chat_menu_start_over), icon = R.drawable.zuno_ic_t_rotate_ccw) {
-                                if (inVoice) endVoice()
-                                zunoViewModel.openRoleplay(conversation.roleplayId, restart = true) { replace(ZunoRoute.Chat(it.id)) }
-                            })
-                        }
-                        add(
-                            ZunoMenuAction(
-                                stringResource(R.string.chat_menu_delete),
-                                icon = R.drawable.zuno_ic_t_trash,
-                                destructive = true,
-                                dividerBefore = true,
-                            ) { deleteTarget = screen.conversationId },
-                        )
-                    }
                     ChatScreen(
                         title = conversation?.title.orEmpty(),
                         sessionLabel = conversation?.let { sessionLabel(localizedContext, it) }.orEmpty(),
@@ -1192,35 +1198,19 @@ fun ZunoApp(
                         pendingAttachments = chat?.pendingAttachments.orEmpty(),
                         drafts = drafts[screen.conversationId].orEmpty(),
                         error = chat?.error,
-                        liveLines = liveLines,
-                        voiceMode = inVoice,
-                        voiceConnecting = inVoice &&
-                            (agentState == AgentState.CONNECTING || agentState == AgentState.DISCONNECTED),
-                        glowState = voiceGlowState(agentState, isMuted),
-                        glowLevel = {
-                            if (agentState == AgentState.SPEAKING) viewModel.agentAudioLevel.value
-                            else viewModel.userAudioLevel.value
-                        },
-                        isMuted = isMuted,
                         placeholder = language.placeholder,
                         typingHint = typingHint,
-                        menu = menu,
-                        onBack = {
-                            if (inVoice) endVoice()
-                            pop()
-                        },
+                        menu = conversationMenu(screen.conversationId),
+                        onBack = ::pop,
                         onRetryLoad = { zunoViewModel.loadConversation(screen.conversationId) },
                         onSend = { text -> zunoViewModel.send(screen.conversationId, text) },
                         onDraftChanged = { if (preferences?.suggestReplies != false) zunoViewModel.onDraftChanged(it) },
                         savedDraft = { zunoViewModel.draftText(screen.conversationId) },
                         onSaveDraft = { zunoViewModel.saveDraftText(screen.conversationId, it) },
                         onStartVoice = {
-                            if (chat?.pendingText == null) startVoice(screen.conversationId)
+                            if (chat?.pendingText == null) withMicrophone { startVoice(screen.conversationId) }
                             else toast(str(R.string.chat_still_replying))
                         },
-                        onSwitchToText = { endVoice() },
-                        onToggleMute = { viewModel.toggleMute() },
-                        onEndVoice = { endVoice() },
                         onListen = { text -> tts.speak(text) },
                         onExplain = ::explain,
                         onAttach = { openAttachmentSheet(screen.conversationId) },
@@ -1228,6 +1218,42 @@ fun ZunoApp(
                         onRetryAttachment = { zunoViewModel.retryAttachment(screen.conversationId, it.localId) },
                         onOpenAttachment = ::openAttachment,
                         showTranslations = preferences?.showTranslations != false,
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.Voice -> {
+                    val inVoice = voiceConversationId == screen.conversationId
+                    LaunchedEffect(Unit) {
+                        // Restored after the process died: the call is gone, so is voice mode.
+                        if (inVoice && viewModel.agentState.value == AgentState.DISCONNECTED) voiceConversationId = null
+                    }
+                    LaunchedEffect(inVoice) {
+                        if (!inVoice && backStack.lastOrNull() == screen) leaveVoice(screen.conversationId)
+                    }
+                    val status = voiceCallStatus(agentState, isMuted)
+                    VoiceModeScreen(
+                        status = status,
+                        level = {
+                            when (status) {
+                                VoiceCallStatus.Speaking -> viewModel.agentAudioLevel.value
+                                VoiceCallStatus.Listening -> maxOf(viewModel.userAudioLevel.value, LISTENING_LEVEL_FLOOR)
+                                else -> 0f
+                            }
+                        },
+                        startedAtMillis = callStartedAt.takeIf { inVoice },
+                        tutorLine = if (inVoice) {
+                            voiceMessages.drop(voiceMessageStart).lastOrNull { it.speaker == Speaker.AGENT }?.text
+                        } else {
+                            null
+                        },
+                        isMuted = isMuted,
+                        menu = conversationMenu(screen.conversationId),
+                        onEnd = {
+                            if (inVoice) endVoice() else leaveVoice(screen.conversationId)
+                        },
+                        onInterrupt = { viewModel.interrupt() },
+                        onToggleMute = { viewModel.toggleMute() },
                         modifier = screenModifier,
                     )
                 }
@@ -1434,6 +1460,23 @@ fun ZunoApp(
         )
     }
 
+    if (showMicDialog) {
+        ZunoDialog(
+            title = stringResource(R.string.mic_dialog_title),
+            body = stringResource(R.string.mic_dialog_body),
+            confirmLabel = stringResource(R.string.mic_dialog_allow),
+            dismissLabel = stringResource(R.string.common_not_now),
+            onConfirm = {
+                showMicDialog = false
+                requestMicrophone()
+            },
+            onDismiss = {
+                showMicDialog = false
+                afterMicGranted = null
+            },
+        )
+    }
+
     deleteTarget?.let { id ->
         val title = chats[id]?.conversation?.title.orEmpty()
         ZunoDialog(
@@ -1577,12 +1620,16 @@ fun ZunoApp(
     }
 }
 
-/** Live call → glow. The mic stays open between turns, so an idle call still listens to the user. */
-private fun voiceGlowState(agentState: AgentState, isMuted: Boolean): AgentGlowState = when (agentState) {
-    AgentState.DISCONNECTED, AgentState.CONNECTING, AgentState.THINKING -> AgentGlowState.Thinking
-    AgentState.SPEAKING -> AgentGlowState.Speaking
-    AgentState.IDLE, AgentState.LISTENING -> if (isMuted) AgentGlowState.Disabled else AgentGlowState.Listening
+/** Live call → voice mode status. The mic stays open between turns, so an idle call still listens to the user. */
+private fun voiceCallStatus(agentState: AgentState, isMuted: Boolean): VoiceCallStatus = when (agentState) {
+    AgentState.DISCONNECTED, AgentState.CONNECTING -> VoiceCallStatus.Connecting
+    AgentState.THINKING -> VoiceCallStatus.Thinking
+    AgentState.SPEAKING -> VoiceCallStatus.Speaking
+    AgentState.IDLE, AgentState.LISTENING -> if (isMuted) VoiceCallStatus.Muted else VoiceCallStatus.Listening
 }
+
+/** Keeps the listening orb gently alive while the learner is silent. */
+private const val LISTENING_LEVEL_FLOOR = 0.12f
 
 /** "New Free Talk · Just now", "Roleplay · 3 hours ago", … */
 private fun sessionLabel(context: Context, conversation: Conversation): String {

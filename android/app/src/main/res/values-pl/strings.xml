@@ -24,18 +24,7 @@
     <string name="drawer_new_chat">Nowy czat</string>
 
     <!-- Home -->
-    <string name="home_hold_to_talk">Przytrzymaj, aby mówić</string>
-    <string name="home_listening">Słucham…</string>
-    <string name="home_release_to_cancel">Puść, aby anulować</string>
-    <string name="home_sending">Wysyłanie…</string>
-    <string name="home_release_to_send">Puść, aby wysłać</string>
-    <string name="home_slide_to_cancel">Przesuń w dół, aby anulować</string>
     <string name="home_type_instead">Napisz zamiast tego</string>
-    <string name="home_ai_tutor">Tutor AI</string>
-    <string name="home_mic_off">Mikrofon jest wyłączony</string>
-    <string name="home_mic_prompt">Zezwól na dostęp do mikrofonu, aby rozmawiać z tutorem</string>
-    <string name="home_allow_mic">Zezwól na mikrofon</string>
-    <string name="home_mic_settings_hint">Możesz to zmienić w dowolnej chwili w Ustawieniach</string>
     <string name="home_greeting_named">Cześć %1$s, co dziś poćwiczymy?</string>
     <string name="home_greeting_unnamed">Cześć, co dziś poćwiczymy?</string>
 

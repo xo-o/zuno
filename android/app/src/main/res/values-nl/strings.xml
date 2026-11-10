@@ -24,18 +24,7 @@
     <string name="drawer_new_chat">Nieuwe chat</string>
 
     <!-- Home -->
-    <string name="home_hold_to_talk">Houd ingedrukt om te praten</string>
-    <string name="home_listening">Luisteren…</string>
-    <string name="home_release_to_cancel">Laat los om te annuleren</string>
-    <string name="home_sending">Verzenden…</string>
-    <string name="home_release_to_send">Laat los om te verzenden</string>
-    <string name="home_slide_to_cancel">Veeg omlaag om te annuleren</string>
     <string name="home_type_instead">Typ in plaats daarvan</string>
-    <string name="home_ai_tutor">AI-tutor</string>
-    <string name="home_mic_off">Microfoon staat uit</string>
-    <string name="home_mic_prompt">Geef microfoontoegang om met je tutor te praten</string>
-    <string name="home_allow_mic">Microfoon toestaan</string>
-    <string name="home_mic_settings_hint">Je kunt dit altijd wijzigen in Instellingen</string>
     <string name="home_greeting_named">Hoi %1$s, wat gaan we vandaag oefenen?</string>
     <string name="home_greeting_unnamed">Hoi, wat gaan we vandaag oefenen?</string>
 

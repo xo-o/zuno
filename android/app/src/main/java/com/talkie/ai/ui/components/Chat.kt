@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -174,8 +175,8 @@ fun ZunoFeedbackPill(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Bottom input: attach, text prompt, voice. With [attachments], it grows into a card with the
- * pending files above the input row; send then shows even without text, disabled by [sendEnabled].
+ * Bottom input card: optional pending [attachments], a multi-line text area, then a toolbar with
+ * attach (+) and voice mode — or send once there is text or an attachment ([sendEnabled] dims it).
  */
 @Composable
 fun ZunoComposer(
@@ -189,119 +190,91 @@ fun ZunoComposer(
     focusRequester: FocusRequester? = null,
     showAttach: Boolean = true,
     enabled: Boolean = true,
-    elevated: Boolean = false,
     attachments: (@Composable RowScope.() -> Unit)? = null,
     sendEnabled: Boolean = true,
 ) {
-    val background = if (elevated) ZunoColors.BgElevated else ZunoColors.SurfaceDefault
-    val borderColor = if (elevated) ZunoColors.BorderFocus else ZunoColors.BorderDefault
-    if (attachments == null) {
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(CircleShape)
-                .background(background)
-                .border(1.dp, borderColor, CircleShape)
-                .padding(start = if (showAttach) ZunoSpace.s8 else ZunoSpace.s20, end = ZunoSpace.s8),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ComposerInputRow(value, onValueChange, onSend, onAttach, onVoice, placeholder, focusRequester, showAttach, enabled, value.isNotBlank(), sendEnabled)
-        }
-    } else {
-        val shape = RoundedCornerShape(ZunoRadius.xxl)
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(background)
-                .border(1.dp, borderColor, shape)
-                .padding(ZunoSpace.s8),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-        ) {
+    val shape = RoundedCornerShape(ZunoRadius.xxl)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(ZunoColors.SurfaceStrong)
+            .padding(
+                start = ZunoSpace.s8,
+                end = ZunoSpace.s8,
+                top = if (attachments != null) ZunoSpace.s12 else ZunoSpace.s20,
+                bottom = ZunoSpace.s8,
+            ),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+    ) {
+        if (attachments != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(start = ZunoSpace.s4, end = ZunoSpace.s4, top = ZunoSpace.s4),
+                    .padding(horizontal = ZunoSpace.s4),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 content = attachments,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().height(40.dp),
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ComposerInputRow(value, onValueChange, onSend, onAttach, onVoice, placeholder, focusRequester, showAttach, enabled, true, sendEnabled)
-            }
         }
-    }
-}
-
-@Composable
-private fun RowScope.ComposerInputRow(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSend: () -> Unit,
-    onAttach: () -> Unit,
-    onVoice: () -> Unit,
-    placeholder: String,
-    focusRequester: FocusRequester?,
-    showAttach: Boolean,
-    enabled: Boolean,
-    showSend: Boolean,
-    sendEnabled: Boolean,
-) {
-    if (showAttach) {
-        ZunoIconButton(
-            icon = R.drawable.zuno_ic_plus,
-            onClick = onAttach,
-            style = ZunoIconButtonStyle.Subtle,
-            contentDescription = "Attach",
-        )
-    }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        enabled = enabled,
-        singleLine = true,
-        textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
-        cursorBrush = SolidColor(ZunoColors.TextPrimary),
-        keyboardOptions = LearnerKeyboard,
-        keyboardActions = KeyboardActions(onSend = { onSend() }),
-        modifier = Modifier
-            .weight(1f)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
-        decorationBox = { inner ->
-            Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) {
-                    EllipsizedText(placeholder, ZunoType.BodyMedium, ZunoColors.TextPlaceholder)
-                }
-                inner()
-            }
-        },
-    )
-    if (showSend) {
-        val canSend = enabled && sendEnabled
-        Box(
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            maxLines = 6,
+            textStyle = ZunoType.BodyLarge.copy(color = ZunoColors.TextPrimary),
+            cursorBrush = SolidColor(ZunoColors.TextPrimary),
+            keyboardOptions = LearnerKeyboard,
+            keyboardActions = KeyboardActions(onSend = { onSend() }),
             modifier = Modifier
-                .size(40.dp)
-                .alpha(if (canSend) 1f else 0.4f)
-                .clip(CircleShape)
-                .background(ZunoColors.SurfaceInverse)
-                .clickable(enabled = canSend, role = Role.Button, onClick = onSend),
-            contentAlignment = Alignment.Center,
-        ) {
-            ZunoIcon(R.drawable.zuno_ic_arrow_up_inverse, 20.dp, contentDescription = "Send")
-        }
-    } else {
-        ZunoIconButton(
-            icon = R.drawable.zuno_ic_composer_voice,
-            onClick = onVoice,
-            style = ZunoIconButtonStyle.Strong,
-            contentDescription = "Voice mode",
+                .fillMaxWidth()
+                .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s4)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        EllipsizedText(placeholder, ZunoType.BodyLarge, ZunoColors.TextPlaceholder)
+                    }
+                    inner()
+                }
+            },
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showAttach) {
+                ZunoIconButton(
+                    icon = R.drawable.zuno_ic_plus,
+                    onClick = onAttach,
+                    iconSize = 20.dp,
+                    contentDescription = "Attach",
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            if (value.isNotBlank() || attachments != null) {
+                val canSend = enabled && sendEnabled
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .alpha(if (canSend) 1f else 0.4f)
+                        .clip(CircleShape)
+                        .background(ZunoColors.SurfaceStronger)
+                        .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+                        .clickable(enabled = canSend, role = Role.Button, onClick = onSend),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ZunoIcon(R.drawable.zuno_ic_arrow_up, 20.dp, contentDescription = "Send")
+                }
+            } else {
+                ZunoIconButton(
+                    icon = R.drawable.zuno_ic_mic,
+                    onClick = onVoice,
+                    contentDescription = "Voice mode",
+                )
+            }
+        }
     }
 }
 

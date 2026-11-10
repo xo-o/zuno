@@ -17,9 +17,6 @@
 
     <!-- Home -->
     <string name="home_greeting">Salut, que pratique-t-on aujourd\'hui ?</string>
-    <string name="home_mic_on">Micro activé — maintenez la lueur pour parler</string>
-    <string name="home_speech_unavailable">La reconnaissance vocale n\'est pas disponible sur cet appareil. Écrivez plutôt.</string>
-    <string name="home_didnt_catch">Je n\'ai pas compris — réessayez</string>
     <string name="voice_call_ended">Appel vocal terminé</string>
 
     <!-- Chat actions -->
@@ -199,4 +196,21 @@
     <string name="learning_language_switched">Vous apprenez maintenant : %1$s</string>
     <string name="level_check_first_message">Salut Zuno ! Trouvons mon niveau.</string>
     <string name="level_check_done">Votre niveau : %1$s</string>
+    <!-- Home voice orb & voice mode -->
+    <string name="home_tap_to_talk">Touchez l\'orbe pour parler</string>
+    <string name="mic_dialog_title">Autoriser l\'accès au micro ?</string>
+    <string name="mic_dialog_body">ZunoAI a besoin de votre micro pour vous entendre et corriger votre prononciation.</string>
+    <string name="mic_dialog_allow">Autoriser</string>
+    <string name="common_not_now">Pas maintenant</string>
+    <string name="voice_live_title">En direct · %1$s</string>
+    <string name="voice_connecting">Connexion…</string>
+    <string name="voice_listening">À l\'écoute…</string>
+    <string name="voice_muted">Micro coupé</string>
+    <string name="voice_thinking">Réflexion…</string>
+    <string name="voice_tap_to_interrupt">Touchez l\'orbe pour interrompre</string>
+    <string name="voice_end_call">Raccrocher</string>
+    <string name="voice_mute">Couper le micro</string>
+    <string name="voice_unmute">Réactiver le micro</string>
+    <string name="voice_show_captions">Afficher les sous-titres</string>
+    <string name="voice_hide_captions">Masquer les sous-titres</string>
 </resources>
