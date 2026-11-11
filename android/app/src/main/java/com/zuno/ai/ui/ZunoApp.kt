@@ -226,9 +226,9 @@ private val BackStackSaver = listSaver<SnapshotStateList<ZunoRoute>, String>(
 private const val PREFS = "zuno_prefs"
 private const val KEY_MIC_ASKED = "mic_permission_asked"
 
-private const val TERMS_URL = "https://usezuno.rest/terms"
-private const val PRIVACY_URL = "https://usezuno.rest/privacy"
-private const val SUPPORT_EMAIL = "support@designcombo.dev"
+private const val TERMS_URL = "https://heyzuno.app/terms"
+private const val PRIVACY_URL = "https://heyzuno.app/privacy"
+private const val SUPPORT_EMAIL = "support@heyzuno.app"
 
 /** Why the app is signing out, so the Sign in screen can say so. */
 private enum class SignOutReason { User, Expired, Deleted }

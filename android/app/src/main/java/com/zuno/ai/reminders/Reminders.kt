@@ -97,16 +97,13 @@ object Reminders {
     }
 
     private fun arm(context: Context, reminder: Reminder) {
-        val alarms = alarmManager(context)
-        val intent = alarmIntent(context, reminder.conversationId)
-        val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
-        if (exact) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, reminder.atMillis, intent)
-        } else {
-            // Without exact-alarm access, a short window keeps "Tonight · 9:00 PM" close to 9 PM
-            // (inexact alarms can drift by most of an hour).
-            alarms.setWindow(AlarmManager.RTC_WAKEUP, reminder.atMillis, INEXACT_WINDOW_MS, intent)
-        }
+        // A short window keeps "Tonight · 9:00 PM" close to 9 PM without requiring SCHEDULE_EXACT_ALARM.
+        alarmManager(context).setWindow(
+            AlarmManager.RTC_WAKEUP,
+            reminder.atMillis,
+            INEXACT_WINDOW_MS,
+            alarmIntent(context, reminder.conversationId),
+        )
     }
 
     private fun alarmIntent(context: Context, conversationId: String): PendingIntent = PendingIntent.getBroadcast(

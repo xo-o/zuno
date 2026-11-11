@@ -27,6 +27,7 @@ export async function sendEmail(options: {
   button?: { label: string; url: string };
   footerHtml?: string;
   headers?: Record<string, string>;
+  replyTo?: string;
 }) {
   const text = [
     options.heading,
@@ -41,13 +42,14 @@ export async function sendEmail(options: {
     text,
     html: cardHtml(options),
     headers: options.headers,
+    replyTo: options.replyTo,
   });
   if (error) throw new Error(`Failed to send email: ${error.message}`);
 }
 
 function cardHtml(options: { heading: string; paragraphs: string[]; button?: { label: string; url: string }; footerHtml?: string }) {
   const paragraphs = options.paragraphs
-    .map((p) => `<tr><td style="font-size:15px;line-height:22px;color:#a1a1aa;padding-bottom:16px;">${escapeHtml(p)}</td></tr>`)
+    .map((p) => `<tr><td style="font-size:15px;line-height:22px;color:#a1a1aa;padding-bottom:16px;white-space:pre-wrap;">${escapeHtml(p)}</td></tr>`)
     .join("");
   const button = options.button
     ? `<tr><td align="center" style="padding-top:12px;"><a href="${escapeHtml(options.button.url)}" style="display:block;background:#ffffff;color:#000000;font-weight:600;font-size:15px;padding:14px 24px;border-radius:9999px;text-decoration:none;">${escapeHtml(options.button.label)}</a></td></tr>`

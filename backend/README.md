@@ -47,6 +47,8 @@ docker run -p 3000:3000 --env-file .env zuno-backend
 | Notifications | `GET` · `PATCH /api/me/notifications` | Daily reminder (+ local `reminderTime`, `timezone`), scheduled sessions, milestones, new content, weekly summary and news emails |
 | Avatar | `POST /api/me/avatar` → PUT to R2 → `POST /api/me/avatar/complete` · `DELETE /api/me/avatar` | Change photo (JPEG/PNG/WebP ≤ 5 MB) |
 | Delete Account | `DELETE /api/me` | Deletes R2 files and the user (all app data cascades), emails a confirmation |
+| Delete Account (web) | `POST /api/account/deletion/request` · `GET` · `POST /api/account/deletion/:token` | Public, for heyzuno.app. `{ email }` → always `{ ok: true }`; emails a single-use 30-minute link to `WEB_BASE_URL/delete-account/confirm?token=…` when the account exists · `{ email, counts: { chats, topics, roleplays } }` · `{ confirm: "DELETE" }` deletes like `DELETE /api/me` → `{ email }`. Rate limited per IP and email |
+| Contact | `POST /api/contact` | Public. `{ name, email, topic: "account" \| "billing" \| "voice" \| "bug" \| "other", message }` → emailed to `SUPPORT_EMAIL` with reply-to set; 5/hour per IP |
 | Devices | `POST /api/devices` · `DELETE /api/devices/:pushToken` | Register / remove this install's FCM token (`{ pushToken, platform, timezone, appLanguage }`) |
 | Recent Sessions | `GET /api/conversations/recent` | Drawer list for the current language: pinned rows first, then Free Talk threads, topics and roleplays by latest activity |
 | Topics | `GET /api/topics` · `POST /api/topics` | List · create from `{ prompt, attachmentIds?, parts? }` (Gemini builds 5 lessons, optionally from learning material) |
@@ -71,7 +73,7 @@ docker run -p 3000:3000 --env-file .env zuno-backend
 | Typing Hint | `POST /api/tutor/hint` | `{ text }` → `{ hint \| null }` |
 | LiveKit Voice Token | `POST /api/livekit/token` | `{ conversationId? }`, returns `{ token, url, room, identity }` |
 
-All `/api/*` routes except auth require `Authorization: Bearer <token>`. AI routes are rate limited per user.
+All `/api/*` routes except auth, languages, contact and web account deletion require `Authorization: Bearer <token>`. AI routes are rate limited per user.
 
 ## Environment
 
@@ -79,9 +81,11 @@ In addition to the auth, database and LiveKit variables in `.env.example`:
 
 - `GEMINI_API_KEY` (required): Google AI Studio key used for all tutor features.
 - `GEMINI_MODEL` (optional, default `gemini-3.8-flash`).
-- `PUBLIC_BASE_URL` (required in production): public origin used in share and unsubscribe links, e.g. `https://api.usezuno.rest`.
+- `PUBLIC_BASE_URL` (required in production): public origin used in share and unsubscribe links, e.g. `https://api.heyzuno.app`.
 - `FIREBASE_SERVICE_ACCOUNT` (optional): Firebase Admin service account JSON (raw or base64). Without it push notifications are skipped.
 - `REPORTS_EMAIL` (optional): receives an email for every chat report.
+- `WEB_BASE_URL` (optional, default `https://heyzuno.app`): website origin used in account-deletion confirm links.
+- `SUPPORT_EMAIL` (optional, default `support@heyzuno.app`): inbox for the website contact form.
 - Background jobs (reminders, schedules, daily reminder, weekly summary) run only with `NODE_ENV=production` (set in the Dockerfile) or `RUN_JOBS=1`, so a local dev server never claims production jobs. `DISABLE_JOBS=1` turns them off in production.
 
 Background jobs live in the `job` table and are polled every 30 s with `FOR UPDATE SKIP LOCKED`, so several instances can share the queue. Run `npm test` for the schedule recurrence tests.

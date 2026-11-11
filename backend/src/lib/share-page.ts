@@ -78,7 +78,7 @@ export function renderSharePage(options: {
       <div class="sub">${subtitle}</div>
     </header>
     ${turns || '<p class="sub">This conversation has no messages yet.</p>'}
-    <footer>Practised with <a href="https://usezuno.rest">Zuno</a>, your AI language tutor.</footer>
+    <footer>Practised with <a href="https://heyzuno.app">Zuno</a>, your AI language tutor.</footer>
   </main>
 </body>
 </html>`;

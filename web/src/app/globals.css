@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --font-brand: var(--font-brand);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-faint: var(--faint);
+  --color-elevated: var(--elevated);
+  --color-border-strong: var(--border-strong);
+  --color-danger: var(--danger);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Zuno web type ramp (Figma "Web/*" text styles). */
+@theme {
+  --text-hero: 68px;
+  --text-hero--line-height: 74px;
+  --text-hero--letter-spacing: -2.5px;
+  --text-heading: 44px;
+  --text-heading--line-height: 52px;
+  --text-heading--letter-spacing: -1.5px;
+  --text-quote: 34px;
+  --text-quote--line-height: 44px;
+  --text-quote--letter-spacing: -1px;
+  --text-title: 22px;
+  --text-title--line-height: 28px;
+  --text-title--letter-spacing: -0.4px;
+  --text-lead: 19px;
+  --text-lead--line-height: 30px;
+  --text-lead--letter-spacing: -0.1px;
+  --text-body-lg: 17px;
+  --text-body-lg--line-height: 24px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-label: 15px;
+  --text-label--line-height: 20px;
+  --text-label--letter-spacing: -0.2px;
+  --text-footnote: 12px;
+  --text-footnote--line-height: 16px;
+  --text-eyebrow: 12px;
+  --text-eyebrow--line-height: 16px;
+  --text-eyebrow--letter-spacing: 1.6px;
+}
+
+/* Zuno is dark-only: both scopes share the Foundations palette. */
+:root,
+.dark {
+  --background: #121212;
+  --foreground: rgb(255 255 255 / 0.92);
+  --card: rgb(255 255 255 / 0.04);
+  --card-foreground: rgb(255 255 255 / 0.92);
+  --popover: #171717;
+  --popover-foreground: rgb(255 255 255 / 0.92);
+  --primary: rgb(255 255 255 / 0.92);
+  --primary-foreground: #121212;
+  --secondary: rgb(255 255 255 / 0.06);
+  --secondary-foreground: rgb(255 255 255 / 0.92);
+  --muted: rgb(255 255 255 / 0.06);
+  --muted-foreground: rgb(255 255 255 / 0.64);
+  --accent: rgb(255 255 255 / 0.08);
+  --accent-foreground: rgb(255 255 255 / 0.92);
+  --destructive: #ff8b8b;
+  --border: rgb(255 255 255 / 0.06);
+  --input: rgb(255 255 255 / 0.08);
+  --ring: rgb(255 255 255 / 0.44);
+  --faint: rgb(255 255 255 / 0.44);
+  --elevated: #171717;
+  --border-strong: rgb(255 255 255 / 0.14);
+  --danger: #d15555;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.75rem;
+  --sidebar: #171717;
+  --sidebar-foreground: rgb(255 255 255 / 0.92);
+  --sidebar-primary: rgb(255 255 255 / 0.92);
+  --sidebar-primary-foreground: #121212;
+  --sidebar-accent: rgb(255 255 255 / 0.08);
+  --sidebar-accent-foreground: rgb(255 255 255 / 0.92);
+  --sidebar-border: rgb(255 255 255 / 0.06);
+  --sidebar-ring: rgb(255 255 255 / 0.44);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans scroll-smooth;
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

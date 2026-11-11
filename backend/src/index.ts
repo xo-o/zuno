@@ -24,7 +24,9 @@ import { completeFlow, consumeFlow, getFlow } from "./lib/magic-link-flows.js";
 import { renderVerifyLandingPage, renderVerifyResultPage } from "./lib/verify-page.js";
 import { getProfile } from "./lib/profile.js";
 import { voiceInstructions } from "./lib/tutor.js";
+import { accountDeletionRoutes } from "./routes/account.js";
 import { attachmentRoutes } from "./routes/attachments.js";
+import { contactRoutes } from "./routes/contact.js";
 import { conversationRoutes, messageRoutes, reminderRoutes, tutorRoutes } from "./routes/conversations.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { profileRoutes } from "./routes/profile.js";
@@ -53,7 +55,7 @@ app.use(
   "*",
   cors({
     // The app sends bearer tokens and needs no CORS; only Zuno's own web origins may call from a browser.
-    origin: (process.env.CORS_ORIGINS ?? "https://usezuno.rest,https://www.usezuno.rest")
+    origin: (process.env.CORS_ORIGINS ?? "https://heyzuno.app")
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
@@ -103,6 +105,10 @@ app.route("/api/attachments", attachmentRoutes);
 app.route("/api/devices", deviceRoutes);
 app.route("/api/reminders", reminderRoutes);
 app.route("/api/schedules", scheduleRoutes);
+
+// Public endpoints for the website (heyzuno.app): account deletion by email link and the contact form.
+app.route("/api/account/deletion", accountDeletionRoutes);
+app.route("/api/contact", contactRoutes);
 
 /** Learning languages (Settings · Learning language). Public so the app can cache it before sign-in. */
 app.get("/api/languages", (c) => {

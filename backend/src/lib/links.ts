@@ -5,7 +5,7 @@ import { HTTPException } from "hono/http-exception";
 const MAX_PAGE_BYTES = 3 * 1024 * 1024;
 const MAX_REDIRECTS = 4;
 const FETCH_TIMEOUT_MS = 12_000;
-const USER_AGENT = "Mozilla/5.0 (compatible; ZunoBot/1.0; +https://usezuno.rest)";
+const USER_AGENT = "Mozilla/5.0 (compatible; ZunoBot/1.0; +https://heyzuno.app)";
 
 /** Validates a pasted link; only public http(s) URLs are accepted. */
 export function parseLink(raw: string): URL {

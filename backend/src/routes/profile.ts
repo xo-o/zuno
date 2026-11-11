@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { attachment } from "../db/app-schema.js";
 import { account, user } from "../db/auth-schema.js";
 import { db } from "../db/index.js";
+import { deleteAccount, R2_PREFIX } from "../lib/account.js";
 import { t } from "../lib/copy.js";
 import { sendEmail } from "../lib/email.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
@@ -70,9 +70,6 @@ const avatarSchema = z.object({
   sizeBytes: z.number().int().positive().max(AVATAR_MAX_BYTES, "Photos can be up to 5 MB"),
 });
 const avatarCompleteSchema = z.object({ key: z.string().min(1).max(200) });
-
-/** Avatars uploaded in the app live in the private bucket ("r2:<key>") and are served with signed URLs. */
-const R2_PREFIX = "r2:";
 
 async function imageUrl(image: string | null | undefined) {
   if (!image) return null;
@@ -166,16 +163,9 @@ export const profileRoutes = new Hono<AuthEnv>()
    * and linked account cascades from it — and confirms by email.
    */
   .delete("/", deleteLimit, async (c) => {
-    const current = c.get("user");
-    const [row] = await db.select().from(user).where(eq(user.id, current.id));
-    if (!row) return c.body(null, 204);
-    const profile = await getProfile(current.id);
-    const files = await db.select({ key: attachment.storageKey }).from(attachment).where(eq(attachment.userId, current.id));
-    const keys = files.map((f) => f.key).filter(Boolean);
-    if (row.image?.startsWith(R2_PREFIX)) keys.push(row.image.slice(R2_PREFIX.length));
-
-    await db.delete(user).where(eq(user.id, current.id));
-    await deleteObjects(keys);
+    const deleted = await deleteAccount(c.get("user").id);
+    if (!deleted) return c.body(null, 204);
+    const { user: row, profile } = deleted;
 
     sendEmail({
       to: row.email,
