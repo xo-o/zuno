@@ -12,9 +12,9 @@ type LanguageInfo = {
 const STANDARD: Accent[] = [{ id: "standard", label: "Standard" }];
 
 /**
- * Languages a learner can study (Settings · Learning language). Only languages the whole voice pipeline
- * supports are listed — Deepgram Nova-3 speech-to-text and Breeze TTS 2 multilingual — so Swahili (no
- * Nova-3) and Cantonese (no Breeze voice) are left out. The first accent is the default.
+ * Languages a learner can study (Settings · Learning language). Only languages supported by Zuno's
+ * speech pipeline — Deepgram Nova-3 speech-to-text and Cartesia Sonic-3 multilingual TTS — are listed.
+ * The first accent is the default.
  */
 export const LANGUAGES = {
   ar: {

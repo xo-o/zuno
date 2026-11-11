@@ -77,6 +77,52 @@ export const topic = pgTable(
   (table) => [index("topic_userId_idx").on(table.userId)],
 );
 
+export type LessonCurriculum = {
+  targetPhrases: Array<{
+    id: string;
+    setupNative?: string;
+    phrase: string;
+    translation: string;
+    focusWord: string;
+    syllables: string;
+    pronunciationCue: string;
+    chunks: string[];
+  }>;
+  buildingBlocks: Array<{
+    promptNative: string;
+    newWord: string;
+    meaning: string;
+    stemHint: string;
+    expectedTarget: string;
+  }>;
+  recallPrompts: Array<{
+    situationNative: string;
+    firstWordHint: string;
+    expectedTargets: string[];
+  }>;
+  roleplay: {
+    aiRole: string;
+    setting: string;
+    goals: Array<{
+      id: string;
+      label: string;
+      description: string;
+    }>;
+  };
+};
+
+export type CoachNoteItem = {
+  category: string;
+  correction: string;
+  ttsSampleText: string;
+  kind: "grammar" | "pronunciation";
+};
+
+export type PhraseResultItem = {
+  phrase: string;
+  status: "mastered" | "practice";
+};
+
 export const topicLesson = pgTable(
   "topic_lesson",
   {
@@ -88,6 +134,7 @@ export const topicLesson = pgTable(
     title: text("title").notNull(),
     translation: text("translation").notNull(),
     objective: text("objective").notNull(),
+    curriculum: jsonb("curriculum").$type<LessonCurriculum>(),
     completedAt: timestamp("completed_at"),
   },
   (table) => [uniqueIndex("topic_lesson_topic_position_idx").on(table.topicId, table.position)],
@@ -375,8 +422,40 @@ export const topicRelations = relations(topic, ({ many }) => ({
   lessons: many(topicLesson),
 }));
 
-export const topicLessonRelations = relations(topicLesson, ({ one }) => ({
+export const topicLessonRelations = relations(topicLesson, ({ one, many }) => ({
   topic: one(topic, { fields: [topicLesson.topicId], references: [topic.id] }),
+  evaluations: many(lessonEvaluation),
+}));
+
+export const lessonEvaluation = pgTable(
+  "lesson_evaluation",
+  {
+    id: text("id").primaryKey(),
+    lessonId: text("lesson_id")
+      .notNull()
+      .references(() => topicLesson.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id").references(() => conversation.id, { onDelete: "set null" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    durationSec: integer("duration_sec").notNull(),
+    pronunciationScore: integer("pronunciation_score").notNull(),
+    goalsCompleted: integer("goals_completed").notNull(),
+    goalsTotal: integer("goals_total").notNull(),
+    fluencyLabel: text("fluency_label", { enum: ["Developing", "Steady", "Natural", "Fluent"] }).notNull(),
+    coachNotes: jsonb("coach_notes").$type<CoachNoteItem[]>().default([]).notNull(),
+    phraseResults: jsonb("phrase_results").$type<PhraseResultItem[]>().default([]).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("lesson_evaluation_lessonId_idx").on(table.lessonId, table.createdAt),
+    index("lesson_evaluation_userId_idx").on(table.userId, table.createdAt),
+  ],
+);
+
+export const lessonEvaluationRelations = relations(lessonEvaluation, ({ one }) => ({
+  lesson: one(topicLesson, { fields: [lessonEvaluation.lessonId], references: [topicLesson.id] }),
+  conversation: one(conversation, { fields: [lessonEvaluation.conversationId], references: [conversation.id] }),
 }));
 
 export const conversationRelations = relations(conversation, ({ many, one }) => ({

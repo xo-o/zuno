@@ -11,7 +11,6 @@ from google.genai import types
 # Python builds on macOS often ship without a CA bundle, which breaks TLS to LiveKit Cloud.
 os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
-from google.cloud import texttospeech
 from livekit import rtc
 from livekit.agents import (
     Agent,
@@ -21,11 +20,17 @@ from livekit.agents import (
     cli,
     room_io,
 )
-import livekit.plugins.cartesia as cartesia
 import livekit.plugins.deepgram as dg
 import livekit.plugins.google as gg
 import livekit.plugins.silero as silero
-from breeze_tts import BreezeTTS, create_breeze_stream_adapter
+
+from lesson_flow import LessonAgent, LessonOrchestrator
+from voices import (
+    DEFAULT_CARTESIA_VOICE,
+    create_cartesia_tts,
+    resolve_cartesia_voice,
+    update_cartesia_tts,
+)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 logging.basicConfig(level=logging.INFO)
@@ -34,99 +39,15 @@ logger = logging.getLogger("voice-agent")
 server = AgentServer()
 
 INSTRUCTIONS = (
-    "You are Nova, an ultra-responsive, friendly, and natural conversational voice AI. "
-    "You are speaking live with the user over a real-time voice call. "
+    "You are Zuno, an ultra-responsive, warm, and natural conversational language tutor. "
+    "You are speaking live with the learner over a real-time voice call. "
     "CRITICAL FORMATTING RULES: "
-    "- Generate ONLY plain conversational speech in the language the user speaks. "
+    "- Generate ONLY plain conversational speech in the target language unless asked otherwise. "
     "- Keep responses short, concise, and natural: 1 to 2 sentences typically (under 120 characters). "
     "- NEVER use markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists. "
     "- NEVER use brackets, parentheticals, or stage directions like [pause], [laughs], or (sighs). "
     "- Respond directly, warmly, and immediately."
 )
-
-GCP_LANGUAGE_MAP = {
-    "en": "en-US",
-    "es": "es-ES",
-    "fr": "fr-FR",
-    "de": "de-DE",
-    "it": "it-IT",
-    "pt": "pt-BR",
-    "ja": "ja-JP",
-    "ko": "ko-KR",
-    "zh": "cmn-CN",
-    "hi": "hi-IN",
-    "ar": "ar-XA",
-    "ru": "ru-RU",
-    "nl": "nl-NL",
-    "sv": "sv-SE",
-    "tr": "tr-TR",
-}
-
-LANGUAGE_CONFIRMATIONS = {
-    "es": "¡Listo! Voz cambiada a español.",
-    "fr": "Bonjour! Voix changée en français.",
-    "de": "Hallo! Stimme auf Deutsch umgestellt.",
-    "it": "Ciao! Voce cambiata in italiano.",
-    "pt": "Olá! Voz alterada para português.",
-    "ja": "こんにちは！音声を日本語に切り替えました。",
-    "ko": "안녕하세요! 음성을 한국어로 변경했습니다.",
-    "zh": "你好！已切换为中文语音。",
-    "hi": "नमस्ते! आवाज हिंदी में बदल दी गई है।",
-    "ar": "مرحباً! تم تغيير الصوت.",
-    "ru": "Здравствуйте! Голос успешно переключен.",
-    "nl": "Hallo! Stem gewijzigd in het Nederlands.",
-    "sv": "Hej! Rösten ändrad till svenska.",
-    "tr": "Merhaba! Ses Türkçe olarak değiştirildi.",
-}
-
-
-def create_tts(provider: str, voice_id: str, language: str = "en"):
-    provider_clean = provider.lower()
-    if provider_clean in ("breeze", "breezeblue"):
-        # Breeze TTS 2 (Real-time with Voice Direction & natural pacing)
-        return create_breeze_stream_adapter(
-            api_key=os.environ.get("BREEZE_API_KEY"),
-            voice_id=voice_id,
-            model="breeze-tts-2",
-            instructions="Natural, warm, engaging, and friendly conversational delivery with natural pauses.",
-            language_code=language,
-            guidance_scale=3.0,
-            speed=1.0,
-        )
-    elif provider_clean == "cartesia":
-        word_timestamps = language in ("en", "de", "es", "fr")
-        return cartesia.TTS(
-            api_key=os.environ.get("CARTESIA_API_KEY"),
-            model="sonic-3",
-            voice=voice_id,
-            language=language,
-            word_timestamps=word_timestamps,
-        )
-    elif provider_clean in ("gcp", "google"):
-        lang_code = GCP_LANGUAGE_MAP.get(language, "en-US")
-        creds_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-        tts_kwargs = {
-            "voice_name": voice_id,
-            "model_name": "gemini-2.5-flash-tts",
-            "language": lang_code,
-            "audio_encoding": texttospeech.AudioEncoding.LINEAR16,
-            "sample_rate": 24000,
-        }
-        if creds_file and os.path.exists(creds_file):
-            tts_kwargs["credentials_file"] = creds_file
-        return gg.TTS(**tts_kwargs)
-    else:
-        # Deepgram: Use Aura-2 for aura models, Flux v2 otherwise
-        if str(voice_id).startswith("aura"):
-            return dg.TTS(
-                model=voice_id,
-                api_key=os.environ.get("DEEPGRAM_API_KEY"),
-            )
-        return dg.TTSv2(
-            model=voice_id,
-            api_key=os.environ.get("DEEPGRAM_API_KEY"),
-        )
-
 
 # Deepgram Nova-3 language codes for accents that have their own model variant.
 STT_ACCENT_CODES = {
@@ -141,13 +62,6 @@ STT_ACCENT_CODES = {
     ("zh", "taiwan"): "zh-TW",
 }
 
-# Preferences · Tutor voice → Breeze voice (used when the tutor speaks with Breeze, the default).
-BREEZE_TUTOR_VOICES = {
-    "warm": "voc_9f5gtax4x5ac",  # Miles
-    "calm": "voc_bd9xj6jwrsr5",  # Asher
-    "energetic": "voc_8a4jbpgm3a3e",  # Chloe
-}
-
 
 def create_stt(language: str = "en", accent: str | None = None):
     if language == "en" and accent in (None, "us"):
@@ -158,15 +72,13 @@ def create_stt(language: str = "en", accent: str | None = None):
             eot_timeout_ms=3000,
             api_key=os.environ.get("DEEPGRAM_API_KEY"),
         )
-    else:
-        # Native language recognition with fast 25ms endpointing
-        return dg.STT(
-            model="nova-3",
-            language=STT_ACCENT_CODES.get((language, accent or ""), language),
-            endpointing_ms=25,
-            interim_results=True,
-            api_key=os.environ.get("DEEPGRAM_API_KEY"),
-        )
+    return dg.STT(
+        model="nova-3",
+        language=STT_ACCENT_CODES.get((language, accent or ""), language),
+        endpointing_ms=25,
+        interim_results=True,
+        api_key=os.environ.get("DEEPGRAM_API_KEY"),
+    )
 
 
 class ConversationalAgent(Agent):
@@ -185,7 +97,6 @@ class ConversationalAgent(Agent):
         self.resume = resume
         self.opening = opening
         self.silent_enter = silent_enter
-        # The backend sends tutor instructions (Free Talk / roleplay / lesson) in the participant metadata.
         instructions = f"{tutor_instructions}\n\n{INSTRUCTIONS}" if tutor_instructions else INSTRUCTIONS
         super().__init__(instructions=instructions, tts=tts, stt=stt)
 
@@ -193,13 +104,9 @@ class ConversationalAgent(Agent):
         if self.silent_enter:
             return
         if self.opening:
-            # The learner's first turn was answered in the app; speak that reply to open the call.
-            # It is already in the instructions transcript and in the app's history, so keep it out of the chat context.
             self.session.say(self.opening, add_to_chat_ctx=False)
             return
         if self.resume:
-            # Voice was switched on mid-conversation: pick up where the chat left off so the
-            # learner hears that the call is live.
             self.session.generate_reply(
                 instructions=(
                     "The learner just switched to a live voice call in the middle of this conversation. "
@@ -211,11 +118,6 @@ class ConversationalAgent(Agent):
         if self.tutor_instructions:
             self.session.generate_reply(
                 instructions="Greet the learner in one short sentence and invite them to start, following your role."
-            )
-        elif self.language in LANGUAGE_CONFIRMATIONS:
-            greeting = LANGUAGE_CONFIRMATIONS[self.language]
-            self.session.generate_reply(
-                instructions=f"Say: '{greeting}' and ask in 1 short sentence how you can assist."
             )
         else:
             self.session.generate_reply(
@@ -230,42 +132,29 @@ async def entrypoint(ctx: JobContext) -> None:
 
     logger.info("Waiting for participant...")
     participant = await ctx.wait_for_participant()
-    logger.info(f"Participant joined: {participant.identity}, metadata: {participant.metadata}")
+    logger.info(f"Participant joined: {participant.identity}")
 
-    current_provider = "breeze"
-    current_voice = "voc_9f5gtax4x5ac"
-    current_language = "en"
-    current_accent = None
-    hands_free = True
-    tutor_instructions = None
-    resume = False
-    opening = None
-
-    # Inspect participant metadata if preset at connection time
+    meta: dict = {}
     if participant.metadata:
         try:
             meta = json.loads(participant.metadata)
-            if "provider" in meta:
-                current_provider = meta["provider"]
-            if "voice" in meta:
-                current_voice = meta["voice"]
-            if "language" in meta:
-                current_language = meta["language"]
-            current_accent = meta.get("accent") or None
-            hands_free = bool(meta.get("handsFree", True))
-            tutor_voice = meta.get("tutorVoice")
-            if current_provider in ("breeze", "breezeblue") and tutor_voice in BREEZE_TUTOR_VOICES:
-                current_voice = BREEZE_TUTOR_VOICES[tutor_voice]
-            tutor_instructions = meta.get("instructions") or None
-            resume = bool(meta.get("resume", False))
-            opening = meta.get("opening") or None
-            logger.info(
-                f"Initialized from participant metadata: provider={current_provider}, voice={current_voice}, lang={current_language}"
-            )
         except Exception as e:
             logger.warning(f"Error parsing metadata: {e}")
 
-    # Fast VAD for instant barge-in cut-off
+    mode = str(meta.get("mode") or ("lesson" if meta.get("curriculum") else "conversation"))
+    tutor_voice = meta.get("tutorVoice")
+    current_voice = resolve_cartesia_voice(meta.get("voice"), tutor_voice)
+    current_language = str(meta.get("targetLanguage") or meta.get("language") or "en")
+    current_accent = meta.get("accent") or None
+    hands_free = bool(meta.get("handsFree", True))
+    tutor_instructions = meta.get("instructions") or None
+    resume = bool(meta.get("resume", False))
+    opening = meta.get("opening") or None
+
+    logger.info(
+        f"Initialized session: mode={mode}, provider=cartesia, voice={current_voice}, lang={current_language}"
+    )
+
     vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
     stt = create_stt(current_language, current_accent)
     llm = gg.LLM(
@@ -273,27 +162,11 @@ async def entrypoint(ctx: JobContext) -> None:
         temperature=0.4,
         http_options=types.HttpOptions(api_version="v1beta"),
     )
-    tts = create_tts(current_provider, current_voice, current_language)
-
-    agent = ConversationalAgent(
-        tts=tts,
-        stt=stt,
+    tts = create_cartesia_tts(
+        voice_id=current_voice,
+        tutor_voice=tutor_voice,
         language=current_language,
-        tutor_instructions=tutor_instructions,
-        resume=resume,
-        opening=opening,
     )
-
-    # Hands-free off gives the learner more thinking time before Zuno takes its turn.
-    session = AgentSession(
-        stt=stt,
-        vad=vad,
-        llm=llm,
-        tts=tts,
-        min_endpointing_delay=0.5 if hands_free else 1.6,
-    )
-
-    last_user_speech_end = 0.0
 
     async def broadcast_event(data: dict) -> None:
         try:
@@ -301,6 +174,43 @@ async def entrypoint(ctx: JobContext) -> None:
             await ctx.room.local_participant.publish_data(payload, reliable=True)
         except Exception as e:
             logger.debug(f"Failed to publish data event: {e}")
+
+    lesson_orchestrator: LessonOrchestrator | None = None
+    if mode == "lesson":
+        lesson_orchestrator = LessonOrchestrator(
+            meta=meta,
+            tts=tts,
+            broadcast=broadcast_event,
+        )
+        agent: Agent = LessonAgent(
+            orchestrator=lesson_orchestrator,
+            tts=tts,
+            stt=stt,
+        )
+        initial_endpointing = 0.6
+    else:
+        agent = ConversationalAgent(
+            tts=tts,
+            stt=stt,
+            language=current_language,
+            tutor_instructions=tutor_instructions,
+            resume=resume,
+            opening=opening,
+        )
+        initial_endpointing = 0.5 if hands_free else 1.6
+
+    session = AgentSession(
+        stt=stt,
+        vad=vad,
+        llm=llm,
+        tts=tts,
+        min_endpointing_delay=initial_endpointing,
+    )
+
+    if lesson_orchestrator is not None:
+        lesson_orchestrator.session = session
+
+    last_user_speech_end = 0.0
 
     @session.on("agent_state_changed")
     def _on_state_changed(ev) -> None:
@@ -315,7 +225,6 @@ async def entrypoint(ctx: JobContext) -> None:
             })
         )
 
-        # Broadcast round-trip latency when agent starts speaking after user input
         if "speaking" in new_state and last_user_speech_end > 0:
             total_latency_ms = (time.time() - last_user_speech_end) * 1000
             last_user_speech_end = 0.0
@@ -324,7 +233,7 @@ async def entrypoint(ctx: JobContext) -> None:
                     "type": "metrics",
                     "total_ms": round(total_latency_ms),
                     "voice": current_voice,
-                    "provider": current_provider,
+                    "provider": "cartesia",
                 })
             )
 
@@ -351,78 +260,51 @@ async def entrypoint(ctx: JobContext) -> None:
             content = getattr(item, "content", "")
             if isinstance(content, list):
                 content = " ".join(str(part) for part in content)
-            logger.info(f"Agent reply: {content}")
+            text = str(content).strip()
+            if not text:
+                return
+            logger.info(f"Agent reply: {text}")
+            if lesson_orchestrator is not None and lesson_orchestrator.stage == "roleplay":
+                lesson_orchestrator.last_tutor_line = text
             asyncio.create_task(
                 broadcast_event({
                     "type": "transcript",
                     "speaker": "agent",
-                    "text": str(content),
+                    "text": text,
                     "is_final": True,
                 })
             )
 
-    # Listen for voice changes from client over WebRTC Data Channel
     @ctx.room.on("data_received")
     def _on_client_data(packet: rtc.DataPacket) -> None:
-        nonlocal current_provider, current_voice, current_language
+        nonlocal current_language
         try:
             text = packet.data.decode("utf-8")
             data = json.loads(text)
-            if data.get("type") == "change_voice":
-                provider = data.get("provider", "deepgram")
-                voice_id = data.get("voice", "flux-alexis-en")
-                lang = data.get("language", "en")
-                logger.info(f"Dynamic voice switch requested: provider={provider}, voice={voice_id}, lang={lang}")
+            msg_type = data.get("type")
 
-                current_provider = provider
-                current_voice = voice_id
-                current_language = lang
+            if msg_type == "interrupt":
+                try:
+                    session.interrupt()
+                except Exception:
+                    pass
+                return
 
-                new_tts = create_tts(current_provider, current_voice, current_language)
-                new_stt = create_stt(current_language, current_accent if lang == current_language else None)
-
-                # 1. Update session default references
-                session._tts = new_tts
-                session._stt = new_stt
-
-                # 2. Update active activity models if activity is alive
-                if getattr(session, "_activity", None) is not None:
-                    session._activity._update_models(new_tts=new_tts, new_stt=new_stt)
-
-                # 3. Update active agent
-                session.update_agent(
-                    ConversationalAgent(
-                        tts=new_tts,
-                        stt=new_stt,
-                        language=current_language,
-                        tutor_instructions=tutor_instructions,
-                        resume=True,
-                        silent_enter=True,
-                    )
-                )
-
+            if msg_type == "lesson_action" and lesson_orchestrator is not None:
+                action = str(data.get("action") or "")
+                payload = data.get("payload")
                 asyncio.create_task(
-                    broadcast_event({
-                        "type": "voice_changed",
-                        "provider": current_provider,
-                        "voice": current_voice,
-                        "language": current_language,
-                    })
-                )
-
-                # Instant spoken confirmation in the newly switched voice & language
-                if current_language in LANGUAGE_CONFIRMATIONS:
-                    confirm_text = LANGUAGE_CONFIRMATIONS[current_language]
-                else:
-                    prov_label = (
-                        "Breeze Blue" if current_provider in ("breeze", "breezeblue")
-                        else "Google Cloud" if current_provider in ("gcp", "google")
-                        else "Cartesia" if current_provider == "cartesia"
-                        else "Deepgram"
+                    lesson_orchestrator.handle_client_action(
+                        action=action,
+                        payload=str(payload) if payload is not None else None,
                     )
-                    confirm_text = f"Switched to {prov_label}."
+                )
+                return
 
-                asyncio.create_task(session.say(confirm_text))
+            if msg_type == "change_language":
+                lang = str(data.get("language") or current_language)
+                current_language = lang
+                update_cartesia_tts(tts, language=current_language, speed=1.0)
         except Exception as e:
             logger.warning(f"Error handling client data packet: {e}", exc_info=True)
 

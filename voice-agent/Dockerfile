@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy agent sources
-COPY agent.py breeze_tts.py token_server.py ./
+COPY agent.py voices.py lesson_flow.py token_server.py ./
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

@@ -121,11 +121,44 @@ class ZunoApi(
     suspend fun resetTopic(id: String): TopicDetail =
         send("POST", "/topics/$id/reset").getJSONObject("topic").toTopicDetail()
 
-    suspend fun startLesson(topicId: String, lessonId: String): ConversationThread =
-        send("POST", "/topics/$topicId/lessons/$lessonId/start").toThread()
+    suspend fun startLessonSession(lessonId: String): LessonSessionTicket =
+        send("POST", "/lessons/$lessonId/session").toLessonSessionTicket()
 
-    suspend fun completeLesson(topicId: String, lessonId: String): TopicDetail =
-        send("POST", "/topics/$topicId/lessons/$lessonId/complete").getJSONObject("topic").toTopicDetail()
+    suspend fun completeLessonEvaluation(
+        lessonId: String,
+        conversationId: String?,
+        evaluation: LessonEvaluation,
+    ): CompleteLessonResult {
+        val json = send("POST", "/lessons/$lessonId/complete", evaluation.toRequestBody(conversationId))
+        val nextId = if (json.isNull("nextLessonId")) null else json.optString("nextLessonId").takeIf { it.isNotBlank() }
+        val savedEval = json.getJSONObject("evaluation").toLessonEvaluation(lessonId)
+        val topicDetail = json.optJSONObject("topic")?.toTopicDetail()
+        return CompleteLessonResult(savedEval, topicDetail, nextId)
+    }
+
+    suspend fun lessonEvaluation(lessonId: String): LessonEvaluation {
+        val json = get("/lessons/$lessonId/evaluation")
+        return json.getJSONObject("evaluation").toLessonEvaluation(lessonId)
+    }
+
+    suspend fun ttsPreview(text: String, language: String? = null, slow: Boolean = false): ByteArray =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject().put("text", text).put("slow", slow)
+            language?.takeIf { it.isNotBlank() }?.let { body.put("language", it) }
+            val req = request("/tts/preview").post(body.toString().toRequestBody(JSON)).build()
+            val response = try {
+                client.newCall(req).execute()
+            } catch (_: IOException) {
+                throw ApiException("Can't reach Zuno. Check your connection and try again.")
+            }
+            response.use {
+                when {
+                    it.code == 401 -> throw ApiException("Your session has expired. Please sign in again.", unauthorized = true)
+                    !it.isSuccessful -> throw ApiException("Voice preview unavailable (${it.code}).")
+                    else -> it.body?.bytes() ?: ByteArray(0)
+                }
+            }
+        }
 
     // Roleplays
 

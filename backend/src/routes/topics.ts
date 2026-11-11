@@ -3,7 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { conversation, topic, topicLesson } from "../db/app-schema.js";
+import { conversation, lessonEvaluation, topic, topicLesson } from "../db/app-schema.js";
 import { db } from "../db/index.js";
 import {
   bindMaterial,
@@ -23,7 +23,7 @@ import {
   serializeTopicDetail,
   serializeTopicSummary,
 } from "../lib/serializers.js";
-import { analyzeMaterial, generateTopic } from "../lib/tutor.js";
+import { analyzeMaterial, generateLessonCurriculum, generateTopic } from "../lib/tutor.js";
 
 const attachmentIds = z.array(z.string().min(1).max(64)).max(MAX_TOPIC_MATERIAL);
 
@@ -79,6 +79,7 @@ export const topicRoutes = new Hono<AuthEnv>()
     const generated = await generateTopic(prompt, profile, notes ? { notes, focus: parts } : undefined);
 
     const topicId = randomUUID();
+    const trimmedMaterial = notes ? materialNotes(material, 12_000) : null;
     const row = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(topic)
@@ -89,7 +90,7 @@ export const topicRoutes = new Hono<AuthEnv>()
           title: generated.title,
           translation: generated.translation,
           language: profile.targetLanguage,
-          material: notes ? materialNotes(material, 12_000) : null,
+          material: trimmedMaterial,
         })
         .returning();
       const lessons = await tx
@@ -108,6 +109,30 @@ export const topicRoutes = new Hono<AuthEnv>()
       return { ...created, lessons };
     });
     await bindMaterial(topicId, material);
+
+    // Pre-generate structured voice curricula in the background so Lesson 1..5 launch instantaneously.
+    void (async () => {
+      const ordered = [...row.lessons].sort((a, b) => a.position - b.position);
+      for (const lesson of ordered) {
+        try {
+          const curriculum = await generateLessonCurriculum(
+            {
+              topicTitle: row.title,
+              lessonTitle: lesson.title,
+              lessonTranslation: lesson.translation,
+              objective: lesson.objective,
+              position: lesson.position,
+              material: trimmedMaterial,
+            },
+            profile,
+          );
+          await db.update(topicLesson).set({ curriculum }).where(eq(topicLesson.id, lesson.id));
+        } catch (err) {
+          console.warn(`Background curriculum pre-warm skipped for lesson ${lesson.id}:`, err);
+        }
+      }
+    })();
+
     return c.json({ topic: serializeTopicDetail(row, row.lessons) }, 201);
   })
   .get("/:id", async (c) => {
@@ -125,8 +150,14 @@ export const topicRoutes = new Hono<AuthEnv>()
   .post("/:id/reset", async (c) => {
     const row = await loadTopic(c.get("user").id, c.req.param("id"));
     const removeFiles = await collectConversationFiles(await conversationIdsWhere(eq(conversation.topicId, row.id)));
+    const lessonIds = row.lessons.map((l) => l.id);
     await db.transaction(async (tx) => {
       await tx.update(topicLesson).set({ completedAt: null }).where(eq(topicLesson.topicId, row.id));
+      if (lessonIds.length > 0) {
+        for (const lid of lessonIds) {
+          await tx.delete(lessonEvaluation).where(eq(lessonEvaluation.lessonId, lid));
+        }
+      }
       await tx.delete(conversation).where(eq(conversation.topicId, row.id));
     });
     await removeFiles();

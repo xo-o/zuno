@@ -1,0 +1,88 @@
+import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
+import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
+import { getProfile } from "../lib/profile.js";
+import { cartesiaLanguage, cartesiaVoiceFor } from "../lib/voices.js";
+
+const previewSchema = z.object({
+  text: z.string().trim().min(1).max(600),
+  language: z.string().trim().max(16).optional(),
+  slow: z.boolean().optional(),
+});
+
+const ttsLimit = rateLimit({ windowMs: 60_000, max: 60 });
+
+async function fetchCartesiaWav(options: {
+  apiKey: string;
+  voiceId: string;
+  text: string;
+  language?: string;
+  speed: number;
+}) {
+  const payload: Record<string, unknown> = {
+    model_id: "sonic-3",
+    transcript: options.text,
+    voice: { mode: "id", id: options.voiceId },
+    output_format: {
+      container: "wav",
+      encoding: "pcm_s16le",
+      sample_rate: 24000,
+    },
+    generation_config: { speed: options.speed },
+  };
+  if (options.language) payload.language = options.language;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch("https://api.cartesia.ai/tts/bytes", {
+      method: "POST",
+      headers: {
+        "X-API-Key": options.apiKey,
+        "Cartesia-Version": "2025-04-16",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      return new Uint8Array(await res.arrayBuffer());
+    }
+    if (res.status === 429 && attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
+      continue;
+    }
+    const errText = await res.text().catch(() => "");
+    console.error(`Cartesia TTS preview failed (${res.status}):`, errText);
+    throw new HTTPException(502, { message: "Voice preview unavailable right now" });
+  }
+  throw new HTTPException(502, { message: "Voice preview unavailable right now" });
+}
+
+export const ttsRoutes = new Hono<AuthEnv>()
+  .use(requireAuth)
+  .post("/preview", ttsLimit, async (c) => {
+    const apiKey = process.env.CARTESIA_API_KEY;
+    if (!apiKey) {
+      throw new HTTPException(500, { message: "Cartesia TTS is not configured" });
+    }
+    const userId = c.get("user").id;
+    const body = await parseBody(c, previewSchema);
+    const profile = await getProfile(userId);
+    const voiceId = cartesiaVoiceFor(profile.tutorVoice);
+    const language = cartesiaLanguage(body.language ?? profile.targetLanguage);
+    const wav = await fetchCartesiaWav({
+      apiKey,
+      voiceId,
+      text: body.text,
+      language,
+      speed: body.slow ? 0.75 : 1.0,
+    });
+
+    return new Response(wav, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/wav",
+        "Content-Length": String(wav.byteLength),
+        "Cache-Control": "private, max-age=86400",
+      },
+    });
+  });

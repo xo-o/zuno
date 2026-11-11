@@ -15,7 +15,6 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.speech.tts.TextToSpeech
 import android.text.format.DateFormat
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
@@ -77,9 +76,9 @@ import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.Message
 import com.zuno.ai.data.RecentKind
 import com.zuno.ai.data.Schedule
+import com.zuno.ai.data.rememberCartesiaAudioPlayer
 import com.zuno.ai.model.AgentState
 import com.zuno.ai.model.Speaker
-import com.zuno.ai.model.VoiceCatalog
 import com.zuno.ai.push.DeepLink
 import com.zuno.ai.push.Push
 import com.zuno.ai.reminders.Reminder
@@ -104,6 +103,7 @@ import com.zuno.ai.ui.screens.ChatScreen
 import com.zuno.ai.ui.screens.DrawerDestination
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
+import com.zuno.ai.ui.screens.LessonEvaluationScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.VoiceModeScreen
 import com.zuno.ai.ui.screens.NewRoleplayScreen
@@ -160,6 +160,16 @@ sealed interface ZunoRoute {
     data class Chat(val conversationId: String) : ZunoRoute
     /** Live voice call for a conversation (voice mode). */
     data class Voice(val conversationId: String) : ZunoRoute
+    /** 03a–03f interactive 5-stage voice lesson. */
+    data class VoiceLesson(
+        val topicId: String,
+        val lessonId: String,
+        val conversationId: String,
+        val position: Int,
+        val totalLessons: Int,
+    ) : ZunoRoute
+    /** 04 · Lesson complete — Evaluation. */
+    data class LessonEvaluation(val topicId: String, val lessonId: String) : ZunoRoute
     data object Settings : ZunoRoute
     data object SettingsPreferences : ZunoRoute
     data object SettingsAppLanguage : ZunoRoute
@@ -186,6 +196,8 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.NewRoleplay -> "new-roleplay"
     is ZunoRoute.Chat -> "chat:$conversationId"
     is ZunoRoute.Voice -> "voice:$conversationId"
+    is ZunoRoute.VoiceLesson -> "voice-lesson:$topicId:$lessonId:$conversationId:$position:$totalLessons"
+    is ZunoRoute.LessonEvaluation -> "lesson-eval:$topicId:$lessonId"
     ZunoRoute.Settings -> "settings"
     ZunoRoute.SettingsPreferences -> "settings:preferences"
     ZunoRoute.SettingsAppLanguage -> "settings:app-language"
@@ -207,6 +219,24 @@ private fun decodeRoute(value: String): ZunoRoute = when {
     value == "roleplays" -> ZunoRoute.Roleplays
     value == "new-roleplay" -> ZunoRoute.NewRoleplay
     value.startsWith("chat:") -> ZunoRoute.Chat(value.removePrefix("chat:"))
+    value.startsWith("voice-lesson:") -> {
+        val parts = value.removePrefix("voice-lesson:").split(':')
+        if (parts.size >= 5) {
+            ZunoRoute.VoiceLesson(
+                topicId = parts[0],
+                lessonId = parts[1],
+                conversationId = parts[2],
+                position = parts[3].toIntOrNull() ?: 1,
+                totalLessons = parts[4].toIntOrNull() ?: 5,
+            )
+        } else {
+            ZunoRoute.Topics
+        }
+    }
+    value.startsWith("lesson-eval:") -> {
+        val parts = value.removePrefix("lesson-eval:").split(':')
+        if (parts.size >= 2) ZunoRoute.LessonEvaluation(parts[0], parts[1]) else ZunoRoute.Topics
+    }
     value.startsWith("voice:") -> ZunoRoute.Voice(value.removePrefix("voice:"))
     value == "settings" -> ZunoRoute.Settings
     value == "settings:preferences" -> ZunoRoute.SettingsPreferences
@@ -259,6 +289,7 @@ fun ZunoApp(
     val recent by zunoViewModel.recent.collectAsStateWithLifecycle()
     val topics by zunoViewModel.topics.collectAsStateWithLifecycle()
     val topicDetails by zunoViewModel.topicDetails.collectAsStateWithLifecycle()
+    val lessonEvaluations by zunoViewModel.lessonEvaluations.collectAsStateWithLifecycle()
     val roleplays by zunoViewModel.roleplays.collectAsStateWithLifecycle()
     val chats by zunoViewModel.chats.collectAsStateWithLifecycle()
     val busy by zunoViewModel.busy.collectAsStateWithLifecycle()
@@ -272,8 +303,7 @@ fun ZunoApp(
     val pendingLink by deepLink.collectAsStateWithLifecycle()
 
     val language: LearningLanguage = profile?.language ?: LearningLanguages.Spanish
-    val accent = profile?.accent
-    val tts = rememberTutorTts(language.locale(accent))
+    val tts = rememberCartesiaAudioPlayer(zunoViewModel::fetchTtsPreview)
     val preferences = profile?.preferences
 
     var appLanguage by rememberSaveable {
@@ -358,11 +388,15 @@ fun ZunoApp(
         action()
     }
 
-    // ── Live voice session (chat) ───────────────────────────────────────────
+    // ── Live voice session (chat & 03g lessons) ─────────────────────────────
     val agentState by viewModel.agentState.collectAsStateWithLifecycle()
     val voiceMessages by viewModel.messages.collectAsStateWithLifecycle()
     val isMuted by viewModel.isMuted.collectAsStateWithLifecycle()
     val voiceError by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val lessonStage by viewModel.lessonStage.collectAsStateWithLifecycle()
+    val pronunciationEval by viewModel.pronunciationEval.collectAsStateWithLifecycle()
+    val rescuePayload by viewModel.rescuePayload.collectAsStateWithLifecycle()
+    val completedLessonEval by viewModel.completedLessonEvaluation.collectAsStateWithLifecycle()
     var voiceConversationId by rememberSaveable { mutableStateOf<String?>(null) }
     var voiceMessageStart by rememberSaveable { mutableIntStateOf(0) }
     /** The call was started from the Home orb in a brand-new conversation. */
@@ -395,9 +429,7 @@ fun ZunoApp(
                     sessionToken = authViewModel.sessionToken,
                     onSessionExpired = authViewModel::signOut,
                     conversationId = conversationId,
-                    // The server picks the Breeze voice from Preferences · Zuno's voice; Cartesia voices
-                    // remain for languages that have one.
-                    voice = VoiceCatalog.tutorVoiceFor(language.code),
+                    language = language.code,
                     speakLastReply = speakLastReply,
                 )
             }
@@ -445,8 +477,9 @@ fun ZunoApp(
             AgentState.CONNECTING -> Unit
             AgentState.DISCONNECTED -> {
                 if (callWasLive && voiceConversationId != null) {
+                    val inLesson = backStack.lastOrNull() is ZunoRoute.VoiceLesson
                     toast(str(R.string.voice_call_ended), ToastIcon.Check)
-                    endVoice()
+                    endVoice(commit = !inLesson)
                 }
                 callWasLive = false
             }
@@ -565,6 +598,35 @@ fun ZunoApp(
         }
     }
 
+    /**
+     * Starts a 03g interactive 5-stage voice lesson (`POST /api/lessons/:id/session`) and enters `03a`.
+     */
+    fun startLessonVoice(topicId: String, lessonId: String, replaceCurrent: Boolean = false) {
+        withMicrophone {
+            runWithVoicePermissions {
+                tts.stop()
+                if (voiceConversationId != null) {
+                    viewModel.disconnect()
+                    voiceConversationId = null
+                }
+                zunoViewModel.startLessonVoiceSession(lessonId) { ticket ->
+                    voiceMessageStart = viewModel.messages.value.size
+                    voiceConversationId = ticket.conversationId
+                    callStartedAt = null
+                    val dest = ZunoRoute.VoiceLesson(
+                        topicId = topicId,
+                        lessonId = ticket.lessonId,
+                        conversationId = ticket.conversationId,
+                        position = ticket.position,
+                        totalLessons = ticket.totalLessons,
+                    )
+                    if (replaceCurrent) replace(dest) else navigate(dest)
+                    viewModel.connectLesson(ticket)
+                }
+            }
+        }
+    }
+
     fun openChat(conversationId: String) = navigate(ZunoRoute.Chat(conversationId))
 
     fun startFreeTalk(text: String?) {
@@ -605,7 +667,12 @@ fun ZunoApp(
                     backStack.clear()
                     backStack.add(ZunoRoute.Home)
                     backStack.add(ZunoRoute.Scheduled)
-                    backStack.add(ZunoRoute.Chat(conversation.id))
+                    if (conversation.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
+                        backStack.add(ZunoRoute.Topic(conversation.topicId))
+                        startLessonVoice(conversation.topicId, conversation.lessonId)
+                    } else {
+                        backStack.add(ZunoRoute.Chat(conversation.id))
+                    }
                 }
             }
             is DeepLink.Topic -> {
@@ -797,7 +864,13 @@ fun ZunoApp(
 
     fun startScheduled(schedule: Schedule) {
         if (voiceConversationId != null) endVoice()
-        zunoViewModel.startSchedule(schedule.id) { openChat(it.id) }
+        zunoViewModel.startSchedule(schedule.id) { conversation ->
+            if (conversation.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
+                startLessonVoice(conversation.topicId, conversation.lessonId)
+            } else {
+                openChat(conversation.id)
+            }
+        }
     }
 
     // ── Settings: sign out, account ─────────────────────────────────────────
@@ -894,10 +967,7 @@ fun ZunoApp(
                     },
                 )
             }
-            if (conversation?.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
-                add(ZunoMenuAction(stringResource(R.string.chat_menu_complete_lesson), icon = R.drawable.zuno_ic_t_check_circle) {
-                    zunoViewModel.completeLesson(conversation.topicId, conversation.lessonId)
-                })
+            if (conversation?.kind == ConversationKind.Lesson && conversation.topicId != null) {
                 add(ZunoMenuAction(stringResource(R.string.chat_menu_back_to_topic), icon = R.drawable.zuno_ic_t_arrow_right) {
                     navigate(ZunoRoute.Topic(conversation.topicId))
                 })
@@ -922,7 +992,7 @@ fun ZunoApp(
     val activeDestination = when (route) {
         ZunoRoute.Home -> DrawerDestination.FreeTalk
         ZunoRoute.Scheduled, is ZunoRoute.NewSchedule -> DrawerDestination.Scheduled
-        ZunoRoute.Topics, ZunoRoute.NewTopic, is ZunoRoute.Topic -> DrawerDestination.Topics
+        ZunoRoute.Topics, ZunoRoute.NewTopic, is ZunoRoute.Topic, is ZunoRoute.VoiceLesson, is ZunoRoute.LessonEvaluation -> DrawerDestination.Topics
         ZunoRoute.Roleplays, ZunoRoute.NewRoleplay -> DrawerDestination.Roleplays
         is ZunoRoute.Chat -> when (chats[route.conversationId]?.conversation?.kind) {
             ConversationKind.Lesson -> DrawerDestination.Topics
@@ -933,6 +1003,8 @@ fun ZunoApp(
     }
     val selectedSessionId = when (route) {
         is ZunoRoute.Topic -> route.id
+        is ZunoRoute.VoiceLesson -> route.topicId
+        is ZunoRoute.LessonEvaluation -> route.topicId
         is ZunoRoute.Chat -> chats[route.conversationId]?.conversation?.let { it.topicId ?: it.roleplayId ?: it.id }
         else -> null
     }
@@ -943,7 +1015,7 @@ fun ZunoApp(
     ) {
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = route.hasDrawer && route !is ZunoRoute.Voice,
+        gesturesEnabled = route.hasDrawer && route !is ZunoRoute.Voice && route !is ZunoRoute.VoiceLesson,
         scrimColor = ZunoColors.BgScrim,
         modifier = modifier,
         drawerContent = {
@@ -1149,7 +1221,8 @@ fun ZunoApp(
                         busy = busy,
                         onBack = ::pop,
                         onRetry = { zunoViewModel.loadTopic(screen.id) },
-                        onOpenLesson = { lesson -> zunoViewModel.startLesson(screen.id, lesson.id) { openChat(it.id) } },
+                        onStartLesson = { lesson -> startLessonVoice(screen.id, lesson.id) },
+                        onOpenEvaluation = { lesson -> navigate(ZunoRoute.LessonEvaluation(screen.id, lesson.id)) },
                         onReset = { zunoViewModel.resetTopic(screen.id) },
                         onDelete = {
                             zunoViewModel.deleteTopic(screen.id)
@@ -1212,7 +1285,7 @@ fun ZunoApp(
                             if (chat?.pendingText == null) withMicrophone { startVoice(screen.conversationId) }
                             else toast(str(R.string.chat_still_replying))
                         },
-                        onListen = { text -> tts.speak(text) },
+                        onListen = { text -> tts.speak(text, language.code, preferences?.tutorVoice ?: "warm") },
                         onExplain = ::explain,
                         onAttach = { openAttachmentSheet(screen.conversationId) },
                         onRemoveAttachment = { zunoViewModel.removeAttachment(screen.conversationId, it.localId) },
@@ -1255,6 +1328,121 @@ fun ZunoApp(
                         },
                         onInterrupt = { viewModel.interrupt() },
                         onToggleMute = { viewModel.toggleMute() },
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.VoiceLesson -> {
+                    val inVoice = voiceConversationId == screen.conversationId
+                    val topicDetail = topicDetails[screen.topicId]
+                    val currentLesson = topicDetail?.lessons?.firstOrNull { it.id == screen.lessonId }
+
+                    LaunchedEffect(Unit) {
+                        if (inVoice && viewModel.agentState.value == AgentState.DISCONNECTED) {
+                            voiceConversationId = null
+                        }
+                    }
+                    LaunchedEffect(inVoice) {
+                        if (!inVoice && backStack.lastOrNull() == screen && completedLessonEval == null) {
+                            pop()
+                        }
+                    }
+
+                    // Navigate automatically to 04 · Evaluation when `lesson_complete` arrives over the Data Channel
+                    LaunchedEffect(completedLessonEval) {
+                        val rawEval = completedLessonEval ?: return@LaunchedEffect
+                        val spoken = viewModel.messages.value.drop(voiceMessageStart)
+                            .filter { it.isFinal && it.text.isNotBlank() }
+                            .map { (it.speaker == Speaker.USER) to it.text }
+                        if (spoken.isNotEmpty()) {
+                            zunoViewModel.saveVoiceTurns(screen.conversationId, spoken)
+                        }
+                        val enriched = rawEval.copy(
+                            lessonId = screen.lessonId,
+                            topicId = screen.topicId,
+                            lessonPosition = screen.position,
+                            totalLessons = screen.totalLessons,
+                            lessonTitle = rawEval.lessonTitle.ifBlank { currentLesson?.title.orEmpty() },
+                            lessonTranslation = rawEval.lessonTranslation.ifBlank { currentLesson?.translation.orEmpty() },
+                        )
+                        zunoViewModel.saveLessonEvaluation(screen.lessonId, screen.conversationId, enriched)
+                        viewModel.clearCompletedLessonEvaluation()
+                        viewModel.disconnect()
+                        voiceConversationId = null
+                        callStartedAt = null
+                        if (backStack.lastOrNull() == screen) {
+                            replace(ZunoRoute.LessonEvaluation(screen.topicId, screen.lessonId))
+                        }
+                    }
+
+                    val status = voiceCallStatus(agentState, isMuted)
+                    val recentTurns = if (inVoice) voiceMessages.drop(voiceMessageStart) else emptyList()
+                    VoiceModeScreen(
+                        status = status,
+                        level = {
+                            when (status) {
+                                VoiceCallStatus.Speaking -> viewModel.agentAudioLevel.value
+                                VoiceCallStatus.Listening -> maxOf(viewModel.userAudioLevel.value, LISTENING_LEVEL_FLOOR)
+                                else -> 0f
+                            }
+                        },
+                        startedAtMillis = callStartedAt.takeIf { inVoice },
+                        tutorLine = recentTurns.lastOrNull { it.speaker == Speaker.AGENT }?.text,
+                        userLine = recentTurns.lastOrNull()?.takeIf { it.speaker == Speaker.USER }?.text,
+                        isMuted = isMuted,
+                        menu = emptyList(),
+                        isLessonMode = true,
+                        lessonPosition = screen.position,
+                        learnerLevel = profile?.level ?: "B1",
+                        lessonStage = lessonStage,
+                        pronunciationEval = pronunciationEval,
+                        rescuePayload = rescuePayload,
+                        onLessonAction = { action, payload -> viewModel.sendLessonAction(action, payload) },
+                        onEnd = {
+                            // Mid-lesson early exit: disconnect cleanly without marking lesson complete
+                            endVoice(commit = false)
+                            if (backStack.lastOrNull() == screen) pop()
+                        },
+                        onInterrupt = { viewModel.interrupt() },
+                        onToggleMute = { viewModel.toggleMute() },
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.LessonEvaluation -> {
+                    val topicDetail = topicDetails[screen.topicId]
+                    val lesson = topicDetail?.lessons?.firstOrNull { it.id == screen.lessonId }
+                    val evaluation = lessonEvaluations[screen.lessonId]
+                    LaunchedEffect(screen.topicId, screen.lessonId) {
+                        if (topicDetail == null) zunoViewModel.loadTopic(screen.topicId)
+                        if (evaluation == null) zunoViewModel.loadLessonEvaluation(screen.lessonId)
+                    }
+                    LessonEvaluationScreen(
+                        evaluation = evaluation,
+                        lessonTitleFallback = lesson?.title.orEmpty(),
+                        lessonPositionFallback = lesson?.position ?: 1,
+                        totalLessonsFallback = topicDetail?.summary?.totalLessons ?: 5,
+                        busy = busy,
+                        onPlaySample = { sample ->
+                            tts.speak(sample, language.code, preferences?.tutorVoice ?: "warm")
+                        },
+                        onNextLesson = { nextLessonId ->
+                            startLessonVoice(screen.topicId, nextLessonId, replaceCurrent = true)
+                        },
+                        onPracticeAgain = {
+                            startLessonVoice(screen.topicId, screen.lessonId, replaceCurrent = true)
+                        },
+                        onBackToTopic = {
+                            tts.stop()
+                            zunoViewModel.loadTopic(screen.topicId)
+                            val prev = backStack.getOrNull(backStack.lastIndex - 1)
+                            if (prev == ZunoRoute.Topic(screen.topicId)) {
+                                pop()
+                            } else {
+                                replace(ZunoRoute.Topic(screen.topicId))
+                            }
+                        },
+                        onRetryLoad = { zunoViewModel.loadLessonEvaluation(screen.lessonId) },
                         modifier = screenModifier,
                     )
                 }
@@ -1734,41 +1922,4 @@ private fun Context.findActivity(): Activity? {
         current = current.baseContext
     }
     return null
-}
-
-/** Reads tutor messages aloud in the language being learned. */
-private class TutorTts(context: Context, private var locale: Locale) : TextToSpeech.OnInitListener {
-    private val engine = TextToSpeech(context.applicationContext, this)
-    private var ready = false
-
-    override fun onInit(status: Int) {
-        ready = status == TextToSpeech.SUCCESS
-        if (ready) engine.language = locale
-    }
-
-    fun setLocale(value: Locale) {
-        locale = value
-        if (ready) engine.language = value
-    }
-
-    fun speak(text: String) {
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "zuno-listen")
-    }
-
-    fun stop() {
-        engine.stop()
-    }
-
-    fun shutdown() = engine.shutdown()
-}
-
-@Composable
-private fun rememberTutorTts(locale: Locale): TutorTts {
-    val context = LocalContext.current
-    val holder = remember { TutorTts(context, locale) }
-    LaunchedEffect(locale) { holder.setLocale(locale) }
-    DisposableEffect(holder) {
-        onDispose { holder.shutdown() }
-    }
-    return holder
 }

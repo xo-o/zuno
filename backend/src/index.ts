@@ -24,15 +24,18 @@ import { completeFlow, consumeFlow, getFlow } from "./lib/magic-link-flows.js";
 import { renderVerifyLandingPage, renderVerifyResultPage } from "./lib/verify-page.js";
 import { getProfile } from "./lib/profile.js";
 import { voiceInstructions } from "./lib/tutor.js";
+import { cartesiaVoiceFor } from "./lib/voices.js";
 import { accountDeletionRoutes } from "./routes/account.js";
 import { attachmentRoutes } from "./routes/attachments.js";
 import { contactRoutes } from "./routes/contact.js";
 import { conversationRoutes, messageRoutes, reminderRoutes, tutorRoutes } from "./routes/conversations.js";
 import { deviceRoutes } from "./routes/devices.js";
+import { lessonRoutes } from "./routes/lessons.js";
 import { profileRoutes } from "./routes/profile.js";
 import { roleplayRoutes } from "./routes/roleplays.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { topicRoutes } from "./routes/topics.js";
+import { ttsRoutes } from "./routes/tts.js";
 
 const app = new Hono();
 
@@ -97,6 +100,8 @@ app.all("/api/auth/*", (c) => {
 // 2. App API (protected by session / bearer token)
 app.route("/api/me", profileRoutes);
 app.route("/api/topics", topicRoutes);
+app.route("/api/lessons", lessonRoutes);
+app.route("/api/tts", ttsRoutes);
 app.route("/api/roleplays", roleplayRoutes);
 app.route("/api/conversations", conversationRoutes);
 app.route("/api/messages", messageRoutes);
@@ -143,8 +148,6 @@ app.get("/s/:token", async (c) => {
 
 // 3. LiveKit token generation
 type TokenRequest = {
-  provider?: string;
-  voice?: string;
   language?: string;
   /** When set, the voice agent follows this conversation's roleplay / lesson context. */
   conversationId?: string;
@@ -186,14 +189,20 @@ app.post("/api/livekit/token", async (c) => {
   const lastTurn = history.at(-1);
   const opening = body.speakLastReply && lastTurn?.role !== "user" ? lastTurn?.text : undefined;
 
+  const voice = cartesiaVoiceFor(profile.tutorVoice);
+  const targetLanguage = body.language ?? profile.targetLanguage;
+
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
     name: user.name || user.email,
     ttl: TOKEN_TTL,
     metadata: JSON.stringify({
-      provider: body.provider ?? "breeze",
-      voice: body.voice ?? "voc_9f5gtax4x5ac",
-      language: body.language ?? profile.targetLanguage,
+      mode: "conversation",
+      provider: "cartesia",
+      voice,
+      language: targetLanguage,
+      targetLanguage,
+      nativeLanguage: profile.nativeLanguage,
       accent: profile.accent,
       // Preferences · Tutor voice ("warm" / "calm" / "energetic") and Hands-free (auto turn-taking).
       tutorVoice: profile.tutorVoice,

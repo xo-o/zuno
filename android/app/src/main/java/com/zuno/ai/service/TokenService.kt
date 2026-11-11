@@ -1,8 +1,6 @@
 package com.zuno.ai.service
 
 import com.zuno.ai.BuildConfig
-import com.zuno.ai.model.VoiceCatalog
-import com.zuno.ai.model.VoiceOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -16,12 +14,12 @@ import java.util.concurrent.TimeUnit
 data class TokenResult(
     val token: String,
     val room: String,
-    val url: String
+    val url: String,
 )
 
 class SessionExpiredException : Exception("Your session has expired. Please sign in again.")
 
-/** Fetches LiveKit access tokens from the backend for the signed-in user. */
+/** Fetches LiveKit access tokens from the backend for the signed-in user (Cartesia multilingual TTS). */
 object TokenService {
 
     private val httpClient = OkHttpClient.Builder()
@@ -33,14 +31,12 @@ object TokenService {
 
     suspend fun fetchToken(
         sessionToken: String,
-        selectedVoice: VoiceOption = VoiceCatalog.DEFAULT_VOICE,
+        language: String? = null,
         conversationId: String? = null,
         speakLastReply: Boolean = false,
     ): TokenResult = withContext(Dispatchers.IO) {
         val bodyJson = JSONObject().apply {
-            put("provider", selectedVoice.provider)
-            put("voice", selectedVoice.id)
-            put("language", selectedVoice.language)
+            language?.let { put("language", it) }
             conversationId?.let { put("conversationId", it) }
             if (speakLastReply) put("speakLastReply", true)
         }

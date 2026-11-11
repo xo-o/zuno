@@ -105,6 +105,7 @@ data class TopicSummary(
     val translation: String,
     val totalLessons: Int,
     val completedLessons: Int,
+    val estimatedMinutesLeft: Int,
     val progress: Int,
     val status: TopicStatus,
 )
@@ -121,6 +122,123 @@ data class TopicLesson(
 data class TopicDetail(val summary: TopicSummary, val lessons: List<TopicLesson>) {
     val nextLesson: TopicLesson? get() = lessons.firstOrNull { it.state == LessonState.Current }
 }
+
+// ── 03g Interactive Voice Lesson & Evaluation Models ────────────────────────
+
+enum class LessonStageKind(val wireName: String) {
+    TeachModel("teach_model"),
+    ShadowDrill("shadow_drill"),
+    BuildingBlocks("building_blocks"),
+    ActiveRecall("active_recall"),
+    Roleplay("roleplay");
+
+    companion object {
+        fun fromWire(value: String?): LessonStageKind =
+            entries.firstOrNull { it.wireName == value } ?: TeachModel
+    }
+}
+
+data class LessonPillUi(
+    val icon: String,
+    val role: String,
+    val goal: String,
+)
+
+sealed interface LessonCardUi {
+    data class TeachCard(
+        val setupPrompt: String,
+        val phrase: String,
+        val translation: String,
+        val focusWord: String,
+        val syllables: String,
+        val cue: String,
+        val chunks: List<String>,
+    ) : LessonCardUi
+
+    data class ScaffoldCard(
+        val prompt: String,
+        val newWord: String,
+        val meaning: String,
+        val stemHint: String,
+    ) : LessonCardUi
+}
+
+data class RecallPromptUi(
+    val eyebrow: String,
+    val cue: String,
+)
+
+data class LessonStageUi(
+    val stage: LessonStageKind,
+    val pill: LessonPillUi,
+    val card: LessonCardUi?,
+    val recallPrompt: RecallPromptUi?,
+    val rescueChips: List<String>,
+)
+
+data class PronunciationEvalUi(
+    val score: Int,
+    val passed: Boolean,
+    val focusWord: String,
+    val feedbackText: String,
+    val showChunks: Boolean,
+)
+
+data class RescuePayloadUi(
+    val action: String,
+    val text: String,
+)
+
+data class LessonSessionTicket(
+    val token: String,
+    val url: String,
+    val room: String,
+    val conversationId: String,
+    val topicId: String,
+    val lessonId: String,
+    val position: Int,
+    val totalLessons: Int,
+    val lessonTitle: String,
+    val lessonTranslation: String,
+)
+
+data class CoachNote(
+    val category: String,
+    val correction: String,
+    val ttsSampleText: String,
+    val kind: String, // "grammar" | "pronunciation"
+)
+
+data class PhraseResult(
+    val phrase: String,
+    val status: String, // "mastered" | "practice"
+) {
+    val isMastered: Boolean get() = status != "practice"
+}
+
+data class LessonEvaluation(
+    val id: String = "",
+    val lessonId: String,
+    val topicId: String = "",
+    val lessonPosition: Int = 1,
+    val totalLessons: Int = 5,
+    val lessonTitle: String = "",
+    val lessonTranslation: String = "",
+    val durationSec: Int,
+    val pronunciationScore: Int,
+    val goalsCompleted: Int,
+    val goalsTotal: Int,
+    val fluencyLabel: String,
+    val coachNotes: List<CoachNote>,
+    val phraseResults: List<PhraseResult>,
+    val nextLessonId: String? = null,
+)
+
+data class CompleteLessonResult(
+    val evaluation: LessonEvaluation,
+    val topic: TopicDetail?,
+    val nextLessonId: String?,
+)
 
 data class Roleplay(
     val id: String,
@@ -376,19 +494,24 @@ internal fun JSONObject.toScheduleTargets() = ScheduleTargets(
     },
 )
 
-internal fun JSONObject.toTopicSummary() = TopicSummary(
-    id = getString("id"),
-    title = optString("title"),
-    translation = optString("translation"),
-    totalLessons = optInt("totalLessons"),
-    completedLessons = optInt("completedLessons"),
-    progress = optInt("progress"),
-    status = when (optString("status")) {
-        "completed" -> TopicStatus.Completed
-        "in_progress" -> TopicStatus.InProgress
-        else -> TopicStatus.NotStarted
-    },
-)
+internal fun JSONObject.toTopicSummary(): TopicSummary {
+    val total = optInt("totalLessons")
+    val completed = optInt("completedLessons")
+    return TopicSummary(
+        id = getString("id"),
+        title = optString("title"),
+        translation = optString("translation"),
+        totalLessons = total,
+        completedLessons = completed,
+        estimatedMinutesLeft = if (has("estimatedMinutesLeft")) optInt("estimatedMinutesLeft") else (total - completed).coerceAtLeast(0) * 5,
+        progress = optInt("progress"),
+        status = when (optString("status")) {
+            "completed" -> TopicStatus.Completed
+            "in_progress" -> TopicStatus.InProgress
+            else -> TopicStatus.NotStarted
+        },
+    )
+}
 
 internal fun JSONObject.toTopicDetail() = TopicDetail(
     summary = toTopicSummary(),
@@ -504,3 +627,138 @@ internal fun JSONObject.toRecentSession() = RecentSession(
 )
 
 internal fun JSONObject.listOf(key: String): List<JSONObject> = getJSONArray(key).objects()
+
+internal fun JSONObject.toLessonSessionTicket() = LessonSessionTicket(
+    token = getString("token"),
+    url = getString("url"),
+    room = getString("room"),
+    conversationId = getString("conversationId"),
+    topicId = getString("topicId"),
+    lessonId = getString("lessonId"),
+    position = optInt("position", 1),
+    totalLessons = optInt("totalLessons", 5),
+    lessonTitle = optString("lessonTitle"),
+    lessonTranslation = optString("lessonTranslation"),
+)
+
+internal fun JSONObject.toLessonStageUi(): LessonStageUi {
+    val pillObj = optJSONObject("pill") ?: JSONObject()
+    val cardObj = optJSONObject("card")
+    val card: LessonCardUi? = when (cardObj?.optString("kind")) {
+        "teach_card" -> LessonCardUi.TeachCard(
+            setupPrompt = cardObj.optString("setupPrompt"),
+            phrase = cardObj.optString("phrase"),
+            translation = cardObj.optString("translation"),
+            focusWord = cardObj.optString("focusWord"),
+            syllables = cardObj.optString("syllables"),
+            cue = cardObj.optString("cue"),
+            chunks = cardObj.optJSONArray("chunks")?.let { arr -> List(arr.length()) { arr.getString(it) } }.orEmpty(),
+        )
+        "scaffold_card" -> LessonCardUi.ScaffoldCard(
+            prompt = cardObj.optString("prompt"),
+            newWord = cardObj.optString("newWord"),
+            meaning = cardObj.optString("meaning"),
+            stemHint = cardObj.optString("stemHint"),
+        )
+        else -> null
+    }
+    val recallObj = optJSONObject("recallPrompt")
+    val recallPrompt = recallObj?.let {
+        RecallPromptUi(
+            eyebrow = it.optString("eyebrow", "Say from memory"),
+            cue = it.optString("cue"),
+        )
+    }
+    val chips = optJSONArray("rescueChips")?.let { arr -> List(arr.length()) { arr.getString(it) } }.orEmpty()
+    return LessonStageUi(
+        stage = LessonStageKind.fromWire(optString("stage")),
+        pill = LessonPillUi(
+            icon = pillObj.optString("icon", "book-open"),
+            role = pillObj.optString("role", "Learn"),
+            goal = pillObj.optString("goal"),
+        ),
+        card = card,
+        recallPrompt = recallPrompt,
+        rescueChips = chips,
+    )
+}
+
+internal fun JSONObject.toPronunciationEvalUi() = PronunciationEvalUi(
+    score = optInt("score", 0),
+    passed = optBoolean("passed", false),
+    focusWord = optString("focusWord"),
+    feedbackText = optString("feedbackText"),
+    showChunks = optBoolean("showChunks", false),
+)
+
+internal fun JSONObject.toRescuePayloadUi() = RescuePayloadUi(
+    action = optString("action"),
+    text = optString("text"),
+)
+
+internal fun JSONObject.toLessonEvaluation(fallbackLessonId: String = ""): LessonEvaluation {
+    val notes = optJSONArray("coachNotes")?.objects()?.map {
+        CoachNote(
+            category = it.optString("category"),
+            correction = it.optString("correction"),
+            ttsSampleText = it.optString("ttsSampleText"),
+            kind = it.optString("kind", "grammar"),
+        )
+    }.orEmpty()
+    val phrases = optJSONArray("phraseResults")?.objects()?.map {
+        PhraseResult(
+            phrase = it.optString("phrase"),
+            status = it.optString("status", "mastered"),
+        )
+    }.orEmpty()
+    return LessonEvaluation(
+        id = optString("id"),
+        lessonId = optString("lessonId").ifBlank { fallbackLessonId },
+        topicId = optString("topicId"),
+        lessonPosition = optInt("lessonPosition", 1),
+        totalLessons = optInt("totalLessons", 5),
+        lessonTitle = optString("lessonTitle"),
+        lessonTranslation = optString("lessonTranslation"),
+        durationSec = optInt("durationSec", 300),
+        pronunciationScore = optInt("pronunciationScore", 90),
+        goalsCompleted = optInt("goalsCompleted", 5),
+        goalsTotal = optInt("goalsTotal", 5).coerceAtLeast(1),
+        fluencyLabel = optString("fluencyLabel", "Natural"),
+        coachNotes = notes,
+        phraseResults = phrases,
+        nextLessonId = optStringOrNull("nextLessonId"),
+    )
+}
+
+internal fun LessonEvaluation.toRequestBody(conversationId: String?): JSONObject {
+    val notesArr = JSONArray().apply {
+        coachNotes.forEach { n ->
+            put(
+                JSONObject()
+                    .put("category", n.category)
+                    .put("correction", n.correction)
+                    .put("ttsSampleText", n.ttsSampleText)
+                    .put("kind", n.kind),
+            )
+        }
+    }
+    val phrasesArr = JSONArray().apply {
+        phraseResults.forEach { p ->
+            put(
+                JSONObject()
+                    .put("phrase", p.phrase)
+                    .put("status", p.status),
+            )
+        }
+    }
+    return JSONObject().apply {
+        conversationId?.let { put("conversationId", it) }
+        put("durationSec", durationSec.coerceAtLeast(1))
+        put("pronunciationScore", pronunciationScore.coerceIn(0, 100))
+        put("goalsCompleted", goalsCompleted.coerceAtLeast(0))
+        put("goalsTotal", goalsTotal.coerceAtLeast(1))
+        put("fluencyLabel", fluencyLabel)
+        put("coachNotes", notesArr)
+        put("phraseResults", phrasesArr)
+    }
+}

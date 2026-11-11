@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from livekit import api
 
+from voices import resolve_cartesia_voice
+
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
@@ -29,8 +31,8 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 class TokenRequest(BaseModel):
     room_name: Optional[str] = None
     participant_name: Optional[str] = None
-    provider: Optional[str] = None
     voice: Optional[str] = None
+    tutor_voice: Optional[str] = None
     language: Optional[str] = None
 
 
@@ -86,13 +88,11 @@ def get_token(
 def create_token(req: TokenRequest):
     room = req.room_name or f"zuno-{str(uuid.uuid4())[:8]}"
     name = req.participant_name or f"user-{str(uuid.uuid4())[:4]}"
-    metadata = None
-    if req.provider or req.voice or req.language:
-        metadata = json.dumps({
-            "provider": req.provider or "breeze",
-            "voice": req.voice or "voc_9f5gtax4x5ac",
-            "language": req.language or "en",
-        })
+    metadata = json.dumps({
+        "provider": "cartesia",
+        "voice": resolve_cartesia_voice(req.voice, req.tutor_voice),
+        "language": req.language or "en",
+    })
     token = generate_token(room, name, metadata=metadata)
     return {
         "token": token,

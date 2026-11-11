@@ -4,16 +4,24 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zuno.ai.data.LessonEvaluation
+import com.zuno.ai.data.LessonSessionTicket
+import com.zuno.ai.data.LessonStageUi
+import com.zuno.ai.data.PronunciationEvalUi
+import com.zuno.ai.data.RescuePayloadUi
+import com.zuno.ai.data.toLessonEvaluation
+import com.zuno.ai.data.toLessonStageUi
+import com.zuno.ai.data.toPronunciationEvalUi
+import com.zuno.ai.data.toRescuePayloadUi
 import com.zuno.ai.model.AgentState
 import com.zuno.ai.model.ChatMessage
 import com.zuno.ai.model.Speaker
-import com.zuno.ai.model.VoiceCatalog
-import com.zuno.ai.model.VoiceOption
 import com.zuno.ai.service.SessionExpiredException
 import com.zuno.ai.service.TokenService
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.DataPublishReliability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -46,11 +54,21 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     private val _roomName = MutableStateFlow("")
     val roomName: StateFlow<String> = _roomName.asStateFlow()
 
-    private val _selectedVoice = MutableStateFlow(VoiceCatalog.DEFAULT_VOICE)
-    val selectedVoice: StateFlow<VoiceOption> = _selectedVoice.asStateFlow()
-
     private val _latencyMs = MutableStateFlow<Int?>(null)
     val latencyMs: StateFlow<Int?> = _latencyMs.asStateFlow()
+
+    // ── 03g Interactive Lesson Data-Channel State ───────────────────────────
+    private val _lessonStage = MutableStateFlow<LessonStageUi?>(null)
+    val lessonStage: StateFlow<LessonStageUi?> = _lessonStage.asStateFlow()
+
+    private val _pronunciationEval = MutableStateFlow<PronunciationEvalUi?>(null)
+    val pronunciationEval: StateFlow<PronunciationEvalUi?> = _pronunciationEval.asStateFlow()
+
+    private val _rescuePayload = MutableStateFlow<RescuePayloadUi?>(null)
+    val rescuePayload: StateFlow<RescuePayloadUi?> = _rescuePayload.asStateFlow()
+
+    private val _completedLessonEvaluation = MutableStateFlow<LessonEvaluation?>(null)
+    val completedLessonEvaluation: StateFlow<LessonEvaluation?> = _completedLessonEvaluation.asStateFlow()
 
     /** Normalized (0..1) loudness of the user's mic and the agent's voice. Poll `.value`; updated ~20×/s. */
     private val _userAudioLevel = MutableStateFlow(0f)
@@ -63,40 +81,14 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     private var connectJob: Job? = null
     private var levelJob: Job? = null
 
-    fun selectVoice(voice: VoiceOption) {
-        _selectedVoice.value = voice
-        sendVoiceChange(voice)
-    }
-
-    private fun sendVoiceChange(voice: VoiceOption) {
-        val room = currentRoom ?: return
-        viewModelScope.launch {
-            try {
-                val payload = JSONObject().apply {
-                    put("type", "change_voice")
-                    put("provider", voice.provider)
-                    put("voice", voice.id)
-                    put("language", voice.language)
-                }.toString().toByteArray(Charsets.UTF_8)
-                room.localParticipant.publishData(payload)
-                Log.i(TAG, "Sent voice change: ${voice.name} (${voice.provider})")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to send voice change packet", e)
-            }
-        }
-    }
-
     /**
-     * Joins a LiveKit room with the voice agent. [conversationId] lets the agent follow that
-     * conversation's roleplay / lesson; [voice] overrides the selected voice (e.g. to match the
-     * language being learned). With [speakLastReply] the agent opens the call by speaking the
-     * conversation's latest tutor reply.
+     * Joins a LiveKit room for Free Talk or Roleplay using the user's Cartesia multilingual tutor voice.
      */
     fun connect(
         sessionToken: String? = null,
         onSessionExpired: () -> Unit = {},
         conversationId: String? = null,
-        voice: VoiceOption? = null,
+        language: String? = null,
         speakLastReply: Boolean = false,
     ) {
         if (_agentState.value != AgentState.DISCONNECTED) return
@@ -104,36 +96,20 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
             _errorMessage.value = "Please sign in to start a voice session."
             return
         }
+        resetLessonState()
         _errorMessage.value = null
         _agentState.value = AgentState.CONNECTING
-        voice?.let { _selectedVoice.value = it }
 
         connectJob = viewModelScope.launch {
             try {
                 val tokenResult = TokenService.fetchToken(
-                    sessionToken,
-                    selectedVoice = _selectedVoice.value,
+                    sessionToken = sessionToken,
+                    language = language,
                     conversationId = conversationId,
                     speakLastReply = speakLastReply,
                 )
-                _roomName.value = tokenResult.room
-
-                val room = LiveKit.create(getApplication())
-                currentRoom = room
-
-                eventJob = launch {
-                    room.events.events.collect { event ->
-                        handleRoomEvent(event)
-                    }
-                }
-
-                room.connect(tokenResult.url, tokenResult.token)
-                room.localParticipant.setMicrophoneEnabled(true)
-                levelJob = launch { pollAudioLevels(room) }
-                _isMuted.value = false
-                _agentState.value = AgentState.IDLE
+                joinRoom(tokenResult.url, tokenResult.token, tokenResult.room)
             } catch (e: CancellationException) {
-                // Hung up while connecting; disconnectInternal already reset the state.
                 throw e
             } catch (e: SessionExpiredException) {
                 _errorMessage.value = e.message
@@ -145,6 +121,59 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                 disconnectInternal()
             }
         }
+    }
+
+    /**
+     * Joins an interactive 03g Voice Lesson room using a server-minted [LessonSessionTicket].
+     */
+    fun connectLesson(ticket: LessonSessionTicket) {
+        if (_agentState.value != AgentState.DISCONNECTED) {
+            disconnectInternal()
+        }
+        resetLessonState()
+        _errorMessage.value = null
+        _agentState.value = AgentState.CONNECTING
+
+        connectJob = viewModelScope.launch {
+            try {
+                joinRoom(ticket.url, ticket.token, ticket.room)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Lesson connection failed", e)
+                _errorMessage.value = e.message ?: "Connection failed. Please check network."
+                disconnectInternal()
+            }
+        }
+    }
+
+    private suspend fun joinRoom(url: String, token: String, roomName: String) {
+        _roomName.value = roomName
+        val room = LiveKit.create(getApplication())
+        currentRoom = room
+
+        eventJob = viewModelScope.launch {
+            room.events.events.collect { event ->
+                handleRoomEvent(event)
+            }
+        }
+
+        room.connect(url, token)
+        room.localParticipant.setMicrophoneEnabled(true)
+        levelJob = viewModelScope.launch { pollAudioLevels(room) }
+        _isMuted.value = false
+        _agentState.value = AgentState.IDLE
+    }
+
+    fun clearCompletedLessonEvaluation() {
+        _completedLessonEvaluation.value = null
+    }
+
+    private fun resetLessonState() {
+        _lessonStage.value = null
+        _pronunciationEval.value = null
+        _rescuePayload.value = null
+        _completedLessonEvaluation.value = null
     }
 
     /** Hangs up synchronously, so a new call can be started right away. */
@@ -171,6 +200,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         _agentState.value = AgentState.DISCONNECTED
         _activeSpeaker.value = null
         _latencyMs.value = null
+        _lessonStage.value = null
+        _pronunciationEval.value = null
+        _rescuePayload.value = null
     }
 
     fun toggleMute() {
@@ -193,12 +225,28 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                 val payload = JSONObject().apply {
                     put("type", "interrupt")
                 }.toString().toByteArray(Charsets.UTF_8)
-                room.localParticipant.publishData(payload)
+                room.localParticipant.publishData(payload, DataPublishReliability.RELIABLE)
                 if (_agentState.value == AgentState.SPEAKING) {
                     _agentState.value = AgentState.LISTENING
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to send interrupt signal", e)
+            }
+        }
+    }
+
+    fun sendLessonAction(action: String, payloadText: String? = null) {
+        val room = currentRoom ?: return
+        viewModelScope.launch {
+            try {
+                val packet = JSONObject().apply {
+                    put("type", "lesson_action")
+                    put("action", action)
+                    payloadText?.let { put("payload", it) }
+                }.toString().toByteArray(Charsets.UTF_8)
+                room.localParticipant.publishData(packet, DataPublishReliability.RELIABLE)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send lesson_action ($action)", e)
             }
         }
     }
@@ -257,12 +305,21 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                                 _latencyMs.value = total
                             }
                         }
-                        "voice_changed" -> {
-                            val voiceId = json.optString("voice")
-                            val matching = VoiceCatalog.VOICES.find { it.id == voiceId }
-                            if (matching != null) {
-                                _selectedVoice.value = matching
-                            }
+                        "lesson_stage" -> {
+                            _lessonStage.value = json.toLessonStageUi()
+                            _pronunciationEval.value = null
+                            _rescuePayload.value = null
+                        }
+                        "pronunciation_eval" -> {
+                            _pronunciationEval.value = json.toPronunciationEvalUi()
+                        }
+                        "rescue_payload" -> {
+                            _rescuePayload.value = json.toRescuePayloadUi()
+                        }
+                        "lesson_complete" -> {
+                            val lessonId = json.optString("lessonId")
+                            val evalObj = json.optJSONObject("evaluation") ?: JSONObject()
+                            _completedLessonEvaluation.value = evalObj.toLessonEvaluation(lessonId)
                         }
                     }
                 } catch (e: Exception) {
@@ -300,7 +357,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                 updated[updated.lastIndex] = last.copy(
                     text = text,
                     isFinal = isFinal,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
                 )
                 updated
             } else {
@@ -309,7 +366,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                     speaker = speaker,
                     text = text,
                     isFinal = isFinal,
-                    timestamp = System.currentTimeMillis()
+                    timestamp = System.currentTimeMillis(),
                 )
             }
         }

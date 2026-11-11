@@ -23,6 +23,8 @@ import com.zuno.ai.data.RecentSession
 import com.zuno.ai.data.Roleplay
 import com.zuno.ai.data.LearningLanguage
 import com.zuno.ai.data.LearningLanguages
+import com.zuno.ai.data.LessonEvaluation
+import com.zuno.ai.data.LessonSessionTicket
 import com.zuno.ai.data.NotificationPrefs
 import com.zuno.ai.data.Preferences
 import com.zuno.ai.data.ReportReason
@@ -119,6 +121,9 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _topicDetails = MutableStateFlow<Map<String, TopicDetail>>(emptyMap())
     val topicDetails: StateFlow<Map<String, TopicDetail>> = _topicDetails.asStateFlow()
+
+    private val _lessonEvaluations = MutableStateFlow<Map<String, LessonEvaluation>>(emptyMap())
+    val lessonEvaluations: StateFlow<Map<String, LessonEvaluation>> = _lessonEvaluations.asStateFlow()
 
     private val _roleplays = MutableStateFlow(Loadable<List<Roleplay>>())
     val roleplays: StateFlow<Loadable<List<Roleplay>>> = _roleplays.asStateFlow()
@@ -327,6 +332,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _recent.value = emptyList()
         _topics.value = Loadable()
         _topicDetails.value = emptyMap()
+        _lessonEvaluations.value = emptyMap()
         _roleplays.value = Loadable()
         _chats.value = emptyMap()
         _typingHint.value = null
@@ -523,22 +529,48 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetTopic(id: String) = launchSafely {
-        cacheTopic(api.resetTopic(id))
+        val resetDetail = api.resetTopic(id)
+        val lessonIds = resetDetail.lessons.map { it.id }.toSet()
+        cacheTopic(resetDetail)
+        _lessonEvaluations.update { evals -> evals.filterKeys { it !in lessonIds } }
         _chats.update { chats -> chats.filterValues { it.conversation.topicId != id } }
         refreshRecent()
     }
 
-    fun startLesson(topicId: String, lessonId: String, onOpened: (Conversation) -> Unit) = runBusy {
-        val thread = api.startLesson(topicId, lessonId)
-        cacheThread(thread)
-        onOpened(thread.conversation)
+    fun startLessonVoiceSession(lessonId: String, onReady: (LessonSessionTicket) -> Unit) = runBusy {
+        val ticket = api.startLessonSession(lessonId)
+        onReady(ticket)
     }
 
-    fun completeLesson(topicId: String, lessonId: String) = launchSafely {
-        cacheTopic(api.completeLesson(topicId, lessonId))
-        refreshRecent()
-        _messages.tryEmit("Lesson complete")
+    fun saveLessonEvaluation(
+        lessonId: String,
+        conversationId: String?,
+        evaluation: LessonEvaluation,
+        onSaved: (LessonEvaluation) -> Unit = {},
+    ) {
+        // Optimistically cache immediately so 04 · Evaluation renders with zero loading flicker
+        _lessonEvaluations.update { it + (lessonId to evaluation) }
+        viewModelScope.launch {
+            try {
+                val res = api.completeLessonEvaluation(lessonId, conversationId, evaluation)
+                _lessonEvaluations.update { it + (lessonId to res.evaluation) }
+                res.topic?.let(::cacheTopic)
+                refreshRecent()
+                onSaved(res.evaluation)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
     }
+
+    fun loadLessonEvaluation(lessonId: String) = launchSafely {
+        val eval = api.lessonEvaluation(lessonId)
+        _lessonEvaluations.update { it + (lessonId to eval) }
+    }
+
+    suspend fun fetchTtsPreview(text: String, language: String? = null, slow: Boolean = false): ByteArray =
+        api.ttsPreview(text = text, language = language, slow = slow)
 
     private fun cacheTopic(topic: TopicDetail) {
         _topicDetails.update { it + (topic.summary.id to topic) }

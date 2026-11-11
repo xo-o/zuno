@@ -6,5 +6,5 @@ enum class AgentState(val label: String) {
     IDLE("Ready to chat"),
     LISTENING("Listening to you..."),
     THINKING("Thinking..."),
-    SPEAKING("Nova is speaking...")
+    SPEAKING("Zuno is speaking...")
 }

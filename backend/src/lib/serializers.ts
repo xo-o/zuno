@@ -1,8 +1,11 @@
-import type { conversation, message, roleplay, topic, topicLesson } from "../db/app-schema.js";
+import type { conversation, lessonEvaluation, message, roleplay, topic, topicLesson } from "../db/app-schema.js";
 import { serializeAttachment, type AttachmentRow } from "./attachments.js";
 
 type TopicRow = typeof topic.$inferSelect;
 type LessonRow = typeof topicLesson.$inferSelect;
+type LessonEvaluationRow = typeof lessonEvaluation.$inferSelect;
+
+export const MINUTES_PER_LESSON = 5;
 
 export type TopicStatus = "not_started" | "in_progress" | "completed";
 export type LessonStatus = "done" | "current" | "upcoming";
@@ -11,12 +14,19 @@ function progressOf(lessons: LessonRow[]) {
   const total = lessons.length;
   const completed = lessons.filter((lesson) => lesson.completedAt).length;
   const status: TopicStatus = completed === 0 ? "not_started" : completed >= total ? "completed" : "in_progress";
-  return { total, completed, percent: total ? Math.round((completed / total) * 100) : 0, status };
+  const remaining = Math.max(0, total - completed);
+  return {
+    total,
+    completed,
+    percent: total ? Math.round((completed / total) * 100) : 0,
+    estimatedMinutesLeft: remaining * MINUTES_PER_LESSON,
+    status,
+  };
 }
 
 export function topicProgressLabel(lessons: LessonRow[]) {
-  const { status, percent } = progressOf(lessons);
-  return status === "completed" ? "Done" : `${percent}%`;
+  const { status, completed, total } = progressOf(lessons);
+  return status === "completed" ? "Completed" : `${completed} of ${total} lessons`;
 }
 
 export function serializeTopicSummary(row: TopicRow, lessons: LessonRow[]) {
@@ -28,6 +38,7 @@ export function serializeTopicSummary(row: TopicRow, lessons: LessonRow[]) {
     language: row.language,
     totalLessons: progress.total,
     completedLessons: progress.completed,
+    estimatedMinutesLeft: progress.estimatedMinutesLeft,
     progress: progress.percent,
     status: progress.status,
     updatedAt: row.updatedAt.toISOString(),
@@ -45,8 +56,35 @@ export function serializeTopicDetail(row: TopicRow, lessons: LessonRow[]) {
       title: lesson.title,
       translation: lesson.translation,
       objective: lesson.objective,
+      completedAt: lesson.completedAt?.toISOString() ?? null,
       status: (lesson.completedAt ? "done" : lesson.id === currentId ? "current" : "upcoming") as LessonStatus,
     })),
+  };
+}
+
+export function serializeLessonEvaluation(
+  row: LessonEvaluationRow,
+  lesson: Pick<LessonRow, "id" | "topicId" | "position" | "title" | "translation">,
+  totalLessons: number,
+  nextLessonId: string | null,
+) {
+  return {
+    id: row.id,
+    lessonId: lesson.id,
+    topicId: lesson.topicId,
+    lessonPosition: lesson.position,
+    totalLessons,
+    lessonTitle: lesson.title,
+    lessonTranslation: lesson.translation,
+    durationSec: row.durationSec,
+    pronunciationScore: row.pronunciationScore,
+    goalsCompleted: row.goalsCompleted,
+    goalsTotal: row.goalsTotal,
+    fluencyLabel: row.fluencyLabel,
+    coachNotes: row.coachNotes ?? [],
+    phraseResults: row.phraseResults ?? [],
+    nextLessonId,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

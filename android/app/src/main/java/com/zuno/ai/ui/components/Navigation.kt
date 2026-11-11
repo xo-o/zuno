@@ -252,10 +252,10 @@ fun ZunoLessonRow(
             .background(if (status == LessonStatus.Current) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(start = ZunoSpace.s16, end = ZunoSpace.s16),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val indicatorModifier = Modifier.size(28.dp).clip(CircleShape)
+        val indicatorModifier = Modifier.size(32.dp).clip(CircleShape)
         Box(
             modifier = when (status) {
                 LessonStatus.Done -> indicatorModifier.background(ZunoColors.SurfaceInverse)

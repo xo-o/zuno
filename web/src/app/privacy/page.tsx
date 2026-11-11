@@ -64,7 +64,7 @@ const PROVIDERS: { name: string; purpose: string; data: string }[] = [
     data: "Live audio stream",
   },
   {
-    name: "Breeze, Cartesia, Google Cloud TTS",
+    name: "Cartesia",
     purpose: "Text-to-speech for Zuno’s voice",
     data: "Text of Zuno’s replies",
   },

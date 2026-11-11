@@ -142,12 +142,9 @@ private fun CollectionScreen(
     }
 }
 
-fun TopicSummary.subtitle(): String {
-    val lessons = "$completedLessons of $totalLessons lessons"
-    return when (status) {
-        TopicStatus.Completed -> "$lessons · Done"
-        else -> "$lessons · $progress%"
-    }
+fun TopicSummary.subtitle(): String = when (status) {
+    TopicStatus.Completed -> "Completed"
+    else -> "$completedLessons of $totalLessons lessons"
 }
 
 /** Topics — List / Empty. */
