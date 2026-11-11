@@ -47,6 +47,10 @@ export const auth = betterAuth({
   appName: "Zuno",
   database: drizzleAdapter(db, { provider: "pg" }),
   trustedOrigins: socialProviders.apple ? ["https://appleid.apple.com"] : [],
+  advanced: {
+    // Railway's edge sends the client address in X-Real-IP; X-Forwarded-For carries a multi-hop chain.
+    ipAddress: { ipAddressHeaders: ["x-real-ip", "x-forwarded-for"] },
+  },
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
