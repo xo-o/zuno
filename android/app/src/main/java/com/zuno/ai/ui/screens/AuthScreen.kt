@@ -87,10 +87,12 @@ fun AuthScreen(
     onSwitchMode: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
+    isGoogleBusy: Boolean = false,
     linkSentTo: String? = null,
     errorMessage: String? = null,
     onUseDifferentEmail: () -> Unit = {},
 ) {
+    val isSendingLink = isBusy && !isGoogleBusy
     if (linkSentTo != null) {
         MagicLinkSent(
             email = linkSentTo,
@@ -132,7 +134,7 @@ fun AuthScreen(
                     onValueChange = { email = it },
                     label = "Email address",
                     placeholder = "name@example.com",
-                    helper = if (isBusy) "We’ll send a magic link to this address." else null,
+                    helper = if (isSendingLink) "We’ll send a magic link to this address." else null,
                     enabled = !isBusy,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
@@ -153,13 +155,13 @@ fun AuthScreen(
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoButton(
-                label = if (isBusy) "Sending link…" else mode.primaryLabel,
+                label = if (isSendingLink) "Sending link…" else mode.primaryLabel,
                 onClick = {
                     focusManager.clearFocus()
                     onSubmit(email.trim())
                 },
-                enabled = email.isNotBlank(),
-                loading = isBusy,
+                enabled = email.isNotBlank() && !isGoogleBusy,
+                loading = isSendingLink,
                 modifier = Modifier.fillMaxWidth(),
             )
             ZunoDivider(label = "or")
@@ -168,6 +170,7 @@ fun AuthScreen(
                 onClick = onContinueWithGoogle,
                 variant = ZunoButtonVariant.Secondary,
                 enabled = !isBusy,
+                loading = isGoogleBusy,
                 leadingIcon = R.drawable.zuno_ic_google,
                 modifier = Modifier.fillMaxWidth(),
             )

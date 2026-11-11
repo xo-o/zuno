@@ -1024,6 +1024,7 @@ fun ZunoApp(
                         replace(ZunoRoute.Auth(other))
                     },
                     isBusy = authForm.isBusy,
+                    isGoogleBusy = authForm.isGoogleBusy,
                     linkSentTo = authForm.linkSentTo,
                     errorMessage = authForm.error,
                     onUseDifferentEmail = { authViewModel.clearMagicLinkSent() },

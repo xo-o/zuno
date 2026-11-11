@@ -24,6 +24,8 @@ sealed interface AuthState {
 
 data class AuthFormState(
     val isBusy: Boolean = false,
+    /** True while the busy action is Google sign-in rather than sending a magic link. */
+    val isGoogleBusy: Boolean = false,
     val linkSentTo: String? = null,
     val error: String? = null,
 )
@@ -122,7 +124,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signInWithGoogle(activityContext: Context) {
-        runFormAction {
+        runFormAction(google = true) {
             val idToken = try {
                 requestGoogleIdToken(activityContext)
             } catch (_: GoogleSignInCancelledException) {
@@ -190,16 +192,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         _authState.value = AuthState.SignedIn(session.user)
     }
 
-    private fun runFormAction(allowWhileBusy: Boolean = false, action: suspend () -> Unit) {
+    private fun runFormAction(allowWhileBusy: Boolean = false, google: Boolean = false, action: suspend () -> Unit) {
         if (_form.value.isBusy && !allowWhileBusy) return
-        _form.update { it.copy(isBusy = true, error = null) }
+        _form.update { it.copy(isBusy = true, isGoogleBusy = google, error = null) }
         viewModelScope.launch {
             try {
                 action()
             } catch (e: AuthException) {
                 _form.update { it.copy(error = e.message) }
             } finally {
-                _form.update { it.copy(isBusy = false) }
+                _form.update { it.copy(isBusy = false, isGoogleBusy = false) }
             }
         }
     }
