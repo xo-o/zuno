@@ -4,7 +4,12 @@ import { z } from "zod";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
 import { cartesiaLanguage, cartesiaVoiceFor } from "../lib/voices.js";
-import { buildWavFromPcmSegments, segmentBilingualText } from "../lib/bilingual-tts.js";
+import {
+  buildWavFromPcmSegments,
+  ensureTerminalPunct,
+  resolveCartesiaLocale,
+  segmentBilingualText,
+} from "../lib/bilingual-tts.js";
 
 const previewSchema = z.object({
   text: z.string().trim().min(1).max(600),
@@ -19,13 +24,18 @@ async function fetchCartesiaPcm(options: {
   apiKey: string;
   voiceId: string;
   text: string;
-  language?: string;
+  locale: string;
+  fallbackLanguage?: string;
   speed: number;
 }): Promise<Uint8Array> {
+  const punctText = ensureTerminalPunct(options.text);
+  if (!punctText) return new Uint8Array(0);
+
   const payload: Record<string, unknown> = {
-    model_id: "sonic-3",
-    transcript: options.text,
+    model_id: "sonic-3.6",
+    transcript: punctText,
     voice: { mode: "id", id: options.voiceId },
+    locale: options.locale,
     output_format: {
       container: "raw",
       encoding: "pcm_s16le",
@@ -33,10 +43,32 @@ async function fetchCartesiaPcm(options: {
     },
     generation_config: { speed: options.speed },
   };
-  if (options.language) payload.language = options.language;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch("https://api.cartesia.ai/tts/bytes", {
+      method: "POST",
+      headers: {
+        "X-API-Key": options.apiKey,
+        "Cartesia-Version": "2026-03-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      return new Uint8Array(await res.arrayBuffer());
+    }
+    if (res.status === 429 && attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      continue;
+    }
+
+    // Fallback to sonic-3 with base language if sonic-3.6/locale fails
+    payload.model_id = "sonic-3";
+    delete payload.locale;
+    if (options.fallbackLanguage) {
+      payload.language = options.fallbackLanguage;
+    }
+    const resFallback = await fetch("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
       headers: {
         "X-API-Key": options.apiKey,
@@ -45,12 +77,8 @@ async function fetchCartesiaPcm(options: {
       },
       body: JSON.stringify(payload),
     });
-    if (res.ok) {
-      return new Uint8Array(await res.arrayBuffer());
-    }
-    if (res.status === 429 && attempt < 2) {
-      await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
-      continue;
+    if (resFallback.ok) {
+      return new Uint8Array(await resFallback.arrayBuffer());
     }
     const errText = await res.text().catch(() => "");
     console.error(`Cartesia TTS preview failed (${res.status}):`, errText);
@@ -89,7 +117,8 @@ export const ttsRoutes = new Hono<AuthEnv>()
           apiKey,
           voiceId,
           text: seg.text,
-          language: cartesiaLanguage(seg.language),
+          locale: resolveCartesiaLocale(seg.language, profile.accent, profile.tutorVoice),
+          fallbackLanguage: cartesiaLanguage(seg.language),
           speed: seg.speed ?? speed,
         }),
       ),

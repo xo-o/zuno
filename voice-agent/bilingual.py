@@ -9,7 +9,11 @@ class SpeechSegment:
     text: str
     language: str
     speed: float = 1.0
-    pause_after_ms: int = 0
+    pause_after_ms: int = 180
+
+
+# SpeechClause is an alias for SpeechSegment
+SpeechClause = SpeechSegment
 
 
 def strip_lang_tags(text: str) -> str:
@@ -30,6 +34,32 @@ def strip_romanization(text: str) -> str:
         r'\s*\([A-Za-z0-9\s,.\'’\-–—]+\)'
     )
     return re.sub(non_latin_pattern, r"\1", text).strip()
+
+
+def strip_parenthetical_notes(text: str) -> str:
+    """Strips grammar/clarification notes in parentheses like '(plural)', '(formal)', '(masculine)'."""
+    if not text:
+        return ""
+    return re.sub(r'\s*\([A-Za-z0-9\s,.\'’\-–—/]+\)', '', text).strip()
+
+
+def ensure_terminal_punct(text: str, default_punct: str = ".") -> str:
+    """Ensures a transcript chunk has a clean terminal punctuation mark for Cartesia prosody.
+
+    Replaces trailing colons or unfinished ellipses with clean sentence closers.
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        return ""
+    # Strip trailing colon or dash
+    cleaned = re.sub(r'[:\-–—]+$', '', cleaned).strip()
+    # Strip trailing unfinished ellipsis
+    cleaned = re.sub(r'\.{3,}$|…$', '', cleaned).strip()
+    if not cleaned:
+        return ""
+    if cleaned[-1] not in ".?!;:¡¿":
+        cleaned += default_punct
+    return cleaned
 
 
 LEAD_IN_REGEX = re.compile(
@@ -81,7 +111,11 @@ def segment_bilingual_text(
     default_lang: Optional[str] = None,
     speed: float = 1.0,
 ) -> list[SpeechSegment]:
-    """Splits an utterance into SpeechSegments tagged with their appropriate Cartesia language."""
+    """Splits an untagged or tagged utterance into SpeechSegments tagged with their appropriate Cartesia language.
+
+    Only splits when there is an explicit tag, a clean colon lead-in with multi-word target phrase,
+    or a non-Latin script switch. Never splits inside single quotes (protecting apostrophes and phonetic cues).
+    """
     text = strip_romanization(raw_text).strip()
     if not text:
         return []
@@ -114,22 +148,22 @@ def segment_bilingual_text(
                 segments.append(SpeechSegment(text=suffix, language=norm_target, speed=speed))
         return _merge_adjacent(segments)
 
-    # 2. Quotes enclosing target language phrases (e.g. Try saying: "Un café, por favor")
-    if norm_native != norm_target and re.search(r'["“\'][^"”\']+?["”\']', text):
-        parts = re.split(r'(["“\'][^"”\']+?["”\'])', text)
+    # 2. Double-quoted target phrase: e.g. Repeat after me: "Un elefante"
+    # Note: ONLY double quotes (or curly double quotes “...”) to avoid breaking English apostrophes ('t, 's)
+    if norm_native != norm_target and re.search(r'["“][^"”]{3,}?["”]', text):
+        parts = re.split(r'(["“][^"”]{3,}?["”])', text)
         if len(parts) > 1:
             segments = []
             for p in parts:
                 p_trimmed = p.strip()
                 if not p_trimmed:
                     continue
-                is_quoted = (
-                    (p_trimmed.startswith('"') and p_trimmed.endswith('"'))
-                    or (p_trimmed.startswith('“') and p_trimmed.endswith('”'))
-                    or (p_trimmed.startswith("'") and p_trimmed.endswith("'"))
+                is_double_quoted = (
+                    (p_trimmed.startswith('"') and p_trimmed.endsWith('"'))
+                    or (p_trimmed.startswith('“') and p_trimmed.endsWith('”'))
                 )
-                if is_quoted:
-                    clean = re.sub(r'^[“"\']|[”"\']$', '', p_trimmed).strip()
+                if is_double_quoted:
+                    clean = re.sub(r'^[“"]|[”"]$', '', p_trimmed).strip()
                     if clean:
                         segments.append(SpeechSegment(text=clean, language=norm_target, speed=speed))
                 else:
@@ -139,17 +173,18 @@ def segment_bilingual_text(
             if segments:
                 return _merge_adjacent(segments)
 
-    # 3. Lead-in colons / dashes (e.g. "Repeat after me: Un elefante")
+    # 3. Lead-in colons: e.g. "Repeat after me: Un elefante"
     colon_idx = text.find(":")
     if colon_idx > 0 and colon_idx < len(text) - 1 and norm_native != norm_target:
         left = text[:colon_idx].strip()
         right = text[colon_idx + 1 :].strip()
-        if left and right and (LEAD_IN_REGEX.match(left + ": ") or len(left.split()) <= 6):
+        # Require right to have at least 1 word and not be a lone character
+        if left and right and len(right.split()) >= 1 and len(right) >= 2:
             left_native_score = _score_language(left.split(), norm_native)
             right_target_score = _score_language(right.split(), norm_target)
             if LEAD_IN_REGEX.match(left + ": ") or left_native_score > 0 or right_target_score > 0:
                 return [
-                    SpeechSegment(text=left, language=norm_native, speed=speed, pause_after_ms=180),
+                    SpeechSegment(text=left, language=norm_native, speed=speed, pause_after_ms=200),
                     SpeechSegment(text=right, language=norm_target, speed=speed),
                 ]
 

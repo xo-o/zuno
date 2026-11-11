@@ -12,7 +12,14 @@ from google.genai import types
 from livekit.agents import Agent, AgentSession, StopResponse, function_tool, llm
 import livekit.plugins.cartesia as cartesia
 
-from bilingual import SpeechSegment, segment_bilingual_text, strip_lang_tags
+from bilingual import (
+    SpeechClause,
+    SpeechSegment,
+    ensure_terminal_punct,
+    segment_bilingual_text,
+    strip_lang_tags,
+    strip_parenthetical_notes,
+)
 from voices import (
     BilingualCartesiaSynthesizer,
     synthesize_bilingual_segments,
@@ -177,11 +184,12 @@ class LessonOrchestrator:
         self.last_tutor_line: str = ""
         self.last_prompt_lang: str = self.target_lang
         self.last_prompt_text: str = ""
-        self.last_prompt_segments: list[SpeechSegment] = []
+        self.last_prompt_clauses: list[SpeechClause] = []
 
         self.synthesizer = BilingualCartesiaSynthesizer(
             voice_id=meta.get("voice"),
             tutor_voice=meta.get("tutorVoice"),
+            accent=meta.get("accent"),
         )
         self._speech_lock = asyncio.Lock()
         self._genai_client: genai.Client | None = None
@@ -218,21 +226,25 @@ class LessonOrchestrator:
             logger.warning(f"Quick LLM check fallback: {e}")
             return {}
 
-    async def _speak_segments(
+    async def _speak_clauses(
         self,
-        segments: list[SpeechSegment],
+        clauses: list[SpeechClause],
         *,
         display_text: str | None = None,
         allow_interruptions: bool = True,
         record_as_tutor_line: bool = False,
     ) -> None:
-        if not self.session or not segments:
+        """Speaks a sequence of distinct language clauses without heuristic parsing.
+
+        Synthesizes all clauses in parallel and streams them out as a single continuous speech turn.
+        """
+        if not self.session or not clauses:
             return
         async with self._speech_lock:
-            clean_text = strip_lang_tags(display_text or " ".join(s.text for s in segments))
-            self.last_prompt_segments = list(segments)
+            clean_text = strip_lang_tags(display_text or " ".join(c.text for c in clauses))
+            self.last_prompt_clauses = list(clauses)
             self.last_prompt_text = clean_text
-            self.last_prompt_lang = segments[-1].language if segments else self.target_lang
+            self.last_prompt_lang = clauses[-1].language if clauses else self.target_lang
 
             if record_as_tutor_line:
                 self.last_tutor_line = clean_text
@@ -243,7 +255,7 @@ class LessonOrchestrator:
                     "is_final": True,
                 })
 
-            audio_stream = synthesize_bilingual_segments(self.synthesizer, segments)
+            audio_stream = synthesize_bilingual_segments(self.synthesizer, clauses)
             handle = self.session.say(
                 clean_text,
                 audio=audio_stream,
@@ -255,6 +267,31 @@ class LessonOrchestrator:
             except Exception as e:
                 logger.debug(f"Speech interrupted or cancelled: {e}")
 
+    async def _speak_mono(
+        self,
+        text: str,
+        *,
+        language: str,
+        speed: float = 1.0,
+        allow_interruptions: bool = True,
+        record_as_tutor_line: bool = False,
+    ) -> None:
+        """Synthesizes an utterance 100% in a single language with zero heuristic splitting."""
+        if not text.strip():
+            return
+        clause = SpeechClause(
+            text=text,
+            language=language,
+            speed=speed,
+            pause_after_ms=0,
+        )
+        await self._speak_clauses(
+            [clause],
+            display_text=text,
+            allow_interruptions=allow_interruptions,
+            record_as_tutor_line=record_as_tutor_line,
+        )
+
     async def _speak(
         self,
         text: str,
@@ -264,6 +301,7 @@ class LessonOrchestrator:
         allow_interruptions: bool = True,
         record_as_tutor_line: bool = False,
     ) -> None:
+        """Fallback for untagged dynamic lines: segments if explicit tags or colon patterns exist."""
         if not self.session or not text.strip():
             return
         segments = segment_bilingual_text(
@@ -273,7 +311,7 @@ class LessonOrchestrator:
             default_lang=language or self.target_lang,
             speed=speed,
         )
-        await self._speak_segments(
+        await self._speak_clauses(
             segments,
             display_text=text,
             allow_interruptions=allow_interruptions,
@@ -337,16 +375,16 @@ class LessonOrchestrator:
             "rescueChips": [],
         })
 
-        segments: list[SpeechSegment] = []
+        clauses: list[SpeechClause] = []
         if not self.teach_in_target and setup:
-            segments.append(
-                SpeechSegment(text=setup, language=self.native_lang, speed=1.0, pause_after_ms=250)
+            clauses.append(
+                SpeechClause(text=setup, language=self.native_lang, speed=1.0, pause_after_ms=220)
             )
-        segments.append(
-            SpeechSegment(text=phrase, language=self.target_lang, speed=self.model_speed)
+        clauses.append(
+            SpeechClause(text=phrase, language=self.target_lang, speed=self.model_speed)
         )
         display_text = f"{setup} {phrase}".strip() if (not self.teach_in_target and setup) else phrase
-        await self._speak_segments(segments, display_text=display_text)
+        await self._speak_clauses(clauses, display_text=display_text)
 
         # Transition immediately into 03b Shadow & Pronunciation if still in teach_model for this phrase
         if self.stage == "teach_model" and self.phrase_idx == idx and not self.completed:
@@ -392,6 +430,7 @@ class LessonOrchestrator:
         prompt_native = item.get("promptNative", "")
         new_word = item.get("newWord", "")
         meaning = item.get("meaning", "")
+        clean_meaning = strip_parenthetical_notes(meaning) or meaning
         stem_hint = item.get("stemHint", "")
 
         # Never include expectedTarget in Scaffold Card so learner assembles it actively
@@ -407,22 +446,22 @@ class LessonOrchestrator:
                 "kind": "scaffold_card",
                 "prompt": prompt_native,
                 "newWord": new_word,
-                "meaning": meaning,
+                "meaning": clean_meaning,
                 "stemHint": stem_hint,
             },
             "recallPrompt": None,
             "rescueChips": ["hint", "reveal", "slow"],
         })
 
-        if not self.teach_in_target and meaning and new_word:
-            segments = [
-                SpeechSegment(text=f"The word for {meaning} is", language=self.native_lang, speed=1.0, pause_after_ms=180),
-                SpeechSegment(text=new_word, language=self.target_lang, speed=self.model_speed, pause_after_ms=220),
-                SpeechSegment(text=prompt_native, language=self.native_lang, speed=1.0),
+        if not self.teach_in_target and clean_meaning and new_word:
+            clean_prompt = ensure_terminal_punct(prompt_native)
+            clauses = [
+                SpeechClause(text=f"{clean_prompt} Here is the word for {clean_meaning}:", language=self.native_lang, speed=1.0, pause_after_ms=200),
+                SpeechClause(text=f"{new_word}.", language=self.target_lang, speed=self.model_speed),
             ]
-            await self._speak_segments(segments, display_text=f"The word for {meaning} is {new_word}. {prompt_native}")
+            await self._speak_clauses(clauses, display_text=f"{clean_prompt} The word for {clean_meaning} is {new_word}.")
         else:
-            await self._speak(prompt_native, language=self.cue_lang, speed=1.0)
+            await self._speak_mono(prompt_native, language=self.cue_lang, speed=1.0)
 
     async def _advance_after_block(self) -> None:
         next_idx = self.block_idx + 1
@@ -440,7 +479,7 @@ class LessonOrchestrator:
         self._set_endpointing_delay(1.4)
 
         item = self.recall_prompts[idx]
-        cue = item.get("situationNative", "")
+        cue = ensure_terminal_punct(item.get("situationNative", ""))
 
         await self.broadcast({
             "type": "lesson_stage",
@@ -458,7 +497,7 @@ class LessonOrchestrator:
             "rescueChips": ["first_word", "reveal", "slow"],
         })
 
-        await self._speak(cue, language=self.cue_lang, speed=1.0)
+        await self._speak_mono(cue, language=self.cue_lang, speed=1.0)
 
     async def _advance_after_recall(self) -> None:
         next_idx = self.recall_idx + 1
@@ -532,6 +571,10 @@ class LessonOrchestrator:
             })
             return
 
+        spoken_tokens = _normalize_tokens(transcript)
+        focus_tokens = _normalize_tokens(focus_word)
+        focus_sim = 1.0 if (focus_tokens and " ".join(focus_tokens) in " ".join(spoken_tokens)) else 0.0
+
         self.pronunciation_scores.append(score)
         if self.lowest_focus is None or score < self.lowest_focus[0]:
             self.lowest_focus = (score, item)
@@ -548,24 +591,74 @@ class LessonOrchestrator:
                 "showChunks": False,
             })
             praise = PRAISE_BY_LANG.get(self.target_lang, PRAISE_BY_LANG["en"])
-            await self._speak(praise, language=self.target_lang, speed=1.0)
+            await self._speak_mono(praise, language=self.target_lang, speed=1.0)
             await asyncio.sleep(0.35)
             await self._advance_after_phrase()
             return
 
+        # Smart recognition: user repeated ONLY the key focus word (e.g. said "Desarrollador" alone)
+        if focus_tokens and len(spoken_tokens) <= len(focus_tokens) + 1 and (focus_sim >= 0.85 or score >= 35):
+            feedback_msg = f"Great pronunciation on '{focus_word}'! Now say the full sentence."
+            await self.broadcast({
+                "type": "pronunciation_eval",
+                "score": max(score, 78),
+                "passed": False,
+                "focusWord": focus_word,
+                "feedbackText": feedback_msg,
+                "showChunks": True,
+            })
+            if not self.teach_in_target:
+                clauses = [
+                    SpeechClause(text="Nice pronunciation on that word! Now say the full sentence.", language=self.native_lang, speed=1.0, pause_after_ms=200),
+                    SpeechClause(text=phrase, language=self.target_lang, speed=self.model_speed),
+                ]
+                await self._speak_clauses(clauses, display_text=f"Nice pronunciation on that word! Now say the full sentence: {phrase}")
+            else:
+                await self._speak_mono(phrase, language=self.target_lang, speed=self.model_speed)
+            return
+
         self.phrase_retries += 1
-        if self.phrase_retries <= 2:
+        if self.phrase_retries == 1:
             await self.broadcast({
                 "type": "pronunciation_eval",
                 "score": score,
                 "passed": False,
                 "focusWord": focus_word,
-                "feedbackText": f'{score}% match · Clear rhythm, {cue[0].lower() + cue[1:] if cue else "try once more"}',
+                "feedbackText": f"{score}% match · Clear rhythm, try once more",
                 "showChunks": True,
             })
             if not self.teach_in_target:
-                await self._speak(f"Almost! {cue}. Listen:", language=self.native_lang, speed=1.0)
-            await self._speak(focus_word or phrase, language=self.target_lang, speed=0.88)
+                clauses = [
+                    SpeechClause(text="Almost! Listen closely to the key word, then try the whole sentence.", language=self.native_lang, speed=1.0, pause_after_ms=200),
+                    SpeechClause(text=f"{focus_word}.", language=self.target_lang, speed=0.85, pause_after_ms=250),
+                    SpeechClause(text=phrase, language=self.target_lang, speed=self.model_speed),
+                ]
+                await self._speak_clauses(clauses, display_text=f"Almost! Listen to '{focus_word}', then try: {phrase}")
+            else:
+                clauses = [
+                    SpeechClause(text=f"{focus_word}.", language=self.target_lang, speed=0.85, pause_after_ms=250),
+                    SpeechClause(text=phrase, language=self.target_lang, speed=self.model_speed),
+                ]
+                await self._speak_clauses(clauses, display_text=f"{focus_word}. {phrase}")
+            return
+
+        if self.phrase_retries == 2:
+            await self.broadcast({
+                "type": "pronunciation_eval",
+                "score": score,
+                "passed": False,
+                "focusWord": focus_word,
+                "feedbackText": f"{score}% match · Listen to the full sentence",
+                "showChunks": True,
+            })
+            if not self.teach_in_target:
+                clauses = [
+                    SpeechClause(text="Listen once more to the full phrase:", language=self.native_lang, speed=1.0, pause_after_ms=200),
+                    SpeechClause(text=phrase, language=self.target_lang, speed=self.model_speed),
+                ]
+                await self._speak_clauses(clauses, display_text=f"Listen once more: {phrase}")
+            else:
+                await self._speak_mono(phrase, language=self.target_lang, speed=self.model_speed)
             return
 
         # Max retries reached: record as "practice" and move forward constructively
@@ -579,7 +672,7 @@ class LessonOrchestrator:
             "showChunks": False,
         })
         if not self.teach_in_target:
-            await self._speak("Good effort, let's keep moving.", language=self.native_lang, speed=1.0)
+            await self._speak_mono("Good effort, let's keep moving.", language=self.native_lang, speed=1.0)
         await asyncio.sleep(0.3)
         await self._advance_after_phrase()
 
@@ -610,7 +703,7 @@ class LessonOrchestrator:
             status = "practice" if expected in self.revealed_phrases else "mastered"
             self.phrase_results[expected] = status
             praise = PRAISE_BY_LANG.get(self.target_lang, PRAISE_BY_LANG["en"])
-            await self._speak(f"{praise} {expected}", language=self.target_lang, speed=1.0)
+            await self._speak_mono(f"{praise} {expected}", language=self.target_lang, speed=1.0)
             await asyncio.sleep(0.3)
             await self._advance_after_block()
             return
@@ -618,20 +711,19 @@ class LessonOrchestrator:
         self.block_retries += 1
         if self.block_retries <= 1:
             if not self.teach_in_target and item.get("stemHint") and new_word:
-                segments = [
-                    SpeechSegment(text="Try combining", language=self.native_lang, speed=1.0, pause_after_ms=120),
-                    SpeechSegment(text=item.get("stemHint", ""), language=self.target_lang, speed=0.92, pause_after_ms=120),
-                    SpeechSegment(text="with", language=self.native_lang, speed=1.0, pause_after_ms=120),
-                    SpeechSegment(text=new_word, language=self.target_lang, speed=0.92),
+                stem_clean = item.get("stemHint", "").rstrip("….").strip()
+                clauses = [
+                    SpeechClause(text="Almost! Start with this pattern and add the new word:", language=self.native_lang, speed=1.0, pause_after_ms=220),
+                    SpeechClause(text=f"{stem_clean}… {new_word}.", language=self.target_lang, speed=0.90),
                 ]
-                await self._speak_segments(segments, display_text=f"Try combining {item.get('stemHint', '')} with {new_word}.")
+                await self._speak_clauses(clauses, display_text=f"Try combining: {stem_clean}… {new_word}")
             else:
                 tip = hint or f"Try combining {item.get('stemHint', '')} with {new_word}."
-                await self._speak(tip, language=self.cue_lang, speed=1.0)
+                await self._speak_mono(tip, language=self.cue_lang, speed=1.0)
             return
 
         self.phrase_results[expected] = "practice"
-        await self._speak(expected, language=self.target_lang, speed=0.92)
+        await self._speak_mono(expected, language=self.target_lang, speed=0.92)
         await asyncio.sleep(0.3)
         await self._advance_after_block()
 
@@ -668,7 +760,7 @@ class LessonOrchestrator:
                 self.phrase_results.setdefault(primary_target, status)
             praise = PRAISE_BY_LANG.get(self.target_lang, PRAISE_BY_LANG["en"])
             confirm = f"{praise} {primary_target}".strip()
-            await self._speak(confirm, language=self.target_lang, speed=1.0)
+            await self._speak_mono(confirm, language=self.target_lang, speed=1.0)
             await asyncio.sleep(0.35)
             await self._advance_after_recall()
             return
@@ -681,19 +773,20 @@ class LessonOrchestrator:
                 "action": "first_word",
                 "text": f"Start with: {first_word}",
             })
-            if not self.teach_in_target and first_word:
-                segments = [
-                    SpeechSegment(text="Start with:", language=self.native_lang, speed=1.0, pause_after_ms=150),
-                    SpeechSegment(text=first_word.rstrip("…."), language=self.target_lang, speed=0.92),
+            first_word_clean = first_word.rstrip("….").strip()
+            if not self.teach_in_target and first_word_clean:
+                clauses = [
+                    SpeechClause(text="Start your sentence like this:", language=self.native_lang, speed=1.0, pause_after_ms=180),
+                    SpeechClause(text=f"{first_word_clean}.", language=self.target_lang, speed=0.90),
                 ]
-                await self._speak_segments(segments, display_text=f"Start with: {first_word}")
+                await self._speak_clauses(clauses, display_text=f"Start with: {first_word_clean}…")
             else:
-                await self._speak(first_word.rstrip("…."), language=self.target_lang, speed=0.92)
+                await self._speak_mono(f"{first_word_clean}.", language=self.target_lang, speed=0.90)
             return
 
         if primary_target:
             self.phrase_results[primary_target] = "practice"
-            await self._speak(primary_target, language=self.target_lang, speed=0.92)
+            await self._speak_mono(primary_target, language=self.target_lang, speed=0.92)
         await asyncio.sleep(0.35)
         await self._advance_after_recall()
 
@@ -767,11 +860,11 @@ class LessonOrchestrator:
         # Optional brief "One Last Fix" recap if a recast was captured
         if self.recast_notes and not self.teach_in_target:
             top_recast = self.recast_notes[0]
-            segments = [
-                SpeechSegment(text="Great job finishing the scene! One quick native tip:", language=self.native_lang, speed=1.0, pause_after_ms=200),
-                SpeechSegment(text=top_recast["natural_form"], language=self.target_lang, speed=0.95),
+            clauses = [
+                SpeechClause(text="Great job finishing the scene! Here is a natural way to phrase that:", language=self.native_lang, speed=1.0, pause_after_ms=200),
+                SpeechClause(text=top_recast["natural_form"], language=self.target_lang, speed=0.95),
             ]
-            await self._speak_segments(segments, display_text=f"Great job finishing the scene! One quick native tip: {top_recast['natural_form']}")
+            await self._speak_clauses(clauses, display_text=f"Great job finishing the scene! One quick native tip: {top_recast['natural_form']}")
             await asyncio.sleep(0.4)
 
         await self.emit_lesson_complete()
@@ -871,33 +964,33 @@ class LessonOrchestrator:
         if action == "listen_normal":
             phrase = payload or self._current_target_phrase()
             if phrase:
-                await self._speak(phrase, language=self.target_lang, speed=1.0)
+                await self._speak_mono(phrase, language=self.target_lang, speed=1.0)
             return
 
         if action in ("listen_slow", "slow"):
             if self.stage in ("teach_model", "shadow_drill"):
                 phrase = payload or self._current_target_phrase()
                 if phrase:
-                    await self._speak(phrase, language=self.target_lang, speed=0.75)
+                    await self._speak_mono(phrase, language=self.target_lang, speed=0.75)
             elif self.stage == "roleplay" and self.last_tutor_line:
-                await self._speak(self.last_tutor_line, language=self.target_lang, speed=0.75)
-            elif self.last_prompt_segments:
-                slow_segments = [
-                    SpeechSegment(
-                        text=s.text,
-                        language=s.language,
-                        speed=round(s.speed * 0.78, 2),
-                        pause_after_ms=s.pause_after_ms,
+                await self._speak_mono(self.last_tutor_line, language=self.target_lang, speed=0.75)
+            elif self.last_prompt_clauses:
+                slow_clauses = [
+                    SpeechClause(
+                        text=c.text,
+                        language=c.language,
+                        speed=round(c.speed * 0.75, 2),
+                        pause_after_ms=c.pause_after_ms,
                     )
-                    for s in self.last_prompt_segments
+                    for c in self.last_prompt_clauses
                 ]
-                await self._speak_segments(slow_segments, display_text=self.last_prompt_text)
+                await self._speak_clauses(slow_clauses, display_text=self.last_prompt_text)
             elif self.last_prompt_text:
-                await self._speak(self.last_prompt_text, language=self.last_prompt_lang, speed=0.78)
+                await self._speak_mono(self.last_prompt_text, language=self.last_prompt_lang, speed=0.78)
             return
 
         if action == "play_chunk" and payload:
-            await self._speak(payload, language=self.target_lang, speed=0.90)
+            await self._speak_mono(payload, language=self.target_lang, speed=0.88)
             return
 
         self.rescue_count += 1
@@ -911,7 +1004,9 @@ class LessonOrchestrator:
                     "action": "first_word",
                     "text": f"Start with: {hint}",
                 })
-                await self._speak(hint.rstrip("…."), language=self.target_lang, speed=0.90)
+                hint_clean = hint.rstrip("….").strip()
+                if hint_clean:
+                    await self._speak_mono(f"{hint_clean}.", language=self.target_lang, speed=0.88)
             return
 
         if action == "hint":
@@ -925,7 +1020,9 @@ class LessonOrchestrator:
                     "action": "hint",
                     "text": f"Use: {connector}",
                 })
-                await self._speak(connector.rstrip("…"), language=self.target_lang, speed=0.90)
+                conn_clean = connector.rstrip("….").strip()
+                if conn_clean:
+                    await self._speak_mono(f"{conn_clean}.", language=self.target_lang, speed=0.88)
             elif self.stage == "roleplay":
                 remaining = [g for g in self.roleplay_goals if g.get("id") not in self.completed_goal_ids]
                 goal_desc = remaining[0].get("description", remaining[0].get("label", "")) if remaining else "Wrap up politely"
@@ -953,7 +1050,7 @@ class LessonOrchestrator:
                     "action": "reveal",
                     "text": target,
                 })
-                await self._speak(target, language=self.target_lang, speed=0.90)
+                await self._speak_mono(target, language=self.target_lang, speed=0.88)
             return
 
         if action == "translate" and self.last_tutor_line:

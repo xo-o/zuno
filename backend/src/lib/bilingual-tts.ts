@@ -22,10 +22,67 @@ export function stripLangTags(text: string): string {
  * (e.g. "こんにちは (konnichiwa)" -> "こんにちは") so TTS engines don't pronounce both.
  */
 export function stripRomanization(text: string): string {
-  // Matches parenthesized ASCII/Latin text following non-Latin characters (CJK, Cyrillic, Arabic, etc.)
   return text
     .replace(/([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF])\s*\([A-Za-z0-9\s,.'’\-–—]+\)/g, "$1")
     .trim();
+}
+
+/**
+ * Strips parenthetical grammar or clarification notes like "(plural)", "(formal)", "(feminine)".
+ */
+export function stripParentheticalNotes(text: string): string {
+  return text.replace(/\s*\([A-Za-z0-9\s,.'’\-–—/]+\)/g, "").trim();
+}
+
+/**
+ * Ensures text sent to Cartesia has clean terminal punctuation, eliminating buffer-delay artifacts.
+ */
+export function ensureTerminalPunct(text: string, defaultPunct = "."): string {
+  let cleaned = text.trim();
+  if (!cleaned) return "";
+  cleaned = cleaned.replace(/[:\-–—]+$/, "").trim();
+  cleaned = cleaned.replace(/\.{3,}$|…$/, "").trim();
+  if (!cleaned) return "";
+  if (!".?!;:¡¿".includes(cleaned[cleaned.length - 1])) {
+    cleaned += defaultPunct;
+  }
+  return cleaned;
+}
+
+/**
+ * Resolves a language code and learner accent into an explicit Cartesia regional locale for sonic-3.6.
+ */
+export function resolveCartesiaLocale(
+  language: string | null | undefined,
+  accent?: string | null,
+  tutorVoice?: string | null,
+): string {
+  const lang = cartesiaLanguage(language) || "es";
+  const acc = (accent || "").toLowerCase().trim();
+
+  if (lang === "es") {
+    if (acc === "spain" || acc === "castilian") return "es-ES";
+    if (tutorVoice === "calm") return "es-CO";
+    return "es-MX";
+  }
+
+  if (lang === "en") {
+    if (acc === "uk" || acc === "british") return "en-GB";
+    if (acc === "au" || acc === "australia" || acc === "australian") return "en-AU";
+    return "en-US";
+  }
+
+  if (lang === "fr") return acc === "canada" || acc === "canadian" ? "fr-CA" : "fr-FR";
+  if (lang === "pt") return acc === "portugal" || acc === "european" ? "pt-PT" : "pt-BR";
+  if (lang === "de") return "de-DE";
+  if (lang === "it") return "it-IT";
+  if (lang === "ja") return "ja-JP";
+  if (lang === "zh") return acc === "taiwan" || acc === "taiwanese" ? "zh-TW" : "zh-CN";
+  if (lang === "ko") return "ko-KR";
+  if (lang === "ru") return "ru-RU";
+  if (lang === "hi") return "hi-IN";
+
+  return lang;
 }
 
 // Regex for common pedagogical lead-ins in language learning apps (e.g. "Repeat after me: ", "Say: ")
@@ -58,7 +115,7 @@ function scoreLanguageMatch(words: string[], lang: string): number {
  *
  * Handles:
  * 1. Explicit tags: `[en]Repeat after me:[/en] [es]Un elefante[/es]`
- * 2. Quotation marks containing target language phrases: `Repeat: "Un elefante"`
+ * 2. Quotation marks containing target language phrases: `Repeat: "Un elefante"` (double quotes only)
  * 3. Lead-in phrases: `Repeat after me: Un elefante`
  * 4. Distinct scripts (e.g. English + Japanese/Russian/Arabic)
  */
@@ -109,29 +166,27 @@ export function segmentBilingualText(
     return mergeAdjacentSegments(segments);
   }
 
-  // 2. Check for quotes enclosing the target language: e.g. Repeat after me: "Un elefante" or 'Un elefante'
-  const quotePattern = /([“"'][^”"']+?[”"'])/g;
-  if (quotePattern.test(text) && native !== target) {
-    quotePattern.lastIndex = 0;
-    const parts = text.split(/([“"'][^”"']+?[”"'])/).filter(Boolean);
+  // 2. Check for DOUBLE-QUOTES enclosing the target language: e.g. Repeat after me: "Un elefante"
+  // Note: Never split on single quotes to protect English contractions (don't, let's) and phonetic cues ('rr', 'j')
+  const doubleQuotePattern = /(["“][^"”]{3,}?["”])/g;
+  if (doubleQuotePattern.test(text) && native !== target) {
+    doubleQuotePattern.lastIndex = 0;
+    const parts = text.split(/(["“][^"”]{3,}?["”])/).filter(Boolean);
     if (parts.length > 1) {
       const segments: SpeechSegment[] = [];
       for (const part of parts) {
         const trimmed = part.trim();
         if (!trimmed) continue;
-        const isQuoted = (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-                         (trimmed.startsWith('“') && trimmed.endsWith('”')) ||
-                         (trimmed.startsWith("'") && trimmed.endsWith("'"));
-        if (isQuoted) {
-          const cleanText = trimmed.replace(/^[“"']|[”"']$/g, "").trim();
+        const isDoubleQuoted = (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+                               (trimmed.startsWith('“') && trimmed.endsWith('”'));
+        if (isDoubleQuoted) {
+          const cleanText = trimmed.replace(/^[“"]|[”"]$/g, "").trim();
           if (cleanText) {
             segments.push({ text: cleanText, language: target, speed });
           }
         } else {
-          // Untagged part outside quotes
           const cleanLeadIn = trimmed.replace(/:\s*$/, "").trim();
           if (cleanLeadIn) {
-            // If lead-in looks native (e.g. "Say:"), tag with nativeLanguage
             segments.push({ text: trimmed, language: native, speed });
           }
         }
@@ -142,18 +197,17 @@ export function segmentBilingualText(
     }
   }
 
-  // 3. Check for lead-in colons / dashes (e.g. "Repeat after me: Un elefante")
+  // 3. Check for lead-in colons: e.g. "Repeat after me: Un elefante"
   const colonIdx = text.indexOf(":");
   if (colonIdx > 0 && colonIdx < text.length - 1 && native !== target) {
     const left = text.slice(0, colonIdx).trim();
     const right = text.slice(colonIdx + 1).trim();
-    if (left && right && (LEAD_IN_REGEX.test(left + ": ") || left.split(/\s+/).length <= 6)) {
+    if (left && right && right.length >= 2 && (LEAD_IN_REGEX.test(left + ": ") || left.split(/\s+/).length <= 6)) {
       const leftWords = left.split(/\s+/);
       const rightWords = right.split(/\s+/);
       const leftNativeScore = scoreLanguageMatch(leftWords, native);
       const rightTargetScore = scoreLanguageMatch(rightWords, target);
 
-      // If left side matches native lead-in or native function words, split!
       if (LEAD_IN_REGEX.test(left + ": ") || leftNativeScore > 0 || rightTargetScore > 0) {
         return [
           { text: left, language: native, speed },
@@ -243,7 +297,7 @@ function createWavHeader(dataLength: number, sampleRate: number): Uint8Array {
 
 /**
  * Combines multiple PCM 16-bit mono audio buffers into a single playable WAV buffer,
- * inserting a natural prosodic silence gap (default ~180ms) between segments.
+ * applying a smooth 10ms linear crossfade and inserting a natural prosodic silence gap.
  */
 export function buildWavFromPcmSegments(
   pcmBuffers: Uint8Array[],

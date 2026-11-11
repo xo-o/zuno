@@ -27,9 +27,11 @@ import livekit.plugins.silero as silero
 from bilingual import segment_bilingual_text, strip_lang_tags
 from lesson_flow import LessonAgent, LessonOrchestrator
 from voices import (
+    BilingualCartesiaSynthesizer,
     DEFAULT_CARTESIA_VOICE,
     create_cartesia_tts,
     resolve_cartesia_voice,
+    synthesize_bilingual_segments,
     update_cartesia_tts,
 )
 
@@ -109,6 +111,30 @@ class ConversationalAgent(Agent):
                 yield strip_lang_tags(delta)
             else:
                 yield delta
+
+    async def tts_node(self, text, model_settings):
+        chunks: list[str] = []
+        async for delta in text:
+            chunks.append(delta)
+        full_text = "".join(chunks)
+
+        if "[" in full_text and (f"[{self.native_language}]" in full_text or f"[{self.language}]" in full_text or "<lang=" in full_text):
+            segments = segment_bilingual_text(
+                full_text,
+                native_lang=self.native_language,
+                target_lang=self.language,
+                default_lang=self.language,
+            )
+            voice_id = getattr(self.tts, "_opts", None) and self.tts._opts.voice
+            synthesizer = BilingualCartesiaSynthesizer(voice_id=voice_id)
+            async for frame in synthesize_bilingual_segments(synthesizer, segments):
+                yield frame
+        else:
+            async def _forward():
+                for c in chunks:
+                    yield c
+            async for frame in Agent.default.tts_node(self, _forward(), model_settings):
+                yield frame
 
     async def on_enter(self) -> None:
         if self.silent_enter:
