@@ -118,14 +118,26 @@ export const lessonRoutes = new Hono<AuthEnv>()
         orderBy: [desc(lessonEvaluation.createdAt)],
         limit: 5,
       });
-      const reviewPhrase = priorEvals
+      const reviewItem = priorEvals
         .flatMap((ev) => ev.phraseResults ?? [])
-        .find((pr) => pr.status === "practice")?.phrase;
+        .find((pr) => pr.status === "practice");
+      const reviewPhrase = reviewItem?.phrase;
       if (reviewPhrase && !sessionCurriculum.recallPrompts.some((r) => r.expectedTargets.includes(reviewPhrase))) {
         const firstWords = reviewPhrase.split(/\s+/).slice(0, 2).join(" ") + "…";
         const cueLangName = languageName(parent.language || profile.targetLanguage);
+        // Find English translation from earlier lesson curriculum to prompt in native language without speaking Spanish in English voice
+        const priorLessonWithPhrase = sortedLessons.find((l) =>
+          l.curriculum?.targetPhrases.some((tp) => tp.phrase.toLowerCase() === reviewPhrase.toLowerCase()),
+        );
+        const phraseMeta = priorLessonWithPhrase?.curriculum?.targetPhrases.find(
+          (tp) => tp.phrase.toLowerCase() === reviewPhrase.toLowerCase(),
+        );
+        const situationPrompt = phraseMeta?.translation
+          ? `Quick review from earlier: how do you say "${phraseMeta.translation}" in ${cueLangName}?`
+          : `Quick review from earlier: express this concept in ${cueLangName}.`;
+
         sessionCurriculum.recallPrompts.push({
-          situationNative: `Quick review from earlier: say "${reviewPhrase}" from memory or express the same idea in ${cueLangName}.`,
+          situationNative: situationPrompt,
           firstWordHint: firstWords,
           expectedTargets: [reviewPhrase],
         });

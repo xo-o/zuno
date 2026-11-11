@@ -295,7 +295,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                         "transcript" -> {
                             val speakerStr = json.optString("speaker")
                             val speaker = if (speakerStr == "user") Speaker.USER else Speaker.AGENT
-                            val messageText = json.optString("text")
+                            val rawText = json.optString("text")
+                            val messageText = if (speaker == Speaker.AGENT) stripVoiceTags(rawText) else rawText
                             val isFinal = json.optBoolean("is_final", true)
                             addOrUpdateMessage(speaker, messageText, isFinal)
                         }
@@ -380,5 +381,13 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     companion object {
         private const val TAG = "VoiceSessionViewModel"
         private const val LEVEL_POLL_MS = 50L
+
+        private fun stripVoiceTags(text: String): String {
+            return text
+                .replace(Regex("<lang=\"?[a-zA-Z_-]+\"?>([\\s\\S]*?)</lang>"), "$1")
+                .replace(Regex("\\[[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\\]([\\s\\S]*?)\\[/[^\\]]+\\]"), "$1")
+                .replace(Regex("\\s{2,}"), " ")
+                .trim()
+        }
     }
 }

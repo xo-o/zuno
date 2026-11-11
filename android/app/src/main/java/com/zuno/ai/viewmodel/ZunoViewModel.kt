@@ -569,8 +569,13 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _lessonEvaluations.update { it + (lessonId to eval) }
     }
 
-    suspend fun fetchTtsPreview(text: String, language: String? = null, slow: Boolean = false): ByteArray =
-        api.ttsPreview(text = text, language = language, slow = slow)
+    suspend fun fetchTtsPreview(
+        text: String,
+        language: String? = null,
+        nativeLanguage: String? = null,
+        slow: Boolean = false,
+    ): ByteArray =
+        api.ttsPreview(text = text, language = language, nativeLanguage = nativeLanguage, slow = slow)
 
     private fun cacheTopic(topic: TopicDetail) {
         _topicDetails.update { it + (topic.summary.id to topic) }

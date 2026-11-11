@@ -24,6 +24,7 @@ import livekit.plugins.deepgram as dg
 import livekit.plugins.google as gg
 import livekit.plugins.silero as silero
 
+from bilingual import segment_bilingual_text, strip_lang_tags
 from lesson_flow import LessonAgent, LessonOrchestrator
 from voices import (
     DEFAULT_CARTESIA_VOICE,
@@ -87,18 +88,27 @@ class ConversationalAgent(Agent):
         tts=None,
         stt=None,
         language: str = "en",
+        native_language: str = "en",
         tutor_instructions: str | None = None,
         resume: bool = False,
         opening: str | None = None,
         silent_enter: bool = False,
     ) -> None:
         self.language = language
+        self.native_language = native_language
         self.tutor_instructions = tutor_instructions
         self.resume = resume
         self.opening = opening
         self.silent_enter = silent_enter
         instructions = f"{tutor_instructions}\n\n{INSTRUCTIONS}" if tutor_instructions else INSTRUCTIONS
         super().__init__(instructions=instructions, tts=tts, stt=stt)
+
+    async def transcription_node(self, text, model_settings):
+        async for delta in text:
+            if isinstance(delta, str):
+                yield strip_lang_tags(delta)
+            else:
+                yield delta
 
     async def on_enter(self) -> None:
         if self.silent_enter:
@@ -193,6 +203,7 @@ async def entrypoint(ctx: JobContext) -> None:
             tts=tts,
             stt=stt,
             language=current_language,
+            native_language=str(meta.get("nativeLanguage") or "en"),
             tutor_instructions=tutor_instructions,
             resume=resume,
             opening=opening,
@@ -263,14 +274,15 @@ async def entrypoint(ctx: JobContext) -> None:
             text = str(content).strip()
             if not text:
                 return
-            logger.info(f"Agent reply: {text}")
+            clean_text = strip_lang_tags(text)
+            logger.info(f"Agent reply: {clean_text}")
             if lesson_orchestrator is not None and lesson_orchestrator.stage == "roleplay":
-                lesson_orchestrator.last_tutor_line = text
+                lesson_orchestrator.last_tutor_line = clean_text
             asyncio.create_task(
                 broadcast_event({
                     "type": "transcript",
                     "speaker": "agent",
-                    "text": text,
+                    "text": clean_text,
                     "is_final": True,
                 })
             )

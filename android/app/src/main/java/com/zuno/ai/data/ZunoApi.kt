@@ -141,10 +141,16 @@ class ZunoApi(
         return json.getJSONObject("evaluation").toLessonEvaluation(lessonId)
     }
 
-    suspend fun ttsPreview(text: String, language: String? = null, slow: Boolean = false): ByteArray =
+    suspend fun ttsPreview(
+        text: String,
+        language: String? = null,
+        nativeLanguage: String? = null,
+        slow: Boolean = false,
+    ): ByteArray =
         withContext(Dispatchers.IO) {
             val body = JSONObject().put("text", text).put("slow", slow)
             language?.takeIf { it.isNotBlank() }?.let { body.put("language", it) }
+            nativeLanguage?.takeIf { it.isNotBlank() }?.let { body.put("nativeLanguage", it) }
             val req = request("/tts/preview").post(body.toString().toRequestBody(JSON)).build()
             val response = try {
                 client.newCall(req).execute()

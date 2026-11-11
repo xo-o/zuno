@@ -12,7 +12,12 @@ from google.genai import types
 from livekit.agents import Agent, AgentSession, StopResponse, function_tool, llm
 import livekit.plugins.cartesia as cartesia
 
-from voices import update_cartesia_tts
+from bilingual import SpeechSegment, segment_bilingual_text, strip_lang_tags
+from voices import (
+    BilingualCartesiaSynthesizer,
+    synthesize_bilingual_segments,
+    update_cartesia_tts,
+)
 
 logger = logging.getLogger("voice-agent.lesson")
 
@@ -172,7 +177,12 @@ class LessonOrchestrator:
         self.last_tutor_line: str = ""
         self.last_prompt_lang: str = self.target_lang
         self.last_prompt_text: str = ""
+        self.last_prompt_segments: list[SpeechSegment] = []
 
+        self.synthesizer = BilingualCartesiaSynthesizer(
+            voice_id=meta.get("voice"),
+            tutor_voice=meta.get("tutorVoice"),
+        )
         self._speech_lock = asyncio.Lock()
         self._genai_client: genai.Client | None = None
 
@@ -208,31 +218,35 @@ class LessonOrchestrator:
             logger.warning(f"Quick LLM check fallback: {e}")
             return {}
 
-    async def _speak(
+    async def _speak_segments(
         self,
-        text: str,
+        segments: list[SpeechSegment],
         *,
-        language: str,
-        speed: float = 1.0,
+        display_text: str | None = None,
         allow_interruptions: bool = True,
         record_as_tutor_line: bool = False,
     ) -> None:
-        if not self.session or not text.strip():
+        if not self.session or not segments:
             return
         async with self._speech_lock:
-            update_cartesia_tts(self.tts, language=language, speed=speed)
+            clean_text = strip_lang_tags(display_text or " ".join(s.text for s in segments))
+            self.last_prompt_segments = list(segments)
+            self.last_prompt_text = clean_text
+            self.last_prompt_lang = segments[-1].language if segments else self.target_lang
+
             if record_as_tutor_line:
-                self.last_tutor_line = text
+                self.last_tutor_line = clean_text
                 await self.broadcast({
                     "type": "transcript",
                     "speaker": "agent",
-                    "text": text,
+                    "text": clean_text,
                     "is_final": True,
                 })
-            self.last_prompt_lang = language
-            self.last_prompt_text = text
+
+            audio_stream = synthesize_bilingual_segments(self.synthesizer, segments)
             handle = self.session.say(
-                text,
+                clean_text,
+                audio=audio_stream,
                 allow_interruptions=allow_interruptions,
                 add_to_chat_ctx=False,
             )
@@ -240,9 +254,31 @@ class LessonOrchestrator:
                 await handle.wait_for_playout()
             except Exception as e:
                 logger.debug(f"Speech interrupted or cancelled: {e}")
-            finally:
-                # Always keep TTS pointed at targetLanguage & 1.0x speed after auxiliary speech
-                update_cartesia_tts(self.tts, language=self.target_lang, speed=1.0)
+
+    async def _speak(
+        self,
+        text: str,
+        *,
+        language: str | None = None,
+        speed: float = 1.0,
+        allow_interruptions: bool = True,
+        record_as_tutor_line: bool = False,
+    ) -> None:
+        if not self.session or not text.strip():
+            return
+        segments = segment_bilingual_text(
+            text,
+            native_lang=self.native_lang,
+            target_lang=self.target_lang,
+            default_lang=language or self.target_lang,
+            speed=speed,
+        )
+        await self._speak_segments(
+            segments,
+            display_text=text,
+            allow_interruptions=allow_interruptions,
+            record_as_tutor_line=record_as_tutor_line,
+        )
 
     def _set_endpointing_delay(self, delay_sec: float) -> None:
         if not self.session:
@@ -301,11 +337,16 @@ class LessonOrchestrator:
             "rescueChips": [],
         })
 
+        segments: list[SpeechSegment] = []
         if not self.teach_in_target and setup:
-            await self._speak(setup, language=self.native_lang, speed=1.0)
-            await asyncio.sleep(0.3)
-
-        await self._speak(phrase, language=self.target_lang, speed=self.model_speed)
+            segments.append(
+                SpeechSegment(text=setup, language=self.native_lang, speed=1.0, pause_after_ms=250)
+            )
+        segments.append(
+            SpeechSegment(text=phrase, language=self.target_lang, speed=self.model_speed)
+        )
+        display_text = f"{setup} {phrase}".strip() if (not self.teach_in_target and setup) else phrase
+        await self._speak_segments(segments, display_text=display_text)
 
         # Transition immediately into 03b Shadow & Pronunciation if still in teach_model for this phrase
         if self.stage == "teach_model" and self.phrase_idx == idx and not self.completed:
@@ -374,10 +415,12 @@ class LessonOrchestrator:
         })
 
         if not self.teach_in_target and meaning and new_word:
-            await self._speak(f"The word for {meaning} is", language=self.native_lang, speed=1.0)
-            await self._speak(new_word, language=self.target_lang, speed=self.model_speed)
-            await asyncio.sleep(0.25)
-            await self._speak(prompt_native, language=self.native_lang, speed=1.0)
+            segments = [
+                SpeechSegment(text=f"The word for {meaning} is", language=self.native_lang, speed=1.0, pause_after_ms=180),
+                SpeechSegment(text=new_word, language=self.target_lang, speed=self.model_speed, pause_after_ms=220),
+                SpeechSegment(text=prompt_native, language=self.native_lang, speed=1.0),
+            ]
+            await self._speak_segments(segments, display_text=f"The word for {meaning} is {new_word}. {prompt_native}")
         else:
             await self._speak(prompt_native, language=self.cue_lang, speed=1.0)
 
@@ -574,8 +617,17 @@ class LessonOrchestrator:
 
         self.block_retries += 1
         if self.block_retries <= 1:
-            tip = hint or f"Try combining {item.get('stemHint', '')} with {new_word}."
-            await self._speak(tip, language=self.cue_lang, speed=1.0)
+            if not self.teach_in_target and item.get("stemHint") and new_word:
+                segments = [
+                    SpeechSegment(text="Try combining", language=self.native_lang, speed=1.0, pause_after_ms=120),
+                    SpeechSegment(text=item.get("stemHint", ""), language=self.target_lang, speed=0.92, pause_after_ms=120),
+                    SpeechSegment(text="with", language=self.native_lang, speed=1.0, pause_after_ms=120),
+                    SpeechSegment(text=new_word, language=self.target_lang, speed=0.92),
+                ]
+                await self._speak_segments(segments, display_text=f"Try combining {item.get('stemHint', '')} with {new_word}.")
+            else:
+                tip = hint or f"Try combining {item.get('stemHint', '')} with {new_word}."
+                await self._speak(tip, language=self.cue_lang, speed=1.0)
             return
 
         self.phrase_results[expected] = "practice"
@@ -629,9 +681,14 @@ class LessonOrchestrator:
                 "action": "first_word",
                 "text": f"Start with: {first_word}",
             })
-            if not self.teach_in_target:
-                await self._speak("Start with:", language=self.native_lang, speed=1.0)
-            await self._speak(first_word.rstrip("…."), language=self.target_lang, speed=0.92)
+            if not self.teach_in_target and first_word:
+                segments = [
+                    SpeechSegment(text="Start with:", language=self.native_lang, speed=1.0, pause_after_ms=150),
+                    SpeechSegment(text=first_word.rstrip("…."), language=self.target_lang, speed=0.92),
+                ]
+                await self._speak_segments(segments, display_text=f"Start with: {first_word}")
+            else:
+                await self._speak(first_word.rstrip("…."), language=self.target_lang, speed=0.92)
             return
 
         if primary_target:
@@ -710,16 +767,11 @@ class LessonOrchestrator:
         # Optional brief "One Last Fix" recap if a recast was captured
         if self.recast_notes and not self.teach_in_target:
             top_recast = self.recast_notes[0]
-            await self._speak(
-                "Great job finishing the scene! One quick native tip:",
-                language=self.native_lang,
-                speed=1.0,
-            )
-            await self._speak(
-                top_recast["natural_form"],
-                language=self.target_lang,
-                speed=0.95,
-            )
+            segments = [
+                SpeechSegment(text="Great job finishing the scene! One quick native tip:", language=self.native_lang, speed=1.0, pause_after_ms=200),
+                SpeechSegment(text=top_recast["natural_form"], language=self.target_lang, speed=0.95),
+            ]
+            await self._speak_segments(segments, display_text=f"Great job finishing the scene! One quick native tip: {top_recast['natural_form']}")
             await asyncio.sleep(0.4)
 
         await self.emit_lesson_complete()
@@ -829,6 +881,17 @@ class LessonOrchestrator:
                     await self._speak(phrase, language=self.target_lang, speed=0.75)
             elif self.stage == "roleplay" and self.last_tutor_line:
                 await self._speak(self.last_tutor_line, language=self.target_lang, speed=0.75)
+            elif self.last_prompt_segments:
+                slow_segments = [
+                    SpeechSegment(
+                        text=s.text,
+                        language=s.language,
+                        speed=round(s.speed * 0.78, 2),
+                        pause_after_ms=s.pause_after_ms,
+                    )
+                    for s in self.last_prompt_segments
+                ]
+                await self._speak_segments(slow_segments, display_text=self.last_prompt_text)
             elif self.last_prompt_text:
                 await self._speak(self.last_prompt_text, language=self.last_prompt_lang, speed=0.78)
             return

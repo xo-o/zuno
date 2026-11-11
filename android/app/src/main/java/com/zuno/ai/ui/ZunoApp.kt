@@ -1285,7 +1285,14 @@ fun ZunoApp(
                             if (chat?.pendingText == null) withMicrophone { startVoice(screen.conversationId) }
                             else toast(str(R.string.chat_still_replying))
                         },
-                        onListen = { text -> tts.speak(text, language.code, preferences?.tutorVoice ?: "warm") },
+                        onListen = { text ->
+                            tts.speak(
+                                text = text,
+                                language = language.code,
+                                nativeLanguage = appLanguage.code,
+                                voiceKey = preferences?.tutorVoice ?: "warm",
+                            )
+                        },
                         onExplain = ::explain,
                         onAttach = { openAttachmentSheet(screen.conversationId) },
                         onRemoveAttachment = { zunoViewModel.removeAttachment(screen.conversationId, it.localId) },
@@ -1424,7 +1431,12 @@ fun ZunoApp(
                         totalLessonsFallback = topicDetail?.summary?.totalLessons ?: 5,
                         busy = busy,
                         onPlaySample = { sample ->
-                            tts.speak(sample, language.code, preferences?.tutorVoice ?: "warm")
+                            tts.speak(
+                                text = sample,
+                                language = language.code,
+                                nativeLanguage = appLanguage.code,
+                                voiceKey = preferences?.tutorVoice ?: "warm",
+                            )
                         },
                         onNextLesson = { nextLessonId ->
                             startLessonVoice(screen.topicId, nextLessonId, replaceCurrent = true)

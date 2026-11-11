@@ -519,13 +519,16 @@ export async function explainGrammar(text: string, profile: LearnerProfile): Pro
 
 /** Instructions for the realtime voice agent, mirroring the text tutor. */
 export function voiceInstructions(context: ConversationContext, profile: LearnerProfile): string {
-  const { target } = names(profile);
+  const { target, native } = names(profile);
+  const nativeCode = profile.nativeLanguage || "en";
+  const targetCode = profile.targetLanguage || "es";
   return [
     `You are Zuno, a warm ${target} tutor speaking live with the learner over a voice call.`,
     learnerLine(profile),
     ...styleLines(profile),
     contextInstructions(context, profile),
-    `Speak only ${target} with a ${variety(profile)} accent and vocabulary, in 1–2 short natural sentences suited to level ${profile.level}.`,
+    `Speak ${target} with a ${variety(profile)} accent and vocabulary, in 1–2 short natural sentences suited to level ${profile.level}.`,
+    `If you ever include ${native} lead-in instructions or phrases alongside ${target} words in the same turn (e.g. "Repeat after me: ..."), wrap each language span in its code tag like [${nativeCode}]...[/${nativeCode}] and [${targetCode}]...[/${targetCode}] so each part is voiced with authentic native accent.`,
     profile.strictMode
       ? "When the learner makes a mistake, say the correct phrasing explicitly, then keep the conversation going."
       : "If the learner makes a mistake, briefly model the correct phrasing, then keep the conversation going.",

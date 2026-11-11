@@ -4,28 +4,30 @@ import { z } from "zod";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
 import { cartesiaLanguage, cartesiaVoiceFor } from "../lib/voices.js";
+import { buildWavFromPcmSegments, segmentBilingualText } from "../lib/bilingual-tts.js";
 
 const previewSchema = z.object({
   text: z.string().trim().min(1).max(600),
   language: z.string().trim().max(16).optional(),
+  nativeLanguage: z.string().trim().max(16).optional(),
   slow: z.boolean().optional(),
 });
 
 const ttsLimit = rateLimit({ windowMs: 60_000, max: 60 });
 
-async function fetchCartesiaWav(options: {
+async function fetchCartesiaPcm(options: {
   apiKey: string;
   voiceId: string;
   text: string;
   language?: string;
   speed: number;
-}) {
+}): Promise<Uint8Array> {
   const payload: Record<string, unknown> = {
     model_id: "sonic-3",
     transcript: options.text,
     voice: { mode: "id", id: options.voiceId },
     output_format: {
-      container: "wav",
+      container: "raw",
       encoding: "pcm_s16le",
       sample_rate: 24000,
     },
@@ -68,14 +70,33 @@ export const ttsRoutes = new Hono<AuthEnv>()
     const body = await parseBody(c, previewSchema);
     const profile = await getProfile(userId);
     const voiceId = cartesiaVoiceFor(profile.tutorVoice);
-    const language = cartesiaLanguage(body.language ?? profile.targetLanguage);
-    const wav = await fetchCartesiaWav({
-      apiKey,
-      voiceId,
-      text: body.text,
-      language,
-      speed: body.slow ? 0.75 : 1.0,
+    const targetLanguage = body.language ?? profile.targetLanguage;
+    const nativeLanguage = body.nativeLanguage ?? profile.nativeLanguage;
+    const speed = body.slow ? 0.75 : 1.0;
+
+    // Segment text into language-specific portions (e.g. English intro -> Spanish target phrase)
+    const segments = segmentBilingualText(body.text, {
+      nativeLanguage,
+      targetLanguage,
+      defaultLanguage: targetLanguage,
+      speed,
     });
+
+    // Synthesize all segments in parallel using the exact same Cartesia voice
+    const pcmBuffers = await Promise.all(
+      segments.map((seg) =>
+        fetchCartesiaPcm({
+          apiKey,
+          voiceId,
+          text: seg.text,
+          language: cartesiaLanguage(seg.language),
+          speed: seg.speed ?? speed,
+        }),
+      ),
+    );
+
+    // Stitch segments together with natural prosodic pause into a single WAV response
+    const wav = buildWavFromPcmSegments(pcmBuffers, 24000, 180);
 
     return new Response(wav, {
       status: 200,

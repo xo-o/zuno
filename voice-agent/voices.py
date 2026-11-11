@@ -1,5 +1,11 @@
+import asyncio
 import os
+from typing import AsyncIterator, Optional
 import livekit.plugins.cartesia as cartesia
+from livekit import rtc
+import numpy as np
+
+from bilingual import SpeechSegment
 
 # Curated Cartesia Sonic-3 multilingual voices.
 # Every voice here natively supports 23+ locales so the tutor maintains the exact same
@@ -71,3 +77,73 @@ def update_cartesia_tts(
         language=resolved_lang,
         speed=speed,
     )
+
+
+class BilingualCartesiaSynthesizer:
+    """Caches language-specific Cartesia TTS engines for the same voice identity so
+
+    multi-segment bilingual speech (e.g. English lead-in -> Spanish target phrase)
+    synthesizes cleanly with the authentic accent for each language segment.
+    """
+
+    def __init__(
+        self,
+        voice_id: str | None = None,
+        tutor_voice: str | None = None,
+    ) -> None:
+        self.voice_id = resolve_cartesia_voice(voice_id, tutor_voice)
+        self.tutor_voice = tutor_voice
+        self._engines: dict[str, cartesia.TTS] = {}
+
+    def get_tts(self, language: str | None, speed: float = 1.0) -> cartesia.TTS:
+        resolved_lang = cartesia_language(language) or "en"
+        speed_clamped = round(max(0.6, min(2.0, float(speed))), 2)
+        key = f"{resolved_lang}:{speed_clamped}"
+        if key not in self._engines:
+            self._engines[key] = create_cartesia_tts(
+                voice_id=self.voice_id,
+                tutor_voice=self.tutor_voice,
+                language=resolved_lang,
+                speed=speed_clamped,
+            )
+        return self._engines[key]
+
+    async def aclose(self) -> None:
+        for engine in self._engines.values():
+            try:
+                await engine.aclose()
+            except Exception:
+                pass
+        self._engines.clear()
+
+
+async def synthesize_bilingual_segments(
+    synthesizer: BilingualCartesiaSynthesizer,
+    segments: list[SpeechSegment],
+    default_pause_ms: int = 180,
+) -> AsyncIterator[rtc.AudioFrame]:
+    """Synthesizes a list of bilingual SpeechSegments in sequence, inserting a natural
+
+    prosodic silence frame between segments.
+    """
+    sample_rate = 24000
+    for idx, seg in enumerate(segments):
+        trimmed = seg.text.strip()
+        if not trimmed:
+            continue
+        engine = synthesizer.get_tts(seg.language, seg.speed)
+        stream = engine.synthesize(trimmed)
+        async for ev in stream:
+            yield ev.frame
+
+        pause_ms = seg.pause_after_ms or (default_pause_ms if idx < len(segments) - 1 else 0)
+        if pause_ms > 0:
+            samples_per_channel = int(sample_rate * pause_ms / 1000)
+            silence_data = np.zeros(samples_per_channel, dtype=np.int16)
+            yield rtc.AudioFrame(
+                data=silence_data.tobytes(),
+                sample_rate=sample_rate,
+                num_channels=1,
+                samples_per_channel=samples_per_channel,
+            )
+

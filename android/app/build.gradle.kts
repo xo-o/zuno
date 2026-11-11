@@ -13,6 +13,19 @@ val googleWebClientId = providers.gradleProperty("zuno.googleWebClientId").getOr
 val magicLinkHost: String = URI(authBaseUrl).host
 
 /**
+ * Release (Play upload key) signing. Keep these out of the repo: set them in ~/.gradle/gradle.properties
+ * or as ZUNO_RELEASE_* environment variables. Without them, release builds are left unsigned.
+ */
+fun releaseSigning(name: String): String? =
+    providers.gradleProperty("zuno.release.$name").orNull
+        ?: providers.environmentVariable("ZUNO_RELEASE_${name.uppercase()}").orNull
+val releaseStoreFile = releaseSigning("storeFile")?.let { file(it.replaceFirst("~", System.getProperty("user.home"))) }
+val releaseStorePassword = releaseSigning("storePassword")
+val releaseKeyAlias = releaseSigning("keyAlias") ?: "zuno"
+val releaseKeyPassword = releaseSigning("keyPassword") ?: releaseStorePassword
+val hasReleaseSigning = releaseStoreFile?.exists() == true && releaseStorePassword != null
+
+/**
  * Firebase (push) config read from app/google-services.json — the same resources the google-services
  * plugin would generate. Without the file the app still builds; push is simply off.
  */
@@ -38,13 +51,13 @@ val firebaseConfig: Map<String, String>? = file("google-services.json").takeIf {
 
 android {
     namespace = "com.zuno.ai"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.zuno.ai"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
+        targetSdk = 36
+        versionCode = 2
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -66,6 +79,14 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -73,6 +94,9 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
