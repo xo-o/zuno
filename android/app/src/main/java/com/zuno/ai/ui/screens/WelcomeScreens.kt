@@ -84,7 +84,7 @@ fun OnboardingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             ) {
-                Text("Zuno", style = ZunoType.TitleLarge, color = ZunoColors.TextPrimary)
+                Text("Zuno", style = ZunoType.Wordmark, color = ZunoColors.TextPrimary)
                 Text(
                     "Your quiet space to master any language.",
                     style = ZunoType.BodySmall,

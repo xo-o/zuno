@@ -7,10 +7,12 @@ import androidx.lifecycle.viewModelScope
 import com.zuno.ai.data.LessonEvaluation
 import com.zuno.ai.data.LessonSessionTicket
 import com.zuno.ai.data.LessonStageUi
+import com.zuno.ai.data.OnboardingVoiceTurnEvent
 import com.zuno.ai.data.PronunciationEvalUi
 import com.zuno.ai.data.RescuePayloadUi
 import com.zuno.ai.data.toLessonEvaluation
 import com.zuno.ai.data.toLessonStageUi
+import com.zuno.ai.data.toOnboardingVoiceTurnEvent
 import com.zuno.ai.data.toPronunciationEvalUi
 import com.zuno.ai.data.toRescuePayloadUi
 import com.zuno.ai.model.AgentState
@@ -25,8 +27,11 @@ import io.livekit.android.room.track.DataPublishReliability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -69,6 +74,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
 
     private val _completedLessonEvaluation = MutableStateFlow<LessonEvaluation?>(null)
     val completedLessonEvaluation: StateFlow<LessonEvaluation?> = _completedLessonEvaluation.asStateFlow()
+
+    private val _onboardingEvents = MutableSharedFlow<OnboardingVoiceTurnEvent>(extraBufferCapacity = 8)
+    val onboardingEvents: SharedFlow<OnboardingVoiceTurnEvent> = _onboardingEvents.asSharedFlow()
 
     /** Normalized (0..1) loudness of the user's mic and the agent's voice. Poll `.value`; updated ~20×/s. */
     private val _userAudioLevel = MutableStateFlow(0f)
@@ -124,8 +132,75 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * Joins an interactive 03g Voice Lesson room using a server-minted [LessonSessionTicket].
+     * Joins a LiveKit room in `mode = "onboarding"` (`5b`–`5d` guided onboarding).
      */
+    fun connectOnboarding(
+        sessionToken: String?,
+        step: String,
+        targetLanguage: String,
+        nativeLanguage: String,
+        accent: String? = null,
+        name: String? = null,
+        level: String? = null,
+        onSessionExpired: () -> Unit = {},
+    ) {
+        if (_agentState.value != AgentState.DISCONNECTED) {
+            disconnectInternal()
+        }
+        if (sessionToken == null) {
+            _errorMessage.value = "Please sign in to start onboarding."
+            return
+        }
+        resetLessonState()
+        _messages.value = emptyList()
+        _errorMessage.value = null
+        _agentState.value = AgentState.CONNECTING
+
+        connectJob = viewModelScope.launch {
+            try {
+                val tokenResult = TokenService.fetchOnboardingToken(
+                    sessionToken = sessionToken,
+                    step = step,
+                    targetLanguage = targetLanguage,
+                    nativeLanguage = nativeLanguage,
+                    accent = accent,
+                    name = name,
+                    level = level,
+                )
+                joinRoom(tokenResult.url, tokenResult.token, tokenResult.room)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SessionExpiredException) {
+                _errorMessage.value = e.message
+                disconnectInternal()
+                onSessionExpired()
+            } catch (e: Exception) {
+                Log.e(TAG, "Onboarding voice connection failed", e)
+                _errorMessage.value = e.message ?: "Connection failed. Please check network."
+                disconnectInternal()
+            }
+        }
+    }
+
+    fun clearMessages() {
+        _messages.value = emptyList()
+    }
+
+    fun sendOnboardingAction(action: String, extras: Map<String, Any?> = emptyMap()) {
+        val room = currentRoom ?: return
+        viewModelScope.launch {
+            try {
+                val packet = JSONObject().apply {
+                    put("type", "onboarding_action")
+                    put("action", action)
+                    extras.forEach { (k, v) -> if (v != null) put(k, v) }
+                }.toString().toByteArray(Charsets.UTF_8)
+                room.localParticipant.publishData(packet, DataPublishReliability.RELIABLE)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send onboarding_action ($action)", e)
+            }
+        }
+    }
     fun connectLesson(ticket: LessonSessionTicket) {
         if (_agentState.value != AgentState.DISCONNECTED) {
             disconnectInternal()
@@ -321,6 +396,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                             val lessonId = json.optString("lessonId")
                             val evalObj = json.optJSONObject("evaluation") ?: JSONObject()
                             _completedLessonEvaluation.value = evalObj.toLessonEvaluation(lessonId)
+                        }
+                        "onboarding_turn" -> {
+                            _onboardingEvents.tryEmit(json.toOnboardingVoiceTurnEvent())
                         }
                     }
                 } catch (e: Exception) {

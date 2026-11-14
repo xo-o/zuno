@@ -40,6 +40,35 @@ object TokenService {
             conversationId?.let { put("conversationId", it) }
             if (speakLastReply) put("speakLastReply", true)
         }
+        postTokenRequest(sessionToken, bodyJson)
+    }
+
+    suspend fun fetchOnboardingToken(
+        sessionToken: String,
+        step: String,
+        targetLanguage: String,
+        nativeLanguage: String,
+        accent: String? = null,
+        name: String? = null,
+        level: String? = null,
+    ): TokenResult = withContext(Dispatchers.IO) {
+        val onboardingObj = JSONObject().apply {
+            put("step", step)
+            put("targetLanguage", targetLanguage)
+            put("nativeLanguage", nativeLanguage)
+            accent?.takeIf { it.isNotBlank() }?.let { put("accent", it) }
+            name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+            level?.takeIf { it.isNotBlank() }?.let { put("level", it) }
+        }
+        val bodyJson = JSONObject().apply {
+            put("mode", "onboarding")
+            put("language", nativeLanguage)
+            put("onboarding", onboardingObj)
+        }
+        postTokenRequest(sessionToken, bodyJson)
+    }
+
+    private fun postTokenRequest(sessionToken: String, bodyJson: JSONObject): TokenResult {
         val request = Request.Builder()
             .url(tokenUrl)
             .header("Authorization", "Bearer $sessionToken")
@@ -55,7 +84,7 @@ object TokenService {
             if (it.code == 401) throw SessionExpiredException()
             if (!it.isSuccessful) throw IOException("Couldn't start a voice session (${it.code}).")
             val json = JSONObject(it.body?.string().orEmpty())
-            TokenResult(
+            return TokenResult(
                 token = json.getString("token"),
                 room = json.getString("room"),
                 url = json.getString("url"),

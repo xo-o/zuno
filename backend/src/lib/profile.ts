@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { userLanguageProgress, userProfile } from "../db/app-schema.js";
+import { conversation, roleplay, topic, userLanguageProgress, userProfile, type RecommendedTopic } from "../db/app-schema.js";
 import { db } from "../db/index.js";
 import {
   defaultAccent,
@@ -14,7 +14,7 @@ import {
 
 export const TUTOR_VOICES = ["warm", "calm", "energetic"] as const;
 export const TEACHING_STYLES = ["balanced", "gentle", "immersive"] as const;
-export const FOCUSES = ["conversation", "travel", "work", "exams"] as const;
+export const FOCUSES = ["conversation", "travel", "work", "exams", "culture"] as const;
 export const DAILY_GOALS = [5, 10, 15, 20, 30] as const;
 
 export type TutorVoice = (typeof TUTOR_VOICES)[number];
@@ -40,6 +40,11 @@ export type LearnerProfile = Preferences & {
   accent: string;
   /** False until the level for the current language has been checked or picked. */
   levelChecked: boolean;
+  interests: string[];
+  goalNote: string | null;
+  onboardingCompleted: boolean;
+  onboardingCompletedAt: string | null;
+  recommendedTopics: RecommendedTopic[];
   plan: "free" | "pro";
   planExpiresAt: string | null;
 };
@@ -67,6 +72,11 @@ function normalize(row: ProfileRow, levelChecked: boolean): LearnerProfile {
     teachInTarget: row.teachInTarget,
     dailyGoalMin: row.dailyGoalMin,
     focus: oneOf(FOCUSES, row.focus, "conversation"),
+    interests: Array.isArray(row.interests) ? row.interests : [],
+    goalNote: row.goalNote || null,
+    onboardingCompleted: row.onboardingCompletedAt !== null,
+    onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null,
+    recommendedTopics: Array.isArray(row.recommendedTopics) ? row.recommendedTopics : [],
     plan: row.plan === "pro" && (!row.planExpiresAt || row.planExpiresAt > new Date()) ? "pro" : "free",
     planExpiresAt: row.planExpiresAt?.toISOString() ?? null,
   };
@@ -74,7 +84,26 @@ function normalize(row: ProfileRow, levelChecked: boolean): LearnerProfile {
 
 async function loadRow(userId: string): Promise<ProfileRow> {
   const existing = await db.query.userProfile.findFirst({ where: eq(userProfile.userId, userId) });
-  if (existing) return existing;
+  if (existing) {
+    if (existing.onboardingCompletedAt === null) {
+      // Accounts created before onboarding existed already have conversations, topics, or roleplays.
+      const [hasConv, hasTopic, hasRoleplay] = await Promise.all([
+        db.query.conversation.findFirst({ where: eq(conversation.userId, userId), columns: { id: true } }),
+        db.query.topic.findFirst({ where: eq(topic.userId, userId), columns: { id: true } }),
+        db.query.roleplay.findFirst({ where: eq(roleplay.userId, userId), columns: { id: true } }),
+      ]);
+      if (hasConv || hasTopic || hasRoleplay) {
+        const completedAt = existing.createdAt ?? new Date();
+        const [updated] = await db
+          .update(userProfile)
+          .set({ onboardingCompletedAt: completedAt })
+          .where(eq(userProfile.userId, userId))
+          .returning();
+        if (updated) return updated;
+      }
+    }
+    return existing;
+  }
   await db.insert(userProfile).values({ userId }).onConflictDoNothing();
   return (await db.query.userProfile.findFirst({ where: eq(userProfile.userId, userId) }))!;
 }
@@ -119,6 +148,10 @@ export type ProfilePatch = Partial<Preferences> & {
   nativeLanguage?: AppLanguageCode;
   level?: Level;
   accent?: string;
+  interests?: string[];
+  goalNote?: string | null;
+  onboardingCompletedAt?: Date | null;
+  recommendedTopics?: RecommendedTopic[];
   /** The level came from a level check (or an explicit pick), so the language counts as checked. */
   markLevelChecked?: boolean;
 };
@@ -132,19 +165,30 @@ export class InvalidAccentError extends Error {}
 export async function updateProfile(userId: string, patch: ProfilePatch): Promise<LearnerProfile> {
   const row = await loadRow(userId);
   await currentProgress(row);
-  const { targetLanguage, level, accent, markLevelChecked, ...rest } = patch;
+  const { targetLanguage, level, accent, markLevelChecked, interests, goalNote, onboardingCompletedAt, recommendedTopics, ...rest } = patch;
 
   const language = targetLanguage ?? (isLanguageCode(row.targetLanguage) ? row.targetLanguage : "es");
   if (accent !== undefined && !isAccentOf(language, accent)) throw new InvalidAccentError("Unknown accent for this language");
 
   const values: Partial<typeof userProfile.$inferInsert> = { ...rest };
+  if (interests !== undefined) values.interests = interests;
+  if (goalNote !== undefined) values.goalNote = goalNote;
+  if (onboardingCompletedAt !== undefined) values.onboardingCompletedAt = onboardingCompletedAt;
+  if (recommendedTopics !== undefined) values.recommendedTopics = recommendedTopics;
 
   if (targetLanguage && targetLanguage !== row.targetLanguage) {
-    // Remember where the learner left the previous language.
-    await db
-      .update(userLanguageProgress)
-      .set({ level: row.level, accent: row.accent, lastActiveAt: sql`now()` })
-      .where(and(eq(userLanguageProgress.userId, userId), eq(userLanguageProgress.language, row.targetLanguage)));
+    if (onboardingCompletedAt && row.onboardingCompletedAt === null) {
+      // Fresh onboarding switching away from the default "es": drop the untouched placeholder progress row.
+      await db
+        .delete(userLanguageProgress)
+        .where(and(eq(userLanguageProgress.userId, userId), eq(userLanguageProgress.language, row.targetLanguage)));
+    } else {
+      // Remember where the learner left the previous language.
+      await db
+        .update(userLanguageProgress)
+        .set({ level: row.level, accent: row.accent, lastActiveAt: sql`now()` })
+        .where(and(eq(userLanguageProgress.userId, userId), eq(userLanguageProgress.language, row.targetLanguage)));
+    }
     await db
       .insert(userLanguageProgress)
       .values({ userId, language: targetLanguage, level: "B1", accent: defaultAccent(targetLanguage) })

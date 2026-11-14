@@ -38,8 +38,16 @@ val Levels = listOf("A1", "A2", "B1", "B2", "C1", "C2")
 
 val TutorVoices = listOf("warm", "calm", "energetic")
 val TeachingStyles = listOf("balanced", "gentle", "immersive")
-val Focuses = listOf("conversation", "travel", "work", "exams")
+val Focuses = listOf("conversation", "travel", "work", "exams", "culture")
 val DailyGoals = listOf(5, 10, 15, 20, 30)
+
+data class RecommendedTopic(
+    val id: String,
+    val title: String,
+    val translation: String,
+    val reason: String,
+    val prompt: String,
+)
 
 /** Settings · Preferences and learning goals; read by the tutor on the server. */
 data class Preferences(
@@ -67,6 +75,10 @@ data class Profile(
     val accent: String? = null,
     /** False until the level for the current language was checked or picked. */
     val levelChecked: Boolean = true,
+    val onboardingCompleted: Boolean = true,
+    val interests: List<String> = emptyList(),
+    val goalNote: String? = null,
+    val recommendedTopics: List<RecommendedTopic> = emptyList(),
     val preferences: Preferences = Preferences(),
     val plan: String = "free",
     /** Profile photo (a short-lived signed URL for uploaded photos, or the Google picture). */
@@ -122,6 +134,36 @@ data class TopicLesson(
 data class TopicDetail(val summary: TopicSummary, val lessons: List<TopicLesson>) {
     val nextLesson: TopicLesson? get() = lessons.firstOrNull { it.state == LessonState.Current }
 }
+
+data class OnboardingTurnResult(
+    val step: String,
+    val valid: Boolean,
+    val name: String = "",
+    val level: String = "B1",
+    val focus: String = "conversation",
+    val interests: List<String> = emptyList(),
+    val goalNote: String = "",
+    val retryPrompt: String? = null,
+)
+
+data class OnboardingCompleteResult(
+    val profile: Profile,
+    val starterTopic: TopicDetail,
+    val recommendedTopics: List<RecommendedTopic>,
+    val pathSubtitle: String,
+)
+
+data class OnboardingVoiceTurnEvent(
+    val step: String,
+    val transcript: String,
+    val name: String = "",
+    val level: String = "",
+    val focus: String = "conversation",
+    val interests: List<String> = emptyList(),
+    val goalNote: String = "",
+    val nextStep: String = "",
+    val nextPrompt: String = "",
+)
 
 // ── 03g Interactive Voice Lesson & Evaluation Models ────────────────────────
 
@@ -404,6 +446,48 @@ private fun JSONObject.optStringOrNull(key: String): String? =
 
 private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
+internal fun JSONObject.toRecommendedTopic() = RecommendedTopic(
+    id = optString("id"),
+    title = optString("title"),
+    translation = optString("translation"),
+    reason = optString("reason"),
+    prompt = optString("prompt"),
+)
+
+internal fun JSONObject.toOnboardingTurnResult() = OnboardingTurnResult(
+    step = optString("step"),
+    valid = optBoolean("valid", true),
+    name = optString("name"),
+    level = optString("level", "B1"),
+    focus = optString("focus", "conversation"),
+    interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+    goalNote = optString("goalNote"),
+    retryPrompt = optStringOrNull("retryPrompt"),
+)
+
+internal fun JSONObject.toOnboardingCompleteResult(): OnboardingCompleteResult {
+    val parsedProfile = toProfile()
+    val recs = optJSONArray("recommendedTopics")?.objects()?.map { it.toRecommendedTopic() } ?: parsedProfile.recommendedTopics
+    return OnboardingCompleteResult(
+        profile = parsedProfile.copy(recommendedTopics = recs),
+        starterTopic = getJSONObject("starterTopic").toTopicDetail(),
+        recommendedTopics = recs,
+        pathSubtitle = optString("pathSubtitle"),
+    )
+}
+
+internal fun JSONObject.toOnboardingVoiceTurnEvent() = OnboardingVoiceTurnEvent(
+    step = optString("step"),
+    transcript = optString("transcript"),
+    name = optString("name"),
+    level = optString("level"),
+    focus = optString("focus", "conversation"),
+    interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+    goalNote = optString("goalNote"),
+    nextStep = optString("nextStep"),
+    nextPrompt = optString("nextPrompt"),
+)
+
 internal fun JSONObject.toProfile(): Profile {
     val user = getJSONObject("user")
     val profile = getJSONObject("profile")
@@ -415,6 +499,10 @@ internal fun JSONObject.toProfile(): Profile {
         appLanguage = AppLanguage.fromCode(profile.optString("nativeLanguage", "en")),
         accent = profile.optStringOrNull("accent"),
         levelChecked = profile.optBoolean("levelChecked", true),
+        onboardingCompleted = profile.optBoolean("onboardingCompleted", false),
+        interests = profile.optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+        goalNote = profile.optStringOrNull("goalNote"),
+        recommendedTopics = profile.optJSONArray("recommendedTopics")?.objects()?.map { it.toRecommendedTopic() }.orEmpty(),
         preferences = Preferences(
             tutorVoice = profile.optString("tutorVoice", "warm"),
             teachingStyle = profile.optString("teachingStyle", "balanced"),

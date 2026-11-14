@@ -26,6 +26,7 @@ import livekit.plugins.silero as silero
 
 from bilingual import segment_bilingual_text, strip_lang_tags
 from lesson_flow import LessonAgent, LessonOrchestrator
+from onboarding_flow import OnboardingAgent, OnboardingOrchestrator
 from voices import (
     BilingualCartesiaSynthesizer,
     DEFAULT_CARTESIA_VOICE,
@@ -191,8 +192,14 @@ async def entrypoint(ctx: JobContext) -> None:
         f"Initialized session: mode={mode}, provider=cartesia, voice={current_voice}, lang={current_language}"
     )
 
+    stt_lang = (
+        str(meta.get("nativeLanguage") or "en")
+        if mode == "onboarding"
+        else current_language
+    )
+    stt_accent = None if mode == "onboarding" else current_accent
     vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
-    stt = create_stt(current_language, current_accent)
+    stt = create_stt(stt_lang, stt_accent)
     llm = gg.LLM(
         model="gemini-2.5-flash",
         temperature=0.4,
@@ -201,7 +208,7 @@ async def entrypoint(ctx: JobContext) -> None:
     tts = create_cartesia_tts(
         voice_id=current_voice,
         tutor_voice=tutor_voice,
-        language=current_language,
+        language=stt_lang if mode == "onboarding" else current_language,
     )
 
     async def broadcast_event(data: dict) -> None:
@@ -212,6 +219,7 @@ async def entrypoint(ctx: JobContext) -> None:
             logger.debug(f"Failed to publish data event: {e}")
 
     lesson_orchestrator: LessonOrchestrator | None = None
+    onboarding_orchestrator: OnboardingOrchestrator | None = None
     if mode == "lesson":
         lesson_orchestrator = LessonOrchestrator(
             meta=meta,
@@ -224,6 +232,18 @@ async def entrypoint(ctx: JobContext) -> None:
             stt=stt,
         )
         initial_endpointing = 0.6
+    elif mode == "onboarding":
+        onboarding_orchestrator = OnboardingOrchestrator(
+            meta=meta,
+            tts=tts,
+            broadcast=broadcast_event,
+        )
+        agent = OnboardingAgent(
+            orchestrator=onboarding_orchestrator,
+            tts=tts,
+            stt=stt,
+        )
+        initial_endpointing = 0.65
     else:
         agent = ConversationalAgent(
             tts=tts,
@@ -246,6 +266,8 @@ async def entrypoint(ctx: JobContext) -> None:
 
     if lesson_orchestrator is not None:
         lesson_orchestrator.session = session
+    if onboarding_orchestrator is not None:
+        onboarding_orchestrator.session = session
 
     last_user_speech_end = 0.0
 
@@ -335,6 +357,16 @@ async def entrypoint(ctx: JobContext) -> None:
                     lesson_orchestrator.handle_client_action(
                         action=action,
                         payload=str(payload) if payload is not None else None,
+                    )
+                )
+                return
+
+            if msg_type == "onboarding_action" and onboarding_orchestrator is not None:
+                action = str(data.get("action") or "")
+                asyncio.create_task(
+                    onboarding_orchestrator.handle_client_action(
+                        action=action,
+                        data=data,
                     )
                 )
                 return

@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import type { RecommendedTopic } from "../db/app-schema.js";
 import { generateJson, type GeminiFile, type GeminiTurn } from "./gemini.js";
 import { accentLabel, languageInfo, languageName } from "./languages.js";
 import type { LearnerProfile } from "./profile.js";
@@ -21,15 +23,20 @@ const FOCUS_LINES: Record<LearnerProfile["focus"], string> = {
   travel: "Their goal is travel: lean examples toward trips, transport, hotels, food and getting around.",
   work: "Their goal is work: lean examples toward meetings, email, colleagues and professional situations.",
   exams: "They are preparing for an exam: favour accurate grammar, varied vocabulary and exam-style tasks.",
+  culture: "Their goal is culture & heritage: lean examples toward films, media, traditions and connecting with family.",
 };
 
 function learnerLine(profile: LearnerProfile) {
   const { target, native } = names(profile);
+  const interestClause = profile.interests && profile.interests.length > 0 ? `Their primary interests include: ${profile.interests.join(", ")}.` : "";
+  const goalClause = profile.goalNote ? `Specific learner goal: "${profile.goalNote}".` : "";
   return [
     `The learner is a native ${native} speaker learning ${target} at CEFR level ${profile.level}.`,
     `Use ${variety(profile)} vocabulary, spelling and expressions.`,
-    FOCUS_LINES[profile.focus],
-  ].join(" ");
+    FOCUS_LINES[profile.focus] || "",
+    interestClause,
+    goalClause,
+  ].filter(Boolean).join(" ");
 }
 
 /** Romanisation for beginners in non-Latin scripts (e.g. "こんにちは (konnichiwa)"). */
@@ -178,6 +185,208 @@ export function generateTopic(request: string, profile: LearnerProfile, material
     temperature: 0.7,
     timeoutMs: material ? 60_000 : undefined,
   });
+}
+
+const recommendationsSchema = z.object({
+  pathSubtitle: z.string().min(4).max(90),
+  topics: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(80),
+        translation: z.string().min(1).max(80),
+        reason: z.string().min(1).max(60),
+        prompt: z.string().min(1).max(200),
+      }),
+    )
+    .min(3)
+    .max(5),
+});
+
+/**
+ * Generates personalized topic recommendation blueprints + a concise path summary subtitle
+ * tailored to the learner's motivation, experience level, and selected interests.
+ */
+export async function generateTopicRecommendations(
+  profile: LearnerProfile,
+  excludeTitle?: string,
+): Promise<{ pathSubtitle: string; topics: RecommendedTopic[] }> {
+  const { target, native } = names(profile);
+  const interests = profile.interests && profile.interests.length > 0 ? profile.interests.join(", ") : "everyday conversations, food & dining, transit, work";
+  const result = await generateJson({
+    system: [
+      "You are Zuno, an expert language curriculum designer.",
+      learnerLine(profile),
+      `1. Write "pathSubtitle" in ${native}: a crisp, warm 1-line summary (max 60 chars) reflecting their specific goals/interests (e.g. "Built from your goals in Mexico & travel." or "Tailored for everyday work & travel.").`,
+      `2. Recommend 3 to 4 distinct follow-up topics the learner would love to practice next in ${target}.`,
+      ...(excludeTitle ? [`Do NOT repeat the starter topic "${excludeTitle}".`] : []),
+      `- "title": authentic, natural topic title in ${target} (sentence case, no numbering).`,
+      `- "translation": natural translation in ${native}.`,
+      `- "reason": short category tag in ${native} (e.g. "Technical interview", "Coffee & travel chat", "Everyday work").`,
+      `- "prompt": a concrete 1-sentence prompt describing what the topic will teach.`,
+      `Tailor strictly to level ${profile.level}, focus '${profile.focus}', and interests: ${interests}.`,
+    ].join("\n"),
+    contents: `Learner focus: ${profile.focus}. Interests: ${interests}.${profile.goalNote ? ` Specific goal: "${profile.goalNote}".` : ""}`,
+    schema: recommendationsSchema,
+    temperature: 0.7,
+    timeoutMs: 30_000,
+  });
+
+  return {
+    pathSubtitle: result.pathSubtitle,
+    topics: result.topics.map((t, idx) => ({
+      id: `rec_${idx + 1}_${randomUUID().slice(0, 6)}`,
+      title: t.title,
+      translation: t.translation,
+      reason: t.reason,
+      prompt: t.prompt,
+    })),
+  };
+}
+
+// ── Onboarding conversational turn extraction ───────────────────────────────
+
+const nameTurnSchema = z.object({
+  valid: z.boolean(),
+  name: z.string().max(60),
+  retryPrompt: z.string().max(120),
+});
+
+const levelTurnSchema = z.object({
+  valid: z.boolean(),
+  level: z.enum(["A1", "A2", "B1", "B2", "C1", "C2"]),
+  retryPrompt: z.string().max(120),
+});
+
+const goalsTurnSchema = z.object({
+  valid: z.boolean(),
+  focus: z.enum(["conversation", "travel", "work", "exams", "culture"]),
+  interests: z.array(z.string().min(1).max(60)).max(6),
+  goalNote: z.string().max(160),
+  retryPrompt: z.string().max(120),
+});
+
+export type OnboardingTurnInput = {
+  step: "name" | "level" | "goals";
+  answer: string;
+  chips?: string[];
+  targetLanguage: LearnerProfile["targetLanguage"];
+  nativeLanguage: LearnerProfile["nativeLanguage"];
+};
+
+export async function parseOnboardingTurn(input: OnboardingTurnInput) {
+  const native = languageName(input.nativeLanguage);
+  const target = languageName(input.targetLanguage);
+  const raw = input.answer.trim();
+  const chips = (input.chips ?? []).map((c) => c.trim()).filter(Boolean);
+
+  if (input.step === "name") {
+    if (!raw) {
+      return { step: "name" as const, valid: false, name: "", retryPrompt: `What should I call you?` };
+    }
+    // Fast-path clean 1-2 word name without conversational filler
+    const stripped = raw
+      .replace(/^(?:hi|hey|hello)[,!\s]+/i, "")
+      .replace(/^(?:call me|my name is|i am|i'm|im|it's|its)\s+/i, "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    if (/^[\p{L}][\p{L}'\- ]{0,30}$/u.test(stripped) && stripped.split(/\s+/).length <= 3) {
+      const formatted = stripped
+        .split(/\s+/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      return { step: "name" as const, valid: true, name: formatted };
+    }
+    const parsed = await generateJson({
+      system: [
+        "Extract the learner's preferred name from their reply to 'What should I call you?'.",
+        `If they gave a usable name or nickname, set "valid": true, "name": clean capitalized name (without "Call me" or punctuation), "retryPrompt": "".`,
+        `If the reply has no name or is unintelligible, set "valid": false, "name": "", and write a warm 1-sentence "retryPrompt" in ${native} asking what to call them.`,
+      ].join("\n"),
+      contents: `Learner reply: "${raw}"`,
+      schema: nameTurnSchema,
+      temperature: 0.1,
+      timeoutMs: 15_000,
+    });
+    return { step: "name" as const, ...parsed };
+  }
+
+  if (input.step === "level") {
+    const normalized = raw.toLowerCase();
+    if (normalized === "beginner" || normalized === "principiante" || normalized === "débutant" || normalized === "anfänger") {
+      return { step: "level" as const, valid: true, level: "A1" as const };
+    }
+    if (normalized === "intermediate" || normalized === "intermedio" || normalized === "intermédiaire" || normalized === "mittelstufe") {
+      return { step: "level" as const, valid: true, level: "B1" as const };
+    }
+    if (normalized === "advanced" || normalized === "avanzado" || normalized === "avancé" || normalized === "fortgeschritten") {
+      return { step: "level" as const, valid: true, level: "C1" as const };
+    }
+    if (!raw) {
+      return { step: "level" as const, valid: false, level: "A1" as const, retryPrompt: `How much ${target} do you know so far?` };
+    }
+    const parsed = await generateJson({
+      system: [
+        `Map the learner's self-reported ${target} experience to a CEFR level (A1, A2, B1, B2, C1, C2).`,
+        `- Complete beginner / nothing / a few words -> A1`,
+        `- Tourist basics / studied briefly -> A2`,
+        `- Intermediate / everyday basics / conversational -> B1`,
+        `- Upper-intermediate / comfortable in most situations -> B2`,
+        `- Advanced / fluent / professional -> C1 or C2`,
+        `Set "valid": true unless the text is completely unrelated gibberish (if gibberish, set "valid": false and write a short "retryPrompt" in ${native}).`,
+      ].join("\n"),
+      contents: `Learner reply: "${raw}"`,
+      schema: levelTurnSchema,
+      temperature: 0.1,
+      timeoutMs: 15_000,
+    });
+    return { step: "level" as const, ...parsed };
+  }
+
+  // step === "goals"
+  const combined = [raw, ...(chips.length ? [`Selected tags: ${chips.join(", ")}`] : [])].filter(Boolean).join(". ");
+  if (!raw && chips.length > 0) {
+    const lowerChips = chips.map((c) => c.toLowerCase());
+    const focus: LearnerProfile["focus"] = lowerChips.some((c) => c.includes("work") || c.includes("interview"))
+      ? "work"
+      : lowerChips.some((c) => c.includes("travel"))
+        ? "travel"
+        : lowerChips.some((c) => c.includes("exam"))
+          ? "exams"
+          : lowerChips.some((c) => c.includes("culture"))
+            ? "culture"
+            : "conversation";
+    return {
+      step: "goals" as const,
+      valid: true,
+      focus,
+      interests: chips.slice(0, 6),
+      goalNote: chips.join(", "),
+    };
+  }
+  if (!combined) {
+    return {
+      step: "goals" as const,
+      valid: false,
+      focus: "conversation" as const,
+      interests: [] as string[],
+      goalNote: "",
+      retryPrompt: `Tell me a bit about why you're learning ${target}.`,
+    };
+  }
+  const parsed = await generateJson({
+    system: [
+      `Extract the learner's motivation and specific interests for learning ${target}.`,
+      `- "focus": pick the closest primary focus among "conversation", "travel", "work", "exams", "culture" (interviews/career -> "work", trips/moving -> "travel", daily chat/friends -> "conversation").`,
+      `- "interests": 1 to 5 concise topic tags in ${native} (max 40 chars each, e.g. ["Backend interviews", "Mexico", "Specialty coffee", "Travel"]).`,
+      `- "goalNote": concise summary of their goal in ${native} (max 150 chars, preserving concrete details like countries, roles, or hobbies).`,
+      `- "valid": true if any goal, reason, or interest was expressed (even "just for fun" -> valid: true, focus: "conversation"); false only for empty/gibberish noise, with a short "retryPrompt" in ${native}.`,
+    ].join("\n"),
+    contents: combined,
+    schema: goalsTurnSchema,
+    temperature: 0.2,
+    timeoutMs: 15_000,
+  });
+  return { step: "goals" as const, ...parsed };
 }
 
 /** Lazily generates structured voice curriculum for a legacy topic lesson created before 03g. */

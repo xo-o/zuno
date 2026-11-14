@@ -149,10 +149,21 @@ app.get("/s/:token", async (c) => {
 // 3. LiveKit token generation
 type TokenRequest = {
   language?: string;
+  /** "conversation" (default) or "onboarding" (`5b`–`5d` guided setup). */
+  mode?: "conversation" | "onboarding";
   /** When set, the voice agent follows this conversation's roleplay / lesson context. */
   conversationId?: string;
   /** When the conversation ends with a tutor reply, the agent opens the call by speaking it. */
   speakLastReply?: boolean;
+  /** Initial onboarding state when `mode === "onboarding"`. */
+  onboarding?: {
+    step?: "name" | "level" | "goals";
+    targetLanguage?: string;
+    nativeLanguage?: string;
+    accent?: string;
+    name?: string;
+    level?: string;
+  };
 };
 
 const TOKEN_TTL = "6h";
@@ -174,6 +185,50 @@ app.post("/api/livekit/token", async (c) => {
   const room = `zuno-${randomUUID().slice(0, 8)}`;
 
   const profile = await getProfile(user.id);
+  const voice = cartesiaVoiceFor(profile.tutorVoice);
+
+  if (body.mode === "onboarding") {
+    const ob = body.onboarding ?? {};
+    const nativeLanguage = ob.nativeLanguage || profile.nativeLanguage || "en";
+    const targetLanguage = ob.targetLanguage || body.language || profile.targetLanguage;
+    const accent = ob.accent || profile.accent;
+    const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity: user.id,
+      name: ob.name || user.name || user.email,
+      ttl: TOKEN_TTL,
+      metadata: JSON.stringify({
+        mode: "onboarding",
+        provider: "cartesia",
+        voice,
+        // Onboarding conducts STT + TTS in the learner's native/app language.
+        language: nativeLanguage,
+        targetLanguage,
+        nativeLanguage,
+        accent,
+        tutorVoice: profile.tutorVoice,
+        handsFree: true,
+        onboarding: {
+          step: ob.step ?? "name",
+          name: ob.name ?? "",
+          level: ob.level ?? "",
+        },
+      }),
+    });
+    token.addGrant({
+      room,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+    return c.json({
+      token: await token.toJwt(),
+      url: LIVEKIT_URL,
+      room,
+      identity: user.id,
+    });
+  }
+
   const thread = body.conversationId ? await findConversation(user.id, body.conversationId) : undefined;
   const context = thread ? await contextFor(thread) : { kind: "freetalk" as const };
   const history = thread ? (await listMessages(thread.id)).slice(-VOICE_HISTORY_TURNS) : [];
@@ -189,7 +244,6 @@ app.post("/api/livekit/token", async (c) => {
   const lastTurn = history.at(-1);
   const opening = body.speakLastReply && lastTurn?.role !== "user" ? lastTurn?.text : undefined;
 
-  const voice = cartesiaVoiceFor(profile.tutorVoice);
   const targetLanguage = body.language ?? profile.targetLanguage;
 
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {

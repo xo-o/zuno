@@ -26,7 +26,10 @@ import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.LessonEvaluation
 import com.zuno.ai.data.LessonSessionTicket
 import com.zuno.ai.data.NotificationPrefs
+import com.zuno.ai.data.OnboardingCompleteResult
+import com.zuno.ai.data.OnboardingTurnResult
 import com.zuno.ai.data.Preferences
+import com.zuno.ai.data.RecommendedTopic
 import com.zuno.ai.data.ReportReason
 import com.zuno.ai.data.Schedule
 import com.zuno.ai.data.ScheduleDraft
@@ -112,6 +115,9 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _profile = MutableStateFlow<Profile?>(null)
     val profile: StateFlow<Profile?> = _profile.asStateFlow()
+
+    private val _profileLoading = MutableStateFlow(false)
+    val profileLoading: StateFlow<Boolean> = _profileLoading.asStateFlow()
 
     private val _recent = MutableStateFlow<List<RecentSession>>(emptyList())
     val recent: StateFlow<List<RecentSession>> = _recent.asStateFlow()
@@ -312,10 +318,82 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Loads everything the signed-in shell needs (drawer + home). */
     fun refreshAccount() {
-        launchSafely { _profile.value = api.profile() }
+        _profileLoading.value = true
+        viewModelScope.launch {
+            try {
+                _profile.value = api.profile()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            } finally {
+                _profileLoading.value = false
+            }
+        }
         refreshRecent()
         loadLanguages()
     }
+
+    suspend fun parseOnboardingTurn(
+        step: String,
+        answer: String,
+        chips: List<String> = emptyList(),
+        targetLanguage: String? = null,
+        nativeLanguage: String? = null,
+    ): OnboardingTurnResult = try {
+        api.parseOnboardingTurn(step, answer, chips, targetLanguage, nativeLanguage)
+    } catch (e: ApiException) {
+        handleAuth(e)
+        throw e
+    }
+
+    suspend fun completeOnboarding(
+        name: String?,
+        targetLanguage: String,
+        nativeLanguage: String,
+        accent: String?,
+        level: String,
+        focus: String,
+        interests: List<String>,
+        goalNote: String?,
+    ): OnboardingCompleteResult = try {
+        val res = api.completeOnboarding(
+            name = name,
+            targetLanguage = targetLanguage,
+            nativeLanguage = nativeLanguage,
+            accent = accent,
+            level = level,
+            focus = focus,
+            interests = interests,
+            goalNote = goalNote,
+        )
+        _profile.value = res.profile
+        cacheTopic(res.starterTopic)
+        _topics.update { state ->
+            val existing = state.items.orEmpty().filterNot { it.id == res.starterTopic.summary.id }
+            state.copy(items = listOf(res.starterTopic.summary) + existing, loading = false, error = null)
+        }
+        res
+    } catch (e: ApiException) {
+        handleAuth(e)
+        throw e
+    }
+
+    /** Creates a full 5-lesson topic from a personalized onboarding recommendation blueprint. */
+    fun createTopicFromRecommendation(rec: RecommendedTopic, onCreated: (TopicDetail) -> Unit) = runBusy {
+        val topic = api.createTopic(prompt = rec.prompt, recommendationId = rec.id)
+        cacheTopic(topic)
+        _topics.update { state ->
+            val others = state.items.orEmpty().filterNot { it.id == topic.summary.id }
+            state.copy(items = listOf(topic.summary) + others)
+        }
+        _profile.update { current ->
+            current?.copy(recommendedTopics = current.recommendedTopics.filterNot { it.id == rec.id })
+        }
+        refreshRecent()
+        onCreated(topic)
+    }
+
+    fun readSessionToken(): String? = tokenStore.read()
 
     fun loadLanguages() = launchSafely(silent = true) {
         val list = api.languages()
@@ -326,6 +404,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clear() {
         _profile.value = null
+        _profileLoading.value = false
         _notificationPrefs.value = null
         _schedules.value = Loadable()
         _scheduleTargets.value = Loadable()

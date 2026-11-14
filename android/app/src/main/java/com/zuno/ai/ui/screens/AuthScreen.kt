@@ -43,7 +43,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
-import com.zuno.ai.ui.components.ZunoBackTopBar
+import com.zuno.ai.ui.components.ZunoOnboardingTopBar
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoDivider
@@ -117,7 +117,7 @@ fun AuthScreen(
             .navigationBarsPadding()
             .imePadding(),
     ) {
-        ZunoBackTopBar(onBack = onBack)
+        ZunoOnboardingTopBar(onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -221,7 +221,7 @@ private fun MagicLinkSent(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoBackTopBar(onBack = onBack)
+        ZunoOnboardingTopBar(onBack = onBack)
         Column(
             modifier = Modifier
                 .weight(1f)

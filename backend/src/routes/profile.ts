@@ -21,6 +21,9 @@ import {
   TUTOR_VOICES,
   updateProfile,
 } from "../lib/profile.js";
+import { generateTopic, generateTopicRecommendations, parseOnboardingTurn } from "../lib/tutor.js";
+import { serializeTopicDetail } from "../lib/serializers.js";
+import { persistAndWarmTopic } from "./topics.js";
 import { deleteObjects, headObject, presignDownload, presignUpload } from "../lib/storage.js";
 import { isValidTimeZone } from "../lib/time.js";
 
@@ -43,6 +46,27 @@ const updateSchema = z.object({
     .refine((value) => (DAILY_GOALS as readonly number[]).includes(value), "Unsupported daily goal")
     .optional(),
   focus: z.enum(FOCUSES).optional(),
+  interests: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
+  goalNote: z.string().trim().max(160).optional(),
+});
+
+const onboardingTurnSchema = z.object({
+  step: z.enum(["name", "level", "goals"]),
+  answer: z.string().max(400).default(""),
+  chips: z.array(z.string().trim().min(1).max(60)).max(8).optional(),
+  targetLanguage: z.enum(LANGUAGE_CODES).optional(),
+  nativeLanguage: z.enum(APP_LANGUAGE_CODES).optional(),
+});
+
+const onboardingSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  targetLanguage: z.enum(LANGUAGE_CODES),
+  nativeLanguage: z.enum(APP_LANGUAGE_CODES).optional(),
+  accent: z.string().trim().min(1).max(40).optional(),
+  level: z.enum(LEVELS),
+  focus: z.enum(FOCUSES),
+  interests: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
+  goalNote: z.string().trim().max(160).optional(),
 });
 
 const notificationsSchema = z.object({
@@ -121,6 +145,77 @@ export const profileRoutes = new Hono<AuthEnv>()
     }
     const [row] = await db.select().from(user).where(eq(user.id, current.id));
     return c.json(await profileResponse(row));
+  })
+  /** Conversational onboarding turn parser (Name / Level / Goals). */
+  .post("/onboarding/turn", async (c) => {
+    const current = c.get("user");
+    const body = await parseBody(c, onboardingTurnSchema);
+    const existing = await getProfile(current.id);
+    const result = await parseOnboardingTurn({
+      step: body.step,
+      answer: body.answer,
+      chips: body.chips,
+      targetLanguage: body.targetLanguage ?? existing.targetLanguage,
+      nativeLanguage: body.nativeLanguage ?? existing.nativeLanguage,
+    });
+    return c.json(result);
+  })
+  /** Completes onboarding (`5e` -> `5f`): persists profile, creates Starter 5-lesson topic, and generates Recommended Next. */
+  .post("/onboarding", async (c) => {
+    const current = c.get("user");
+    const { name, ...patch } = await parseBody(c, onboardingSchema);
+
+    if (name) {
+      await db.update(user).set({ name }).where(eq(user.id, current.id));
+    }
+
+    let updatedProfile;
+    try {
+      updatedProfile = await updateProfile(current.id, {
+        ...patch,
+        goalNote: patch.goalNote || null,
+        onboardingCompletedAt: new Date(),
+        markLevelChecked: true,
+      });
+    } catch (err) {
+      if (err instanceof InvalidAccentError) throw new HTTPException(400, { message: err.message });
+      throw err;
+    }
+
+    const starterPrompt = patch.goalNote
+      ? `Starter foundational topic tailored to: ${patch.goalNote}`
+      : patch.interests.length > 0
+        ? `Starter foundational topic introducing myself and ${patch.interests.slice(0, 2).join(" & ")}`
+        : `Starter foundational topic for ${patch.focus} conversations and introducing myself`;
+
+    const [generatedStarter, recBundle] = await Promise.all([
+      generateTopic(starterPrompt, updatedProfile),
+      generateTopicRecommendations(updatedProfile),
+    ]);
+
+    // Filter out any recommendation whose title duplicates the starter topic, keeping 2–3 crisp next steps.
+    const starterTitleKey = generatedStarter.title.trim().toLowerCase();
+    const dedupedRecs = recBundle.topics
+      .filter((r) => r.title.trim().toLowerCase() !== starterTitleKey)
+      .slice(0, 3);
+
+    const [starterRow] = await Promise.all([
+      persistAndWarmTopic({
+        userId: current.id,
+        prompt: starterPrompt,
+        generated: generatedStarter,
+        profile: updatedProfile,
+      }),
+      updateProfile(current.id, { recommendedTopics: dedupedRecs }),
+    ]);
+
+    const [row] = await db.select().from(user).where(eq(user.id, current.id));
+    return c.json({
+      ...(await profileResponse(row ?? current)),
+      starterTopic: serializeTopicDetail(starterRow, starterRow.lessons),
+      recommendedTopics: dedupedRecs,
+      pathSubtitle: recBundle.pathSubtitle,
+    });
   })
   .get("/notifications", async (c) => {
     return c.json({ notifications: serializeNotificationPrefs(await getNotificationPrefs(c.get("user").id)) });

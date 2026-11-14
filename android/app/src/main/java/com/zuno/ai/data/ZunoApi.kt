@@ -34,6 +34,44 @@ class ZunoApi(
         return send("PATCH", "/me", body).toProfile()
     }
 
+    suspend fun parseOnboardingTurn(
+        step: String,
+        answer: String,
+        chips: List<String> = emptyList(),
+        targetLanguage: String? = null,
+        nativeLanguage: String? = null,
+    ): OnboardingTurnResult {
+        val body = JSONObject()
+            .put("step", step)
+            .put("answer", answer)
+            .put("chips", JSONArray(chips))
+        targetLanguage?.takeIf { it.isNotBlank() }?.let { body.put("targetLanguage", it) }
+        nativeLanguage?.takeIf { it.isNotBlank() }?.let { body.put("nativeLanguage", it) }
+        return send("POST", "/me/onboarding/turn", body).toOnboardingTurnResult()
+    }
+
+    suspend fun completeOnboarding(
+        name: String?,
+        targetLanguage: String,
+        nativeLanguage: String,
+        accent: String?,
+        level: String,
+        focus: String,
+        interests: List<String>,
+        goalNote: String?,
+    ): OnboardingCompleteResult {
+        val body = JSONObject()
+            .put("targetLanguage", targetLanguage)
+            .put("nativeLanguage", nativeLanguage)
+            .put("level", level)
+            .put("focus", focus)
+            .put("interests", JSONArray(interests))
+        name?.trim()?.takeIf { it.isNotEmpty() }?.let { body.put("name", it) }
+        accent?.takeIf { it.isNotBlank() }?.let { body.put("accent", it) }
+        goalNote?.trim()?.takeIf { it.isNotEmpty() }?.let { body.put("goalNote", it) }
+        return send("POST", "/me/onboarding", body).toOnboardingCompleteResult()
+    }
+
     suspend fun languages(): List<LearningLanguage> =
         execute(Request.Builder().url("$apiUrl/languages").get().build()).listOf("languages").map { it.toLearningLanguage() }
 
@@ -96,11 +134,13 @@ class ZunoApi(
         prompt: String,
         attachmentIds: List<String> = emptyList(),
         parts: List<String> = emptyList(),
+        recommendationId: String? = null,
     ): TopicDetail {
         val body = JSONObject()
             .put("prompt", prompt)
             .put("attachmentIds", JSONArray(attachmentIds))
             .put("parts", JSONArray(parts))
+        recommendationId?.takeIf { it.isNotBlank() }?.let { body.put("recommendationId", it) }
         return send("POST", "/topics", body).getJSONObject("topic").toTopicDetail()
     }
 

@@ -61,6 +61,45 @@ fun ZunoBackTopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/** Top Bar · Onboarding (`2524:3247`): optional Ghost `arrow-left` back button + optional centered title. */
+@Composable
+fun ZunoOnboardingTopBar(
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    onBack: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(TopBarHeight)
+            .padding(horizontal = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (onBack != null) {
+            ZunoIconButton(
+                icon = R.drawable.zuno_ic_arrow_left,
+                onClick = onBack,
+                size = ZunoIconButtonSize.Large,
+                contentDescription = "Back",
+            )
+        } else {
+            Spacer(Modifier.size(ZunoIconButtonSize.Large.button))
+        }
+        if (title != null) {
+            EllipsizedText(
+                text = title,
+                style = ZunoType.Headline.copy(textAlign = TextAlign.Center),
+                color = ZunoColors.TextPrimary,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.size(ZunoIconButtonSize.Large.button))
+    }
+}
+
 /** Top Bar — Type=Back + Compact Title. Chat & detail screens: back, centred title, trailing overflow. */
 @Composable
 fun ZunoCompactTitleTopBar(

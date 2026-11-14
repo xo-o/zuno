@@ -181,7 +181,7 @@ fun ZunoAgentGlow(
     modifier: Modifier = Modifier,
     audioLevel: () -> Float = { 0f },
     intensity: Float = 1f,
-    shape: Shape = RoundedCornerShape(ZunoRadius.xxxl),
+    shape: Shape = RoundedCornerShape(40.dp),
 ) {
     val tune = animatedTune(state, intensity)
     val motion = rememberGlowMotion(state, tune, audioLevel)

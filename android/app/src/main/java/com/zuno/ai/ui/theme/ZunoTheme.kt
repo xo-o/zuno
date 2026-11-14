@@ -70,6 +70,11 @@ object ZunoColors {
     val IconSecondary = Color(0x8FFFFFFF)
     val IconTertiary = Color(0x52FFFFFF)
     val IconOnInverse = Gray2
+    val IconBrand = Color(0xFFFFFFFF)
+    val IconDanger = Color(0xFFFF8B8B)
+
+    // Status
+    val StatusListening = Color(0xFF85BDFF)
 
     val Divider = Color(0x24FFFFFF)
 
@@ -101,16 +106,18 @@ object ZunoSpace {
     val s24 = 24.dp
     val s32 = 32.dp
     val s40 = 40.dp
+    val s48 = 48.dp
 }
 
 object ZunoRadius {
     val xs = 6.dp
     val sm = 8.dp
-    val md = 12.dp
-    val lg = 16.dp
-    val xl = 20.dp
-    val xxl = 24.dp
-    val xxxl = 40.dp
+    val md = 10.dp
+    val lg = 12.dp
+    val xl = 14.dp
+    val xxl = 16.dp
+    val xxxl = 18.dp
+    val full = 999.dp
 }
 
 @OptIn(ExperimentalTextApi::class)
@@ -126,7 +133,11 @@ val Lexend = FontFamily(
     lexend(FontWeight.SemiBold),
 )
 
-/** The 14 Lexend text styles. */
+val Outfit = FontFamily(
+    Font(resId = R.font.outfit, weight = FontWeight.Medium),
+)
+
+/** The 14 Lexend text styles + Web/Title & brand Wordmark. */
 object ZunoType {
     private fun style(weight: FontWeight, size: Int, lineHeight: Int, tracking: Float = 0f) = TextStyle(
         fontFamily = Lexend,
@@ -142,6 +153,18 @@ object ZunoType {
 
     val Display = style(FontWeight.SemiBold, 28, 34, -1f)
     val TitleLarge = style(FontWeight.SemiBold, 24, 30, -0.8f)
+    val WebTitle = style(FontWeight.SemiBold, 22, 28, -0.4f)
+    val Wordmark = TextStyle(
+        fontFamily = Outfit,
+        fontWeight = FontWeight.Medium,
+        fontSize = 25.sp,
+        lineHeight = 30.sp,
+        letterSpacing = (-0.5).sp,
+        lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.None,
+        ),
+    )
     val Headline = style(FontWeight.Medium, 17, 24, -0.2f)
     val BodyLarge = style(FontWeight.Normal, 17, 24)
     val BodyMedium = style(FontWeight.Normal, 15, 22)

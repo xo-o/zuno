@@ -12,6 +12,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -30,15 +33,22 @@ class CartesiaAudioPlayer(
     private var mediaPlayer: MediaPlayer? = null
     private var playJob: Job? = null
 
+    private val _isSpeaking = MutableStateFlow(false)
+    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
     fun speak(
         text: String,
         language: String? = null,
         nativeLanguage: String? = null,
         voiceKey: String = "warm",
         slow: Boolean = false,
+        onFinished: (() -> Unit)? = null,
     ) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty()) {
+            onFinished?.invoke()
+            return
+        }
         stop()
         playJob = scope.launch {
             try {
@@ -54,13 +64,22 @@ class CartesiaAudioPlayer(
                         cached.writeBytes(bytes)
                     }
                     cached
-                } ?: return@launch
+                } ?: run {
+                    _isSpeaking.value = false
+                    onFinished?.invoke()
+                    return@launch
+                }
 
+                _isSpeaking.value = true
                 val mp = MediaPlayer().apply {
                     setDataSource(file.absolutePath)
-                    setOnCompletionListener { releaseSafely(it) }
+                    setOnCompletionListener {
+                        releaseSafely(it)
+                        onFinished?.invoke()
+                    }
                     setOnErrorListener { player, _, _ ->
                         releaseSafely(player)
+                        onFinished?.invoke()
                         true
                     }
                     prepare()
@@ -69,6 +88,8 @@ class CartesiaAudioPlayer(
                 mediaPlayer = mp
             } catch (e: Exception) {
                 Log.w("CartesiaAudioPlayer", "TTS preview playback failed", e)
+                _isSpeaking.value = false
+                onFinished?.invoke()
             }
         }
     }
@@ -78,6 +99,7 @@ class CartesiaAudioPlayer(
         playJob = null
         mediaPlayer?.let(::releaseSafely)
         mediaPlayer = null
+        _isSpeaking.value = false
     }
 
     fun release() {
@@ -90,7 +112,10 @@ class CartesiaAudioPlayer(
             if (player.isPlaying) player.stop()
         }
         runCatching { player.release() }
-        if (mediaPlayer === player) mediaPlayer = null
+        if (mediaPlayer === player) {
+            mediaPlayer = null
+            _isSpeaking.value = false
+        }
     }
 
     private fun sha256(input: String): String {

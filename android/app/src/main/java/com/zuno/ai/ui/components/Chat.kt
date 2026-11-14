@@ -89,6 +89,7 @@ fun ZunoAssistantBubble(
     translation: String? = null,
     glossary: List<String> = emptyList(),
     showSender: Boolean = true,
+    senderLabel: String = "ZunoAI",
     onListen: (() -> Unit)? = null,
     onExplain: (() -> Unit)? = null,
     contextNote: String? = null,
@@ -106,7 +107,7 @@ fun ZunoAssistantBubble(
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
     ) {
         if (showSender) {
-            Text("ZunoAI", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+            Text(senderLabel, style = ZunoType.Micro, color = ZunoColors.TextTertiary)
         }
         if (!contextNote.isNullOrBlank()) {
             ZunoContextStatus(contextNote, onClick = onContextClick)

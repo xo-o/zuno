@@ -16,23 +16,88 @@ import {
 import { conversationIdsWhere, createConversation, listMessages } from "../lib/conversations.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { checkTopicCompleted } from "./conversations.js";
-import { getProfile } from "../lib/profile.js";
+import { getProfile, updateProfile, type LearnerProfile } from "../lib/profile.js";
 import {
   serializeConversation,
   serializeMessages,
   serializeTopicDetail,
   serializeTopicSummary,
 } from "../lib/serializers.js";
-import { analyzeMaterial, generateLessonCurriculum, generateTopic } from "../lib/tutor.js";
+import { analyzeMaterial, generateLessonCurriculum, generateTopic, type GeneratedTopic } from "../lib/tutor.js";
 
 const attachmentIds = z.array(z.string().min(1).max(64)).max(MAX_TOPIC_MATERIAL);
 
 const createSchema = z.object({
   prompt: z.string().trim().min(2).max(200),
+  recommendationId: z.string().trim().min(1).max(64).optional(),
   attachmentIds: attachmentIds.default([]),
   /** Sub-topics from /analyze the learner kept selected. */
   parts: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
 });
+
+export async function persistAndWarmTopic(options: {
+  userId: string;
+  prompt: string;
+  generated: GeneratedTopic;
+  profile: LearnerProfile;
+  trimmedMaterial?: string | null;
+}) {
+  const topicId = randomUUID();
+  const trimmedMaterial = options.trimmedMaterial ?? null;
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(topic)
+      .values({
+        id: topicId,
+        userId: options.userId,
+        prompt: options.prompt,
+        title: options.generated.title,
+        translation: options.generated.translation,
+        language: options.profile.targetLanguage,
+        material: trimmedMaterial,
+      })
+      .returning();
+    const lessons = await tx
+      .insert(topicLesson)
+      .values(
+        options.generated.lessons.map((lesson, index) => ({
+          id: randomUUID(),
+          topicId,
+          position: index + 1,
+          title: lesson.title,
+          translation: lesson.translation,
+          objective: lesson.objective,
+        })),
+      )
+      .returning();
+    return { ...created, lessons };
+  });
+
+  // Pre-generate structured voice curricula in the background so Lesson 1..5 launch instantaneously.
+  void (async () => {
+    const ordered = [...row.lessons].sort((a, b) => a.position - b.position);
+    for (const lesson of ordered) {
+      try {
+        const curriculum = await generateLessonCurriculum(
+          {
+            topicTitle: row.title,
+            lessonTitle: lesson.title,
+            lessonTranslation: lesson.translation,
+            objective: lesson.objective,
+            position: lesson.position,
+            material: trimmedMaterial,
+          },
+          options.profile,
+        );
+        await db.update(topicLesson).set({ curriculum }).where(eq(topicLesson.id, lesson.id));
+      } catch (err) {
+        console.warn(`Background curriculum pre-warm skipped for lesson ${lesson.id}:`, err);
+      }
+    }
+  })();
+
+  return row;
+}
 
 const analyzeSchema = z.object({
   prompt: z.string().trim().max(200).default(""),
@@ -72,66 +137,37 @@ export const topicRoutes = new Hono<AuthEnv>()
   })
   .post("/", aiLimit, async (c) => {
     const userId = c.get("user").id;
-    const { prompt, attachmentIds, parts } = await parseBody(c, createSchema);
+    const { prompt, recommendationId, attachmentIds, parts } = await parseBody(c, createSchema);
     const profile = await getProfile(userId);
+    const matchedRec = recommendationId
+      ? profile.recommendedTopics.find((r) => r.id === recommendationId)
+      : undefined;
     const material = await materialForTopic(userId, attachmentIds);
     const notes = material.length ? materialNotes(material) : null;
-    const generated = await generateTopic(prompt, profile, notes ? { notes, focus: parts } : undefined);
+    const rawGenerated = await generateTopic(
+      matchedRec ? `${matchedRec.title} (${matchedRec.translation}): ${matchedRec.prompt}` : prompt,
+      profile,
+      notes ? { notes, focus: parts } : undefined,
+    );
+    const generated: GeneratedTopic = matchedRec
+      ? { ...rawGenerated, title: matchedRec.title, translation: matchedRec.translation }
+      : rawGenerated;
 
-    const topicId = randomUUID();
     const trimmedMaterial = notes ? materialNotes(material, 12_000) : null;
-    const row = await db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(topic)
-        .values({
-          id: topicId,
-          userId,
-          prompt,
-          title: generated.title,
-          translation: generated.translation,
-          language: profile.targetLanguage,
-          material: trimmedMaterial,
-        })
-        .returning();
-      const lessons = await tx
-        .insert(topicLesson)
-        .values(
-          generated.lessons.map((lesson, index) => ({
-            id: randomUUID(),
-            topicId,
-            position: index + 1,
-            title: lesson.title,
-            translation: lesson.translation,
-            objective: lesson.objective,
-          })),
-        )
-        .returning();
-      return { ...created, lessons };
+    const row = await persistAndWarmTopic({
+      userId,
+      prompt: matchedRec?.prompt ?? prompt,
+      generated,
+      profile,
+      trimmedMaterial,
     });
-    await bindMaterial(topicId, material);
+    await bindMaterial(row.id, material);
 
-    // Pre-generate structured voice curricula in the background so Lesson 1..5 launch instantaneously.
-    void (async () => {
-      const ordered = [...row.lessons].sort((a, b) => a.position - b.position);
-      for (const lesson of ordered) {
-        try {
-          const curriculum = await generateLessonCurriculum(
-            {
-              topicTitle: row.title,
-              lessonTitle: lesson.title,
-              lessonTranslation: lesson.translation,
-              objective: lesson.objective,
-              position: lesson.position,
-              material: trimmedMaterial,
-            },
-            profile,
-          );
-          await db.update(topicLesson).set({ curriculum }).where(eq(topicLesson.id, lesson.id));
-        } catch (err) {
-          console.warn(`Background curriculum pre-warm skipped for lesson ${lesson.id}:`, err);
-        }
-      }
-    })();
+    if (matchedRec) {
+      await updateProfile(userId, {
+        recommendedTopics: profile.recommendedTopics.filter((r) => r.id !== matchedRec.id),
+      });
+    }
 
     return c.json({ topic: serializeTopicDetail(row, row.lessons) }, 201);
   })

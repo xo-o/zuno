@@ -2,6 +2,14 @@ import { relations } from "drizzle-orm";
 import { boolean, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 
+export type RecommendedTopic = {
+  id: string;
+  title: string;
+  translation: string;
+  reason: string;
+  prompt: string;
+};
+
 /**
  * Learning preferences. One row per user, created lazily on first read. `level` and `accent` are the
  * current target language's values (denormalised from user_language_progress for the tutor).
@@ -24,6 +32,10 @@ export const userProfile = pgTable("user_profile", {
   teachInTarget: boolean("teach_in_target").default(false).notNull(),
   dailyGoalMin: integer("daily_goal_min").default(15).notNull(),
   focus: text("focus").default("conversation").notNull(),
+  interests: jsonb("interests").$type<string[]>().default([]).notNull(),
+  goalNote: text("goal_note"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+  recommendedTopics: jsonb("recommended_topics").$type<RecommendedTopic[]>(),
   plan: text("plan", { enum: ["free", "pro"] }).default("free").notNull(),
   planExpiresAt: timestamp("plan_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

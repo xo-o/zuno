@@ -646,6 +646,7 @@ private fun focusLabel(id: String) = stringResource(
         "travel" -> R.string.settings_learn_focus_travel
         "work" -> R.string.settings_learn_focus_work
         "exams" -> R.string.settings_learn_focus_exams
+        "culture" -> R.string.settings_learn_focus_culture
         else -> R.string.settings_learn_focus_conversation
     },
 )
