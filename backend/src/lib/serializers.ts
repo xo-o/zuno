@@ -135,12 +135,14 @@ export async function serializeMessage(row: MessageRow) {
   return {
     id: row.id,
     role: row.role,
+    kind: row.kind,
     text: row.text,
     translation: row.translation,
     feedback: row.feedback,
     glossary: row.glossary ?? [],
     viaVoice: row.viaVoice,
     contextNote: row.contextNote,
+    metadata: row.metadata ?? null,
     attachments: await Promise.all((row.attachments ?? []).map(serializeAttachment)),
     createdAt: row.createdAt.toISOString(),
   };

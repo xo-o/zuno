@@ -42,6 +42,11 @@ const transcriptSchema = z.object({
     .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().trim().min(1).max(2000) }))
     .max(200),
 });
+const callSummarySchema = z.object({
+  durationSec: z.number().int().min(0).max(36_000),
+  isVideo: z.boolean().default(false),
+  tipsCount: z.number().int().min(0).max(50).default(2),
+});
 const hintSchema = z.object({ text: z.string().trim().min(1).max(300) });
 const updateSchema = z
   .object({
@@ -309,6 +314,32 @@ export const conversationRoutes = new Hono<AuthEnv>()
     const { turns } = await parseBody(c, transcriptSchema);
     const saved = await appendTranscript(row, turns);
     return c.json({ messages: await serializeMessages(saved) });
+  })
+  .post("/:id/call-summary", async (c) => {
+    const row = await requireConversation(c.get("user").id, c.req.param("id"));
+    const body = await parseBody(c, callSummarySchema);
+    const mins = Math.floor(body.durationSec / 60);
+    const secs = body.durationSec % 60;
+    const durationLabel = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    const title = `${body.isVideo ? "Video call" : "Voice call"} · ${durationLabel} · Ended`;
+    const [saved] = await db
+      .insert(message)
+      .values({
+        id: randomUUID(),
+        conversationId: row.id,
+        role: "assistant",
+        kind: "call_summary",
+        text: title,
+        viaVoice: true,
+        metadata: {
+          durationSec: body.durationSec,
+          isVideo: body.isVideo,
+          tipsCount: body.tipsCount,
+        },
+      })
+      .returning();
+    await db.update(conversation).set({ updatedAt: sql`now()` }).where(eq(conversation.id, row.id));
+    return c.json({ message: await serializeMessage(saved) }, 201);
   });
 
 /** Queues the "Topic complete" milestone once every lesson is done. */

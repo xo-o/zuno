@@ -352,6 +352,10 @@ data class Message(
     val attachments: List<Attachment> = emptyList(),
     /** "Read menu photo · 4 items found" — what the tutor read from the learner's attachments. */
     val contextNote: String? = null,
+    val kind: String = "text",
+    val callDurationSec: Int? = null,
+    val callIsVideo: Boolean = false,
+    val callTipsCount: Int = 0,
 )
 
 /** A presigned R2 upload for a newly created attachment. */
@@ -676,6 +680,7 @@ internal fun JSONObject.toUploadTicket() = UploadTicket(
 
 internal fun JSONObject.toMessage(): Message {
     val glossary = optJSONArray("glossary")
+    val meta = optJSONObject("metadata")
     return Message(
         id = getString("id"),
         isUser = optString("role") == "user",
@@ -685,6 +690,10 @@ internal fun JSONObject.toMessage(): Message {
         glossary = if (glossary == null) emptyList() else List(glossary.length()) { glossary.getString(it) },
         attachments = optJSONArray("attachments")?.objects()?.map { it.toAttachment() }.orEmpty(),
         contextNote = optStringOrNull("contextNote"),
+        kind = optString("kind", "text"),
+        callDurationSec = meta?.let { if (it.has("durationSec")) it.optInt("durationSec") else null },
+        callIsVideo = meta?.optBoolean("isVideo", false) ?: false,
+        callTipsCount = meta?.optInt("tipsCount", 0) ?: 0,
     )
 }
 
@@ -849,4 +858,244 @@ internal fun LessonEvaluation.toRequestBody(conversationId: String?): JSONObject
         put("coachNotes", notesArr)
         put("phraseResults", phrasesArr)
     }
+}
+
+// ── Unified Chats, Peer Messaging & 1:1 Call Rooms ──────────────────────────
+
+enum class ChatsFilter { All, AiTutor, People, Open }
+
+data class PeerLearner(
+    val id: String,
+    val name: String,
+    val shortName: String,
+    val initial: String,
+    val imageUrl: String?,
+    val language: String,
+    val languageName: String,
+    val level: String,
+    val nativeLanguage: String,
+    val streakDays: Int,
+    val sessionsCount: Int,
+    val interests: List<String>,
+    val openToSpeak: Boolean,
+    val isPartner: Boolean,
+    val activeLabel: String,
+    val isSeeded: Boolean = false,
+)
+
+enum class UnifiedChatKind { Ai, Peer }
+
+data class UnifiedChatItem(
+    val id: String,
+    val kind: UnifiedChatKind,
+    val conversationId: String?,
+    val peerConversationId: String?,
+    val partnerId: String?,
+    val title: String,
+    val badge: String?,
+    val isVoice: Boolean,
+    val openToSpeak: Boolean,
+    val snippet: String,
+    val unread: Boolean,
+    val pinned: Boolean,
+    val updatedAtMillis: Long,
+    val avatarInitial: String,
+    val avatarUrl: String?,
+)
+
+data class ChatsOverview(
+    val openToSpeak: Boolean,
+    val language: String,
+    val languageName: String,
+    val level: String,
+    val openSpeakers: List<PeerLearner>,
+    val partners: List<PeerLearner>,
+    val conversations: List<UnifiedChatItem>,
+)
+
+data class PeerMessage(
+    val id: String,
+    val peerConversationId: String,
+    val senderId: String,
+    val isMine: Boolean,
+    val kind: String, // "text" | "call_invite" | "missed_invite" | "call_summary"
+    val text: String,
+    val callRoomId: String?,
+    val cameraEnabled: Boolean,
+    val durationSec: Int?,
+    val createdAtMillis: Long,
+)
+
+data class PeerCallRoom(
+    val id: String,
+    val peerConversationId: String,
+    val hostUserId: String,
+    val guestUserId: String,
+    val livekitRoom: String,
+    val status: String, // "waiting" | "active" | "ended" | "declined" | "missed"
+    val cameraEnabled: Boolean,
+    val startedAtMillis: Long?,
+    val durationSec: Int,
+)
+
+data class PeerConversationMeta(
+    val id: String,
+    val language: String,
+    val muted: Boolean,
+    val partnerId: String,
+)
+
+data class PeerConversationThread(
+    val conversation: PeerConversationMeta,
+    val partner: PeerLearner?,
+    val messages: List<PeerMessage>,
+    val activeCall: PeerCallRoom?,
+)
+
+data class LivekitTicket(
+    val token: String,
+    val url: String,
+    val room: String,
+    val identity: String,
+)
+
+data class StartPeerCallResult(
+    val call: PeerCallRoom,
+    val livekit: LivekitTicket,
+    val message: PeerMessage,
+)
+
+data class JoinPeerCallResult(
+    val call: PeerCallRoom,
+    val livekit: LivekitTicket,
+)
+
+data class CoachPromptItem(
+    val phrase: String,
+    val translation: String,
+)
+
+data class CoachPrompts(
+    val answers: List<CoachPromptItem> = emptyList(),
+    val followUps: List<CoachPromptItem> = emptyList(),
+    val questions: List<CoachPromptItem> = emptyList(),
+)
+
+internal fun JSONObject.toPeerLearner() = PeerLearner(
+    id = getString("id"),
+    name = optString("name"),
+    shortName = optString("shortName"),
+    initial = optString("initial", "L"),
+    imageUrl = optStringOrNull("image"),
+    language = optString("language", "es"),
+    languageName = optString("languageName", "Spanish"),
+    level = optString("level", "B1"),
+    nativeLanguage = optString("nativeLanguage", "English"),
+    streakDays = optInt("streakDays", 7),
+    sessionsCount = optInt("sessionsCount", 12),
+    interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+    openToSpeak = optBoolean("openToSpeak", false),
+    isPartner = optBoolean("isPartner", false),
+    activeLabel = optString("activeLabel"),
+    isSeeded = optBoolean("isSeeded", false),
+)
+
+internal fun JSONObject.toUnifiedChatItem() = UnifiedChatItem(
+    id = getString("id"),
+    kind = if (optString("kind") == "peer") UnifiedChatKind.Peer else UnifiedChatKind.Ai,
+    conversationId = optStringOrNull("conversationId"),
+    peerConversationId = optStringOrNull("peerConversationId"),
+    partnerId = optStringOrNull("partnerId"),
+    title = optString("title"),
+    badge = optStringOrNull("badge"),
+    isVoice = optBoolean("isVoice", false),
+    openToSpeak = optBoolean("openToSpeak", false),
+    snippet = optString("snippet"),
+    unread = optBoolean("unread", false),
+    pinned = optBoolean("pinned", false),
+    updatedAtMillis = parseInstant(optString("updatedAt")) ?: System.currentTimeMillis(),
+    avatarInitial = optString("avatarInitial", "Z"),
+    avatarUrl = optStringOrNull("avatarUrl"),
+)
+
+internal fun JSONObject.toChatsOverview() = ChatsOverview(
+    openToSpeak = optBoolean("openToSpeak", true),
+    language = optString("language", "es"),
+    languageName = optString("languageName", "Spanish"),
+    level = optString("level", "B1"),
+    openSpeakers = optJSONArray("openSpeakers")?.objects()?.map { it.toPeerLearner() }.orEmpty(),
+    partners = optJSONArray("partners")?.objects()?.map { it.toPeerLearner() }.orEmpty(),
+    conversations = optJSONArray("conversations")?.objects()?.map { it.toUnifiedChatItem() }.orEmpty(),
+)
+
+internal fun JSONObject.toPeerMessage(): PeerMessage {
+    val meta = optJSONObject("metadata")
+    return PeerMessage(
+        id = getString("id"),
+        peerConversationId = optString("peerConversationId"),
+        senderId = optString("senderId"),
+        isMine = optBoolean("isMine", false),
+        kind = optString("kind", "text"),
+        text = optString("text"),
+        callRoomId = optStringOrNull("callRoomId"),
+        cameraEnabled = meta?.optBoolean("cameraEnabled", false) ?: false,
+        durationSec = meta?.let { if (it.has("durationSec")) it.optInt("durationSec") else null },
+        createdAtMillis = parseInstant(optString("createdAt")) ?: System.currentTimeMillis(),
+    )
+}
+
+internal fun JSONObject.toPeerCallRoom() = PeerCallRoom(
+    id = getString("id"),
+    peerConversationId = optString("peerConversationId"),
+    hostUserId = optString("hostUserId"),
+    guestUserId = optString("guestUserId"),
+    livekitRoom = optString("livekitRoom"),
+    status = optString("status", "waiting"),
+    cameraEnabled = optBoolean("cameraEnabled", false),
+    startedAtMillis = parseInstant(optStringOrNull("startedAt")),
+    durationSec = optInt("durationSec", 0),
+)
+
+internal fun JSONObject.toPeerConversationThread(): PeerConversationThread {
+    val convObj = getJSONObject("conversation")
+    return PeerConversationThread(
+        conversation = PeerConversationMeta(
+            id = convObj.getString("id"),
+            language = convObj.optString("language", "es"),
+            muted = convObj.optBoolean("muted", false),
+            partnerId = convObj.optString("partnerId"),
+        ),
+        partner = optJSONObject("partner")?.toPeerLearner(),
+        messages = optJSONArray("messages")?.objects()?.map { it.toPeerMessage() }.orEmpty(),
+        activeCall = optJSONObject("activeCall")?.toPeerCallRoom(),
+    )
+}
+
+internal fun JSONObject.toLivekitTicket() = LivekitTicket(
+    token = getString("token"),
+    url = getString("url"),
+    room = getString("room"),
+    identity = optString("identity"),
+)
+
+internal fun JSONObject.toStartPeerCallResult() = StartPeerCallResult(
+    call = getJSONObject("call").toPeerCallRoom(),
+    livekit = getJSONObject("livekit").toLivekitTicket(),
+    message = getJSONObject("message").toPeerMessage(),
+)
+
+internal fun JSONObject.toJoinPeerCallResult() = JoinPeerCallResult(
+    call = getJSONObject("call").toPeerCallRoom(),
+    livekit = getJSONObject("livekit").toLivekitTicket(),
+)
+
+internal fun JSONObject.toCoachPrompts(): CoachPrompts {
+    fun list(key: String) = optJSONArray(key)?.objects()?.map {
+        CoachPromptItem(it.optString("phrase"), it.optString("translation"))
+    }.orEmpty()
+    return CoachPrompts(
+        answers = list("answers"),
+        followUps = list("followUps"),
+        questions = list("questions"),
+    )
 }

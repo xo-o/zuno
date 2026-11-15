@@ -75,12 +75,14 @@ fun ZunoSheet(
                 .padding(start = ZunoSpace.s12, end = ZunoSpace.s12, bottom = ZunoSpace.s40),
             verticalArrangement = Arrangement.spacedBy(spacing),
         ) {
-            Text(
-                title,
-                style = ZunoType.Headline,
-                color = ZunoColors.TextPrimary,
-                modifier = Modifier.padding(horizontal = ZunoSpace.s12).heightIn(min = 32.dp).padding(top = ZunoSpace.s4),
-            )
+            if (title.isNotBlank()) {
+                Text(
+                    title,
+                    style = ZunoType.Headline,
+                    color = ZunoColors.TextPrimary,
+                    modifier = Modifier.padding(horizontal = ZunoSpace.s12).heightIn(min = 32.dp).padding(top = ZunoSpace.s4),
+                )
+            }
             description?.let {
                 Text(
                     it,

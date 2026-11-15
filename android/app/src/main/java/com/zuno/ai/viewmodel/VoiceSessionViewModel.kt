@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.zuno.ai.data.LessonEvaluation
 import com.zuno.ai.data.LessonSessionTicket
 import com.zuno.ai.data.LessonStageUi
+import com.zuno.ai.data.LivekitTicket
 import com.zuno.ai.data.OnboardingVoiceTurnEvent
 import com.zuno.ai.data.PronunciationEvalUi
 import com.zuno.ai.data.RescuePayloadUi
@@ -24,6 +25,8 @@ import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.DataPublishReliability
+import io.livekit.android.room.track.Track
+import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -83,6 +86,24 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     val userAudioLevel: StateFlow<Float> = _userAudioLevel.asStateFlow()
     private val _agentAudioLevel = MutableStateFlow(0f)
     val agentAudioLevel: StateFlow<Float> = _agentAudioLevel.asStateFlow()
+
+    // ── Video & 1:1 Peer Call Room State ────────────────────────────────────
+    private val _isCameraEnabled = MutableStateFlow(false)
+    val isCameraEnabled: StateFlow<Boolean> = _isCameraEnabled.asStateFlow()
+
+    private val _isSpeakerOn = MutableStateFlow(true)
+    val isSpeakerOn: StateFlow<Boolean> = _isSpeakerOn.asStateFlow()
+
+    private val _localVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val localVideoTrack: StateFlow<VideoTrack?> = _localVideoTrack.asStateFlow()
+
+    private val _remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val remoteVideoTrack: StateFlow<VideoTrack?> = _remoteVideoTrack.asStateFlow()
+
+    private val _partnerJoined = MutableStateFlow(false)
+    val partnerJoined: StateFlow<Boolean> = _partnerJoined.asStateFlow()
+
+    val activeRoom: Room? get() = currentRoom
 
     private var currentRoom: Room? = null
     private var eventJob: Job? = null
@@ -222,22 +243,65 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private suspend fun joinRoom(url: String, token: String, roomName: String) {
+    fun connectPeerCall(ticket: LivekitTicket, enableCamera: Boolean = false) {
+        if (_agentState.value != AgentState.DISCONNECTED) {
+            disconnectInternal()
+        }
+        resetLessonState()
+        _messages.value = emptyList()
+        _partnerJoined.value = false
+        _errorMessage.value = null
+        _agentState.value = AgentState.CONNECTING
+
+        connectJob = viewModelScope.launch {
+            try {
+                joinRoom(ticket.url, ticket.token, ticket.room, enableCamera = enableCamera, isPeerRoom = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Peer call connection failed", e)
+                _errorMessage.value = e.message ?: "Connection failed. Please check network."
+                disconnectInternal()
+            }
+        }
+    }
+
+    private suspend fun joinRoom(
+        url: String,
+        token: String,
+        roomName: String,
+        enableCamera: Boolean = false,
+        isPeerRoom: Boolean = false,
+    ) {
         _roomName.value = roomName
         val room = LiveKit.create(getApplication())
         currentRoom = room
 
         eventJob = viewModelScope.launch {
             room.events.events.collect { event ->
-                handleRoomEvent(event)
+                handleRoomEvent(event, isPeerRoom)
             }
         }
 
         room.connect(url, token)
         room.localParticipant.setMicrophoneEnabled(true)
+        if (enableCamera) {
+            runCatching { room.localParticipant.setCameraEnabled(true) }
+                .onSuccess {
+                    _isCameraEnabled.value = true
+                    refreshVideoTracks(room)
+                }
+        } else {
+            _isCameraEnabled.value = false
+        }
+        _isSpeakerOn.value = true
+        room.setSpeakerMute(false)
         levelJob = viewModelScope.launch { pollAudioLevels(room) }
         _isMuted.value = false
         _agentState.value = AgentState.IDLE
+        if (isPeerRoom && room.remoteParticipants.values.any { !it.identity?.value.orEmpty().startsWith("agent-") }) {
+            _partnerJoined.value = true
+        }
     }
 
     fun clearCompletedLessonEvaluation() {
@@ -263,6 +327,11 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         levelJob = null
         _userAudioLevel.value = 0f
         _agentAudioLevel.value = 0f
+        _isCameraEnabled.value = false
+        _isSpeakerOn.value = true
+        _localVideoTrack.value = null
+        _remoteVideoTrack.value = null
+        _partnerJoined.value = false
         currentRoom?.let { room ->
             try {
                 room.disconnect()
@@ -291,6 +360,49 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                 Log.w(TAG, "Failed to toggle microphone", e)
             }
         }
+    }
+
+    fun toggleCamera(enable: Boolean? = null) {
+        val room = currentRoom ?: return
+        viewModelScope.launch {
+            try {
+                val next = enable ?: !_isCameraEnabled.value
+                room.localParticipant.setCameraEnabled(next)
+                _isCameraEnabled.value = next
+                refreshVideoTracks(room)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to toggle camera", e)
+            }
+        }
+    }
+
+    fun toggleSpeaker() {
+        val room = currentRoom ?: return
+        val next = !_isSpeakerOn.value
+        _isSpeakerOn.value = next
+        runCatching { room.setSpeakerMute(!next) }
+    }
+
+    fun sendPingPartner() {
+        val room = currentRoom ?: return
+        viewModelScope.launch {
+            try {
+                val packet = JSONObject().apply { put("type", "ping_partner") }.toString().toByteArray(Charsets.UTF_8)
+                room.localParticipant.publishData(packet, DataPublishReliability.RELIABLE)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send ping_partner", e)
+            }
+        }
+    }
+
+    private fun refreshVideoTracks(room: Room) {
+        val local = room.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
+        _localVideoTrack.value = if (_isCameraEnabled.value) local else null
+        val remote = room.remoteParticipants.values
+            .firstOrNull()
+            ?.getTrackPublication(Track.Source.CAMERA)
+            ?.track as? VideoTrack
+        _remoteVideoTrack.value = remote
     }
 
     fun interrupt() {
@@ -326,10 +438,26 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun handleRoomEvent(event: RoomEvent) {
+    private fun handleRoomEvent(event: RoomEvent, isPeerRoom: Boolean = false) {
+        val room = currentRoom
         when (event) {
             is RoomEvent.Connected -> {
                 _agentState.value = AgentState.IDLE
+                if (room != null) refreshVideoTracks(room)
+            }
+            is RoomEvent.ParticipantConnected -> {
+                if (isPeerRoom && !event.participant.identity?.value.orEmpty().startsWith("agent-")) {
+                    _partnerJoined.value = true
+                }
+            }
+            is RoomEvent.ParticipantDisconnected -> {
+                if (room != null) refreshVideoTracks(room)
+            }
+            is RoomEvent.TrackPublished,
+            is RoomEvent.TrackUnpublished,
+            is RoomEvent.TrackSubscribed,
+            is RoomEvent.TrackUnsubscribed -> {
+                if (room != null) refreshVideoTracks(room)
             }
             is RoomEvent.ActiveSpeakersChanged -> {
                 val localIdentity = currentRoom?.localParticipant?.identity?.value
@@ -399,6 +527,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                         }
                         "onboarding_turn" -> {
                             _onboardingEvents.tryEmit(json.toOnboardingVoiceTurnEvent())
+                        }
+                        "partner_joined" -> {
+                            _partnerJoined.value = true
                         }
                     }
                 } catch (e: Exception) {

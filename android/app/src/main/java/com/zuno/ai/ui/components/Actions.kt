@@ -82,6 +82,7 @@ fun ZunoButton(
     size: ZunoButtonSize = ZunoButtonSize.Large,
     enabled: Boolean = true,
     @DrawableRes leadingIcon: Int? = null,
+    leadingIconTint: Color? = null,
     @DrawableRes trailingIcon: Int? = null,
     loading: Boolean = false,
 ) {
@@ -112,7 +113,7 @@ fun ZunoButton(
         if (loading) {
             ZunoSpinner(size = size.iconSize, color = contentColor)
         } else {
-            leadingIcon?.let { ZunoIcon(it, size.iconSize) }
+            leadingIcon?.let { ZunoIcon(it, size.iconSize, tint = leadingIconTint) }
         }
         Text(text = label, style = textStyle, color = contentColor, maxLines = 1)
         trailingIcon?.let { ZunoIcon(it, size.iconSize) }
@@ -138,6 +139,7 @@ fun ZunoIconButton(
     style: ZunoIconButtonStyle = ZunoIconButtonStyle.Ghost,
     size: ZunoIconButtonSize = ZunoIconButtonSize.Medium,
     iconSize: Dp = size.icon,
+    tint: Color? = null,
     contentDescription: String? = null,
 ) {
     val buttonSize = size.button
@@ -157,7 +159,7 @@ fun ZunoIconButton(
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        ZunoIcon(icon, iconSize, contentDescription = contentDescription)
+        ZunoIcon(icon, iconSize, contentDescription = contentDescription, tint = tint)
     }
 }
 

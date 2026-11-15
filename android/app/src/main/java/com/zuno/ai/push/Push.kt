@@ -37,6 +37,9 @@ object Push {
     const val EXTRA_TOPIC_ID = "com.zuno.ai.extra.TOPIC_ID"
     const val EXTRA_ROLEPLAY_ID = "com.zuno.ai.extra.ROLEPLAY_ID"
     const val EXTRA_START = "com.zuno.ai.extra.START"
+    const val EXTRA_PEER_CONVERSATION_ID = "com.zuno.ai.extra.PEER_CONVERSATION_ID"
+    const val EXTRA_PARTNER_ID = "com.zuno.ai.extra.PARTNER_ID"
+    const val EXTRA_CALL_ID = "com.zuno.ai.extra.CALL_ID"
 
     private const val TAG = "ZunoPush"
     private const val PREFS = "zuno_push"
@@ -126,14 +129,20 @@ object Push {
         val title = data["title"].orEmpty()
         val body = data["body"].orEmpty()
         val conversationId = data["conversationId"]
+        val peerConversationId = data["peerConversationId"]
+        val partnerId = data["partnerId"]
+        val callId = data["callId"]
         val scheduleId = data["scheduleId"]
         val topicId = data["topicId"]
-        val key = data["reminderId"] ?: scheduleId ?: conversationId ?: topicId ?: type
+        val key = data["reminderId"] ?: callId ?: peerConversationId ?: scheduleId ?: conversationId ?: topicId ?: type
         val notificationId = key.hashCode()
 
         val open = Intent(context, MainActivity::class.java)
             .setAction("com.zuno.ai.PUSH.$type.$key.${System.currentTimeMillis()}")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        peerConversationId?.let { open.putExtra(EXTRA_PEER_CONVERSATION_ID, it) }
+        partnerId?.let { open.putExtra(EXTRA_PARTNER_ID, it) }
+        callId?.let { open.putExtra(EXTRA_CALL_ID, it) }
         conversationId?.let { open.putExtra(Reminders.EXTRA_CONVERSATION_ID, it) }
         scheduleId?.let {
             open.putExtra(EXTRA_SCHEDULE_ID, it)

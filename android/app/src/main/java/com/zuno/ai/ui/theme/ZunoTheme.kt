@@ -75,6 +75,7 @@ object ZunoColors {
 
     // Status
     val StatusListening = Color(0xFF85BDFF)
+    val StatusSpeaking = Color(0xFF6EE3A6)
 
     val Divider = Color(0x24FFFFFF)
 

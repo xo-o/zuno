@@ -371,6 +371,95 @@ class ZunoApi(
             .listOf("messages").map { it.toMessage() }
     }
 
+    suspend fun saveCallSummary(
+        conversationId: String,
+        durationSec: Int,
+        isVideo: Boolean,
+        tipsCount: Int = 2,
+    ): Message =
+        send(
+            "POST",
+            "/conversations/$conversationId/call-summary",
+            JSONObject()
+                .put("durationSec", durationSec)
+                .put("isVideo", isVideo)
+                .put("tipsCount", tipsCount),
+        ).getJSONObject("message").toMessage()
+
+    // Unified Chats, Peer Messaging & 1:1 Call Rooms
+
+    suspend fun chatsOverview(): ChatsOverview = get("/chats/overview").toChatsOverview()
+
+    suspend fun setOpenToSpeak(openToSpeak: Boolean): Boolean =
+        send("PATCH", "/chats/open-to-speak", JSONObject().put("openToSpeak", openToSpeak)).optBoolean("openToSpeak", openToSpeak)
+
+    suspend fun addPartner(partnerId: String) {
+        send("POST", "/chats/partners/$partnerId")
+    }
+
+    suspend fun removePartner(partnerId: String) {
+        send("DELETE", "/chats/partners/$partnerId")
+    }
+
+    suspend fun openPeerChat(partnerId: String): PeerConversationThread =
+        send("POST", "/chats/people/$partnerId/open").toPeerConversationThread()
+
+    suspend fun peerChat(conversationId: String): PeerConversationThread =
+        get("/chats/people/$conversationId").toPeerConversationThread()
+
+    suspend fun sendPeerMessage(conversationId: String, text: String): PeerMessage =
+        send("POST", "/chats/people/$conversationId/messages", JSONObject().put("text", text))
+            .getJSONObject("message")
+            .toPeerMessage()
+
+    suspend fun mutePeerChat(conversationId: String, muted: Boolean): Boolean =
+        send("PATCH", "/chats/people/$conversationId", JSONObject().put("muted", muted)).optBoolean("muted", muted)
+
+    suspend fun reportPeerUser(conversationId: String, reason: String, details: String) {
+        val body = JSONObject().put("reason", reason)
+        if (details.isNotBlank()) body.put("details", details.trim())
+        send("POST", "/chats/people/$conversationId/report", body)
+    }
+
+    suspend fun deletePeerChat(conversationId: String) {
+        send("DELETE", "/chats/people/$conversationId")
+    }
+
+    suspend fun startPeerCall(conversationId: String, cameraEnabled: Boolean = false): StartPeerCallResult =
+        send("POST", "/chats/people/$conversationId/call", JSONObject().put("cameraEnabled", cameraEnabled))
+            .toStartPeerCallResult()
+
+    suspend fun joinPeerCall(callId: String): JoinPeerCallResult =
+        send("POST", "/chats/calls/$callId/join").toJoinPeerCallResult()
+
+    suspend fun declinePeerCall(callId: String): PeerCallRoom =
+        send("POST", "/chats/calls/$callId/decline").getJSONObject("call").toPeerCallRoom()
+
+    suspend fun pingPeerCall(callId: String) {
+        send("POST", "/chats/calls/$callId/ping")
+    }
+
+    suspend fun endPeerCall(callId: String, durationSec: Int, isVideo: Boolean): PeerMessage =
+        send(
+            "POST",
+            "/chats/calls/$callId/end",
+            JSONObject().put("durationSec", durationSec).put("isVideo", isVideo),
+        ).getJSONObject("summaryMessage").toPeerMessage()
+
+    suspend fun coachPrompts(
+        targetLanguage: String? = null,
+        contextLabel: String? = null,
+        partnerName: String? = null,
+        lastLine: String? = null,
+    ): CoachPrompts {
+        val body = JSONObject()
+        targetLanguage?.takeIf { it.isNotBlank() }?.let { body.put("targetLanguage", it) }
+        contextLabel?.takeIf { it.isNotBlank() }?.let { body.put("contextLabel", it) }
+        partnerName?.takeIf { it.isNotBlank() }?.let { body.put("partnerName", it) }
+        lastLine?.takeIf { it.isNotBlank() }?.let { body.put("lastLine", it) }
+        return send("POST", "/chats/coach-prompts", body).toCoachPrompts()
+    }
+
     suspend fun explain(messageId: String): String =
         send("POST", "/messages/$messageId/explain").optString("explanation")
 

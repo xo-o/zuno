@@ -31,6 +31,13 @@ data class LearningLanguage(
         return if (firstName.isBlank()) copy.plain else copy.named.replace("{name}", firstName)
     }
 
+    /** Short Home top-bar greeting in the target language, e.g. "Hola, Noah". */
+    fun shortGreeting(firstName: String): String {
+        val salutation = SHORT_SALUTATION[code] ?: "Hi"
+        val name = firstName.trim()
+        return if (name.isBlank()) salutation else "$salutation, $name"
+    }
+
     /** Composer placeholder, e.g. "Responde en español…". */
     val placeholder: String get() = (HOME_COPY[code] ?: HOME_COPY.getValue("en")).placeholder
 
@@ -116,6 +123,18 @@ data class LearningLanguage(
             "uk" to HomeCopyText("Привіт, {name}! Що потренуємо сьогодні?", "Привіт! Що потренуємо сьогодні?", "Відповідай українською…"),
             "ur" to HomeCopyText("ہیلو {name}، آج ہم کیا مشق کریں؟", "ہیلو، آج ہم کیا مشق کریں؟", "اردو میں جواب دیں…"),
             "vi" to HomeCopyText("Chào {name}, hôm nay mình luyện gì nhé?", "Chào bạn, hôm nay mình luyện gì nhé?", "Trả lời bằng tiếng Việt…"),
+        )
+
+        val SHORT_SALUTATION: Map<String, String> = mapOf(
+            "ar" to "مرحبًا", "bn" to "হ্যালো", "zh" to "你好", "cs" to "Ahoj",
+            "da" to "Hej", "nl" to "Hoi", "en" to "Hi", "fi" to "Hei",
+            "fr" to "Salut", "de" to "Hallo", "el" to "Γεια σου", "he" to "היי",
+            "hi" to "नमस्ते", "hu" to "Szia", "id" to "Hai", "it" to "Ciao",
+            "ja" to "こんにちは", "ko" to "안녕하세요", "ms" to "Hai", "no" to "Hei",
+            "fa" to "سلام", "pl" to "Cześć", "pt" to "Oi", "ro" to "Salut",
+            "ru" to "Привет", "es" to "Hola", "sv" to "Hej", "tl" to "Kumusta",
+            "th" to "สวัสดี", "tr" to "Merhaba", "uk" to "Привіт", "ur" to "ہیلو",
+            "vi" to "Chào",
         )
     }
 }

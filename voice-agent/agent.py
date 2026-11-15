@@ -179,6 +179,10 @@ async def entrypoint(ctx: JobContext) -> None:
             logger.warning(f"Error parsing metadata: {e}")
 
     mode = str(meta.get("mode") or ("lesson" if meta.get("curriculum") else "conversation"))
+    if mode == "peer_human_only":
+        logger.info(f"Peer human-only room {ctx.room.name}; agent stepping out.")
+        return
+
     tutor_voice = meta.get("tutorVoice")
     current_voice = resolve_cartesia_voice(meta.get("voice"), tutor_voice)
     current_language = str(meta.get("targetLanguage") or meta.get("language") or "en")
@@ -191,6 +195,42 @@ async def entrypoint(ctx: JobContext) -> None:
     logger.info(
         f"Initialized session: mode={mode}, provider=cartesia, voice={current_voice}, lang={current_language}"
     )
+
+    if mode == "peer_partner":
+        partner_name = str(meta.get("partnerName") or "Lucía M.")
+        partner_level = str(meta.get("partnerLevel") or "B1")
+        partner_interests = ", ".join(meta.get("partnerInterests") or ["Travel", "Daily life"])
+        tutor_instructions = (
+            f"You are {partner_name}, a friendly fellow language learner practicing {current_language} "
+            f"at CEFR level {partner_level}. Your interests include {partner_interests}. "
+            f"You just joined a 1:1 peer practice voice call with another learner. "
+            f"Talk naturally like a friendly practice partner (NOT as a teacher or AI assistant). "
+            f"Greet them warmly in {current_language} and ask how their day is going or what they want to practice."
+        )
+        # Simulate realistic 2.5s call-ring wait before partner joins, or join immediately if user taps Ping
+        ping_event = asyncio.Event()
+
+        @ctx.room.on("data_received")
+        def _on_wait_data(packet: rtc.DataPacket) -> None:
+            try:
+                msg = json.loads(packet.data.decode("utf-8"))
+                if msg.get("type") == "ping_partner":
+                    ping_event.set()
+            except Exception:
+                pass
+
+        try:
+            await asyncio.wait_for(ping_event.wait(), timeout=2.5)
+        except asyncio.TimeoutError:
+            pass
+
+        try:
+            await ctx.room.local_participant.publish_data(
+                json.dumps({"type": "partner_joined", "partnerName": partner_name}).encode("utf-8"),
+                reliable=True,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to broadcast partner_joined: {e}")
 
     stt_lang = (
         str(meta.get("nativeLanguage") or "en")

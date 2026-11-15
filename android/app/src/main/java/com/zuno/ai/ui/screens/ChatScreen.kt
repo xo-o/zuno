@@ -2,20 +2,27 @@ package com.zuno.ai.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,15 +34,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.Message
+import com.zuno.ai.ui.components.ZunoAiTutorAvatar
 import com.zuno.ai.ui.components.ZunoAssistantBubble
+import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoComposer
 import com.zuno.ai.ui.components.ZunoDraftAttachment
+import com.zuno.ai.ui.components.ZunoIcon
+import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoMessageAttachments
 import com.zuno.ai.ui.components.ZunoPendingAttachments
 import com.zuno.ai.ui.components.ZunoFeedbackPill
@@ -43,12 +58,13 @@ import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOverflowMenu
 import com.zuno.ai.ui.components.ZunoSessionStart
-import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
 import com.zuno.ai.ui.components.ZunoIconButtonSize
+import com.zuno.ai.ui.components.ZunoIconButtonStyle
 import com.zuno.ai.ui.components.ZunoTutorHint
 import com.zuno.ai.ui.components.ZunoTypingBubble
 import com.zuno.ai.ui.components.ZunoUserBubble
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.viewmodel.DraftAttachment
@@ -84,6 +100,7 @@ fun ChatScreen(
     modifier: Modifier = Modifier,
     /** Preferences · Show translations. */
     showTranslations: Boolean = true,
+    levelLabel: String = "B1",
 ) {
     val listState = rememberLazyListState()
     // Re-scroll whenever content at the bottom changes — including the typing bubble being replaced by the reply.
@@ -103,10 +120,11 @@ fun ChatScreen(
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
-            ZunoCompactTitleTopBar(
-                title = title,
+            AiTutorTopBar(
+                subtitle = if (title.isNotBlank()) "$title · $levelLabel" else levelLabel,
                 onBack = onBack,
-                trailing = { ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Large) },
+                onStartCall = onStartVoice,
+                menu = menu,
             )
             if (messages == null) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -121,7 +139,12 @@ fun ChatScreen(
                 ) {
                     item(key = "start") { ZunoSessionStart(sessionLabel) }
                     itemsIndexed(messages, key = { _, message -> message.id }) { index, message ->
-                        if (message.isUser) {
+                        if (message.kind == "call_summary") {
+                            ReturnedCallSummaryCard(
+                                message = message,
+                                onNotesClick = { onExplain(message) },
+                            )
+                        } else if (message.isUser) {
                             UserTurn(message.text, message.feedback) {
                                 if (message.attachments.isNotEmpty()) ZunoMessageAttachments(message.attachments, onOpenAttachment)
                             }
@@ -176,6 +199,113 @@ fun ChatScreen(
                 onVoice = onStartVoice,
             )
         }
+    }
+}
+
+@Composable
+private fun AiTutorTopBar(
+    subtitle: String,
+    onBack: () -> Unit,
+    onStartCall: () -> Unit,
+    menu: List<ZunoMenuAction>,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(horizontal = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ZunoIconButton(
+            icon = R.drawable.zuno_ic_arrow_left,
+            onClick = onBack,
+            size = ZunoIconButtonSize.Large,
+            contentDescription = stringResource(R.string.common_back),
+        )
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZunoAiTutorAvatar(size = 36.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = stringResource(R.string.onboarding_sender_sofia),
+                    style = ZunoType.BodyMediumStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                )
+                Text(
+                    text = subtitle,
+                    style = ZunoType.FootnoteRegular,
+                    color = ZunoColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        ZunoIconButton(
+            icon = R.drawable.zuno_ic_t_phone,
+            onClick = onStartCall,
+            style = ZunoIconButtonStyle.Subtle,
+            size = ZunoIconButtonSize.Medium,
+            tint = ZunoColors.IconPrimary,
+            contentDescription = stringResource(R.string.chats_action_talk),
+        )
+        ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Large)
+    }
+}
+
+@Composable
+private fun ReturnedCallSummaryCard(
+    message: Message,
+    onNotesClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(ZunoRadius.xxl)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(ZunoColors.SurfaceDefault)
+            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .clickable(role = Role.Button, onClick = onNotesClick)
+            .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(ZunoColors.SurfaceStrong),
+            contentAlignment = Alignment.Center,
+        ) {
+            ZunoIcon(
+                icon = if (message.callIsVideo) R.drawable.zuno_ic_t_video else R.drawable.zuno_ic_t_phone,
+                size = 16.dp,
+                tint = ZunoColors.IconPrimary,
+            )
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+            Text(
+                text = message.text,
+                style = ZunoType.LabelMedium,
+                color = ZunoColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(R.string.call_returned_summary_sub, message.callTipsCount.coerceAtLeast(1)),
+                style = ZunoType.FootnoteRegular,
+                color = ZunoColors.TextSecondary,
+                maxLines = 1,
+            )
+        }
+        ZunoChip(
+            label = stringResource(R.string.call_returned_notes),
+            onClick = onNotesClick,
+        )
     }
 }
 

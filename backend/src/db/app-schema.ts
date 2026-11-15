@@ -36,6 +36,8 @@ export const userProfile = pgTable("user_profile", {
   goalNote: text("goal_note"),
   onboardingCompletedAt: timestamp("onboarding_completed_at"),
   recommendedTopics: jsonb("recommended_topics").$type<RecommendedTopic[]>(),
+  openToSpeak: boolean("open_to_speak").default(true).notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
   plan: text("plan", { enum: ["free", "pro"] }).default("free").notNull(),
   planExpiresAt: timestamp("plan_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -368,6 +370,7 @@ export const message = pgTable(
       .notNull()
       .references(() => conversation.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    kind: text("kind", { enum: ["text", "call_summary"] }).default("text").notNull(),
     text: text("text").notNull(),
     translation: text("translation"),
     feedback: text("feedback"),
@@ -376,6 +379,7 @@ export const message = pgTable(
     viaVoice: boolean("via_voice").default(false).notNull(),
     /** Short "Read menu photo · 4 items found" line shown above replies to messages with attachments. */
     contextNote: text("context_note"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("message_conversationId_createdAt_idx").on(table.conversationId, table.createdAt)],
@@ -493,4 +497,130 @@ export const scheduleRelations = relations(schedule, ({ one }) => ({
 
 export const chatReminderRelations = relations(chatReminder, ({ one }) => ({
   conversation: one(conversation, { fields: [chatReminder.conversationId], references: [conversation.id] }),
+}));
+
+// ── Unified Chats: Peer Messaging, Partners & 1:1 Call Rooms ─────────────────
+
+export const learnerPartner = pgTable(
+  "learner_partner",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    partnerUserId: text("partner_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.partnerUserId] })],
+);
+
+export const peerConversation = pgTable(
+  "peer_conversation",
+  {
+    id: text("id").primaryKey(),
+    userAId: text("user_a_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    userBId: text("user_b_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    language: text("language").notNull(),
+    mutedByUserA: boolean("muted_by_user_a").default(false).notNull(),
+    mutedByUserB: boolean("muted_by_user_b").default(false).notNull(),
+    deletedByUserA: boolean("deleted_by_user_a").default(false).notNull(),
+    deletedByUserB: boolean("deleted_by_user_b").default(false).notNull(),
+    lastMessageText: text("last_message_text"),
+    lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+    unreadCountA: integer("unread_count_a").default(0).notNull(),
+    unreadCountB: integer("unread_count_b").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("peer_conversation_pair_idx").on(table.userAId, table.userBId, table.language),
+    index("peer_conversation_userA_idx").on(table.userAId, table.lastMessageAt),
+    index("peer_conversation_userB_idx").on(table.userBId, table.lastMessageAt),
+  ],
+);
+
+export const peerMessage = pgTable(
+  "peer_message",
+  {
+    id: text("id").primaryKey(),
+    peerConversationId: text("peer_conversation_id")
+      .notNull()
+      .references(() => peerConversation.id, { onDelete: "cascade" }),
+    senderId: text("sender_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["text", "call_invite", "missed_invite", "call_summary"] })
+      .default("text")
+      .notNull(),
+    text: text("text").notNull(),
+    callRoomId: text("call_room_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("peer_message_conv_createdAt_idx").on(table.peerConversationId, table.createdAt)],
+);
+
+export const peerCallRoom = pgTable(
+  "peer_call_room",
+  {
+    id: text("id").primaryKey(),
+    peerConversationId: text("peer_conversation_id")
+      .notNull()
+      .references(() => peerConversation.id, { onDelete: "cascade" }),
+    hostUserId: text("host_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    guestUserId: text("guest_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    livekitRoom: text("livekit_room").notNull().unique(),
+    status: text("status", { enum: ["waiting", "active", "ended", "declined", "missed"] })
+      .default("waiting")
+      .notNull(),
+    cameraEnabled: boolean("camera_enabled").default(false).notNull(),
+    startedAt: timestamp("started_at"),
+    endedAt: timestamp("ended_at"),
+    durationSec: integer("duration_sec").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("peer_call_room_conv_idx").on(table.peerConversationId, table.createdAt)],
+);
+
+export const peerReport = pgTable(
+  "peer_report",
+  {
+    id: text("id").primaryKey(),
+    reporterId: text("reporter_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    reportedUserId: text("reported_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    peerConversationId: text("peer_conversation_id").references(() => peerConversation.id, { onDelete: "set null" }),
+    reason: text("reason").notNull(),
+    details: text("details"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("peer_report_reporterId_idx").on(table.reporterId)],
+);
+
+export const peerConversationRelations = relations(peerConversation, ({ many }) => ({
+  messages: many(peerMessage),
+  calls: many(peerCallRoom),
+}));
+
+export const peerMessageRelations = relations(peerMessage, ({ one }) => ({
+  conversation: one(peerConversation, { fields: [peerMessage.peerConversationId], references: [peerConversation.id] }),
+}));
+
+export const peerCallRoomRelations = relations(peerCallRoom, ({ one }) => ({
+  conversation: one(peerConversation, { fields: [peerCallRoom.peerConversationId], references: [peerConversation.id] }),
 }));

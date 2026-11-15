@@ -1,311 +1,398 @@
 package com.zuno.ai.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.LearningLanguage
-import com.zuno.ai.ui.components.VoiceOrbState
-import com.zuno.ai.ui.components.ZunoComposer
-import com.zuno.ai.ui.components.ZunoDraftAttachment
+import com.zuno.ai.ui.components.ContinueSessionUi
+import com.zuno.ai.ui.components.HomeNavTab
+import com.zuno.ai.ui.components.ZunoDailyTargetRow
+import com.zuno.ai.ui.components.ZunoExploreTopBar
+import com.zuno.ai.ui.components.ZunoFloatingBottomNav
+import com.zuno.ai.ui.components.ZunoHomeTopBar
 import com.zuno.ai.ui.components.ZunoIcon
-import com.zuno.ai.ui.components.ZunoSelectorTopBar
-import com.zuno.ai.ui.components.ZunoTutorHint
-import com.zuno.ai.ui.components.ZunoVoiceOrb
+import com.zuno.ai.ui.components.ZunoLiveNowSection
+import com.zuno.ai.ui.components.ZunoPickUpSection
+import com.zuno.ai.ui.components.ZunoProfileCard
+import com.zuno.ai.ui.components.ZunoUpgradeBanner
 import com.zuno.ai.ui.theme.ZunoColors
-import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
-import com.zuno.ai.ui.theme.ZunoType
-import com.zuno.ai.viewmodel.DraftAttachment
-import com.zuno.ai.viewmodel.DraftUploadState
+import com.zuno.ai.ui.theme.ZunoTheme
 
-/** Greeting copy: the prompt in the language being learned, its translation in the app language. */
-data class HomeCopy(val prompt: String, val translation: String, val placeholder: String) {
+/** Greeting copy for Home top bar and composer placeholder. */
+data class HomeCopy(
+    val shortGreeting: String,
+    val languageName: String,
+    val placeholder: String,
+) {
     companion object {
-        /** [translation] is the app-language greeting; it's hidden when it matches the prompt. */
-        fun forLanguage(language: LearningLanguage, firstName: String, translation: String): HomeCopy {
-            val prompt = language.greeting(firstName)
-            return HomeCopy(prompt, translation.takeIf { it != prompt }.orEmpty(), language.placeholder)
-        }
+        fun forLanguage(language: LearningLanguage, firstName: String): HomeCopy = HomeCopy(
+            shortGreeting = language.shortGreeting(firstName),
+            languageName = language.englishName,
+            placeholder = language.placeholder,
+        )
     }
 }
 
 /**
- * Home — voice orb. Tap the orb to start a live call in a new Free Talk, or type instead.
+ * 02 · Home — Dashboard (`Home · 1` Active — Continue with Zuno) and
+ * Explore tab (`Home · 5 · More — Explore Zuno`).
  */
 @Composable
 fun HomeScreen(
     copy: HomeCopy,
-    busy: Boolean,
-    typingHint: String?,
-    /** "Spanish · B1" — active language and level. */
-    selector: String,
-    onOpenDrawer: () -> Unit,
-    onSelector: () -> Unit,
-    onOrbTap: () -> Unit,
-    onDraftChanged: (String) -> Unit,
-    onSendText: (String) -> Unit,
-    onTypeModeChanged: (Boolean) -> Unit,
-    drafts: List<DraftAttachment>,
-    onAttach: () -> Unit,
-    onRemoveAttachment: (DraftAttachment) -> Unit,
-    onRetryAttachment: (DraftAttachment) -> Unit,
+    userName: String,
+    userInitial: String,
+    userImage: String?,
+    streakDays: Int,
+    dailyGoalMinutesDone: Int,
+    dailyGoalTargetMinutes: Int,
+    level: String,
+    showUpgrade: Boolean,
+    continueSession: ContinueSessionUi?,
+    vocabDueCount: Int = 14,
+    activeLiveRoomsCount: Int = 2,
+    partnersOnlineCount: Int = 12,
+    scheduledTimeLabel: String? = null,
+    leagueRank: Int = 5,
+    onStreakClick: () -> Unit,
+    onAvatarClick: () -> Unit,
+    onDailyGoalContinue: () -> Unit,
+    onOpenTopics: () -> Unit,
+    onOpenChats: () -> Unit,
+    onOpenPartners: () -> Unit = onOpenChats,
+    onOpenLiveRooms: () -> Unit = onOpenChats,
+    onOpenRoleplays: () -> Unit,
+    onOpenScheduled: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onStartHomeVoice: () -> Unit,
+    onStartFreeTalk: () -> Unit,
+    onOpenConversation: (String) -> Unit,
+    onUpgrade: () -> Unit,
+    onComingSoon: (String) -> Unit,
     modifier: Modifier = Modifier,
+    initialExplore: Boolean = false,
 ) {
-    var typing by rememberSaveable { mutableStateOf(false) }
-    fun setTyping(value: Boolean) {
-        typing = value
-        onTypeModeChanged(value)
-    }
-    BackHandler(enabled = typing) { setTyping(false) }
+    var showExplore by rememberSaveable(initialExplore) { mutableStateOf(initialExplore) }
 
-    Column(
+    BackHandler(enabled = showExplore) { showExplore = false }
+
+    val liveRoomsLabel = stringResource(R.string.home_explore_live_rooms)
+    val partnersLabel = stringResource(R.string.home_explore_partners)
+    val vocabularyLabel = stringResource(R.string.home_explore_vocabulary)
+    val communityLabel = stringResource(R.string.home_explore_community)
+    val leaderboardLabel = stringResource(R.string.home_explore_leaderboard)
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
-            .statusBarsPadding()
-            .navigationBarsPadding(),
+            .background(ZunoColors.BgCanvas),
     ) {
-        ZunoSelectorTopBar(selector = selector, onMenu = onOpenDrawer, onSelector = onSelector)
-        Crossfade(targetState = typing, label = "homeMode", modifier = Modifier.weight(1f)) { isTyping ->
-            if (isTyping) {
-                TypeMode(
-                    copy = copy,
-                    busy = busy,
-                    typingHint = typingHint,
-                    onDraftChanged = onDraftChanged,
-                    onSend = onSendText,
-                    onVoice = { setTyping(false) },
-                    drafts = drafts,
-                    onAttach = onAttach,
-                    onRemoveAttachment = onRemoveAttachment,
-                    onRetryAttachment = onRetryAttachment,
-                )
-            } else {
-                OrbMode(
-                    copy = copy,
-                    busy = busy,
-                    onOrbTap = onOrbTap,
-                    onTypeInstead = { setTyping(true) },
-                )
-            }
-        }
-    }
-}
-
-/** Visible sphere of the Home / call orb (Figma 190dp); the canvas around it leaves room to bulge. */
-internal val OrbSphereSize = 190.dp
-internal val OrbCanvasSize = 296.dp
-
-@Composable
-private fun OrbMode(
-    copy: HomeCopy,
-    busy: Boolean,
-    onOrbTap: () -> Unit,
-    onTypeInstead: () -> Unit,
-) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = maxHeight * OrbTopFraction),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
+        Crossfade(
+            targetState = showExplore,
+            label = "homeRootTab",
+            modifier = Modifier.fillMaxSize(),
+        ) { isExplore ->
+            Column(
                 modifier = Modifier
-                    .size(OrbSphereSize)
-                    .clip(CircleShape)
-                    .clickable(enabled = !busy, role = Role.Button, onClick = onOrbTap)
-                    .semantics { contentDescription = "Start a voice call" },
-                contentAlignment = Alignment.Center,
+                    .fillMaxSize()
+                    .statusBarsPadding(),
             ) {
-                ZunoVoiceOrb(
-                    state = if (busy) VoiceOrbState.Thinking else VoiceOrbState.Idle,
-                    size = OrbCanvasSize,
-                    modifier = Modifier.requiredSize(OrbCanvasSize),
-                )
-            }
-            Spacer(Modifier.height(ZunoSpace.s40))
-            Column(
-                modifier = Modifier.width(300.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
-            ) {
-                Prompt(copy.prompt)
-                Text(
-                    stringResource(if (busy) R.string.voice_connecting else R.string.home_tap_to_talk),
-                    style = ZunoType.CaptionRegular,
-                    color = ZunoColors.TextTertiary,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = ZunoSpace.s16)
-                .clip(RoundedCornerShape(ZunoRadius.sm))
-                .clickable(role = Role.Button, onClick = onTypeInstead)
-                .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ZunoIcon(R.drawable.zuno_ic_keyboard, 16.dp, tint = ZunoColors.IconPrimary)
-            Text(stringResource(R.string.home_type_instead), style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
-        }
-    }
-}
-
-@Composable
-private fun Prompt(text: String) {
-    Text(text, style = ZunoType.Display, color = ZunoColors.TextPrimary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-}
-
-@Composable
-private fun TypeMode(
-    copy: HomeCopy,
-    busy: Boolean,
-    typingHint: String?,
-    onDraftChanged: (String) -> Unit,
-    onSend: (String) -> Unit,
-    onVoice: () -> Unit,
-    drafts: List<DraftAttachment>,
-    onAttach: () -> Unit,
-    onRemoveAttachment: (DraftAttachment) -> Unit,
-    onRetryAttachment: (DraftAttachment) -> Unit,
-) {
-    var draft by rememberSaveable { mutableStateOf("") }
-    val attachmentsReady = drafts.all { it.state == DraftUploadState.Ready }
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .imePadding(),
-    ) {
-        GreetingArea(Modifier.weight(1f)) {
-            Column(
-                modifier = Modifier.width(300.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-            ) {
-                Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
-                    ZunoVoiceOrb(
-                        state = if (busy) VoiceOrbState.Thinking else VoiceOrbState.Idle,
-                        size = 150.dp,
-                        dots = 360,
-                        modifier = Modifier.requiredSize(150.dp),
+                if (isExplore) {
+                    ZunoExploreTopBar(onSettingsClick = onOpenSettings)
+                    HomeExploreBody(
+                        userName = userName.ifBlank { userInitial },
+                        userImage = userImage,
+                        languageName = copy.languageName,
+                        level = level,
+                        streakDays = streakDays,
+                        showUpgrade = showUpgrade,
+                        vocabDueCount = vocabDueCount,
+                        activeLiveRoomsCount = activeLiveRoomsCount,
+                        partnersOnlineCount = partnersOnlineCount,
+                        scheduledTimeLabel = scheduledTimeLabel,
+                        leagueRank = leagueRank,
+                        onProfileClick = onOpenSettings,
+                        onUpgrade = onUpgrade,
+                        onRoleplayClick = onOpenRoleplays,
+                        onLiveRoomsClick = onOpenLiveRooms,
+                        onVocabularyClick = { onComingSoon(vocabularyLabel) },
+                        onScheduledClick = onOpenScheduled,
+                        onCommunityClick = { onComingSoon(communityLabel) },
+                        onPartnersClick = onOpenPartners,
+                        onLeaderboardClick = { onComingSoon(leaderboardLabel) },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    ZunoHomeTopBar(
+                        greeting = copy.shortGreeting,
+                        streakDays = streakDays,
+                        userInitial = userInitial,
+                        userImage = userImage,
+                        onStreakClick = onStreakClick,
+                        onAvatarClick = onAvatarClick,
+                    )
+                    HomeActiveBody(
+                        languageName = copy.languageName,
+                        dailyGoalMinutesDone = dailyGoalMinutesDone,
+                        dailyGoalTargetMinutes = dailyGoalTargetMinutes,
+                        continueSession = continueSession,
+                        onDailyGoalContinue = onDailyGoalContinue,
+                        onResumeSession = onOpenConversation,
+                        onStartFreeTalk = onStartFreeTalk,
+                        onLiveRoomClick = onOpenLiveRooms,
+                        onPracticePartnerClick = onOpenPartners,
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                Spacer(Modifier.height(ZunoSpace.s20))
-                Prompt(copy.prompt)
-                if (copy.translation.isNotBlank()) {
-                    Text(copy.translation, style = ZunoType.BodySmall, color = ZunoColors.TextTertiary, textAlign = TextAlign.Center)
-                }
             }
         }
-        Column(
+
+        Box(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, bottom = ZunoSpace.s8),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-        ) {
-            AnimatedVisibility(visible = typingHint != null && draft.isNotBlank(), enter = fadeIn(), exit = fadeOut()) {
-                ZunoTutorHint(typingHint.orEmpty())
-            }
-            ZunoComposer(
-                value = draft,
-                onValueChange = {
-                    draft = it
-                    onDraftChanged(it)
-                },
-                onSend = {
-                    val text = draft.trim()
-                    if ((text.isNotEmpty() || drafts.isNotEmpty()) && attachmentsReady && !busy) onSend(text)
-                },
-                onAttach = onAttach,
-                onVoice = onVoice,
-                placeholder = copy.placeholder,
-                focusRequester = focusRequester,
-                enabled = !busy,
-                attachments = if (drafts.isEmpty()) null else {
-                    {
-                        drafts.forEach { attachment ->
-                            key(attachment.localId) {
-                                ZunoDraftAttachment(
-                                    draft = attachment,
-                                    onRemove = { onRemoveAttachment(attachment) },
-                                    onRetry = { onRetryAttachment(attachment) },
-                                )
-                            }
-                        }
+                .height(104.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.45f to ZunoColors.BgCanvas.copy(alpha = 0.85f),
+                        1f to ZunoColors.BgCanvas,
+                    ),
+                ),
+        )
+
+        ZunoFloatingBottomNav(
+            activeTab = if (showExplore) HomeNavTab.More else HomeNavTab.Home,
+            onTabSelected = { tab ->
+                when (tab) {
+                    HomeNavTab.Home -> showExplore = false
+                    HomeNavTab.Learn -> {
+                        showExplore = false
+                        onOpenTopics()
                     }
-                },
-                sendEnabled = attachmentsReady,
+                    HomeNavTab.Zuno -> onStartHomeVoice()
+                    HomeNavTab.Chats -> onOpenChats()
+                    HomeNavTab.More -> showExplore = true
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = ZunoSpace.s12),
+        )
+    }
+}
+
+@Composable
+private fun HomeActiveBody(
+    languageName: String,
+    dailyGoalMinutesDone: Int,
+    dailyGoalTargetMinutes: Int,
+    continueSession: ContinueSessionUi?,
+    onDailyGoalContinue: () -> Unit,
+    onResumeSession: (String) -> Unit,
+    onStartFreeTalk: () -> Unit,
+    onLiveRoomClick: () -> Unit,
+    onPracticePartnerClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s20, bottom = 104.dp),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
+    ) {
+        ZunoDailyTargetRow(
+            minutesDone = dailyGoalMinutesDone,
+            goalMinutes = dailyGoalTargetMinutes,
+            onClick = onDailyGoalContinue,
+        )
+
+        ZunoPickUpSection(
+            session = continueSession,
+            languageName = languageName,
+            onResume = onResumeSession,
+            onStartNew = onStartFreeTalk,
+        )
+
+        ZunoLiveNowSection(
+            onLiveRoomClick = onLiveRoomClick,
+            onPracticePartnerClick = onPracticePartnerClick,
+        )
+    }
+}
+
+@Composable
+private fun HomeExploreBody(
+    userName: String,
+    userImage: String?,
+    languageName: String,
+    level: String,
+    streakDays: Int,
+    showUpgrade: Boolean,
+    vocabDueCount: Int,
+    activeLiveRoomsCount: Int,
+    partnersOnlineCount: Int,
+    scheduledTimeLabel: String?,
+    leagueRank: Int,
+    onProfileClick: () -> Unit,
+    onUpgrade: () -> Unit,
+    onRoleplayClick: () -> Unit,
+    onLiveRoomsClick: () -> Unit,
+    onVocabularyClick: () -> Unit,
+    onScheduledClick: () -> Unit,
+    onCommunityClick: () -> Unit,
+    onPartnersClick: () -> Unit,
+    onLeaderboardClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s6, bottom = 104.dp),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+    ) {
+        ZunoProfileCard(
+            name = userName,
+            detail = stringResource(R.string.home_explore_streak_detail, languageName, level, streakDays),
+            imageUrl = userImage,
+            onClick = onProfileClick,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        if (showUpgrade) {
+            ZunoUpgradeBanner(
+                onClick = onUpgrade,
+                text = stringResource(R.string.home_explore_upgrade_text),
+                action = stringResource(R.string.home_explore_upgrade_action),
+            )
+        }
+
+        ZunoSettingsGroup(
+            sectionLabel = stringResource(R.string.home_explore_practice_learn),
+        ) {
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_roleplay),
+                leading = { ZunoIcon(R.drawable.zuno_ic_play_circle, 18.dp, tint = ZunoColors.IconSecondary) },
+                showChevron = true,
+                onClick = onRoleplayClick,
+            )
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_live_rooms),
+                leading = { ZunoIcon(R.drawable.zuno_ic_radio, 18.dp, tint = ZunoColors.IconSecondary) },
+                value = stringResource(R.string.home_explore_live_active_count, activeLiveRoomsCount),
+                showChevron = true,
+                showDivider = true,
+                onClick = onLiveRoomsClick,
+            )
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_vocabulary),
+                leading = { ZunoIcon(R.drawable.zuno_ic_bookmark, 18.dp, tint = ZunoColors.IconSecondary) },
+                value = stringResource(R.string.home_explore_vocab_due_count, vocabDueCount),
+                showChevron = true,
+                showDivider = true,
+                onClick = onVocabularyClick,
+            )
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_scheduled),
+                leading = { ZunoIcon(R.drawable.zuno_ic_calendar, 18.dp, tint = ZunoColors.IconSecondary) },
+                value = scheduledTimeLabel ?: stringResource(R.string.home_explore_scheduled_default),
+                showChevron = true,
+                showDivider = true,
+                onClick = onScheduledClick,
+            )
+        }
+
+        ZunoSettingsGroup(
+            sectionLabel = stringResource(R.string.home_explore_social_milestones),
+        ) {
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_community),
+                leading = { ZunoIcon(R.drawable.zuno_ic_users, 18.dp, tint = ZunoColors.IconSecondary) },
+                showChevron = true,
+                onClick = onCommunityClick,
+            )
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_partners),
+                leading = { ZunoIcon(R.drawable.zuno_ic_user_plus, 18.dp, tint = ZunoColors.IconSecondary) },
+                value = stringResource(R.string.home_partners_count, partnersOnlineCount),
+                showChevron = true,
+                showDivider = true,
+                onClick = onPartnersClick,
+            )
+            ZunoSettingsRow(
+                title = stringResource(R.string.home_explore_leaderboard),
+                leading = { ZunoIcon(R.drawable.zuno_ic_award, 18.dp, tint = ZunoColors.IconSecondary) },
+                value = "#$leagueRank",
+                showChevron = true,
+                showDivider = true,
+                onClick = onLeaderboardClick,
             )
         }
     }
 }
 
-/**
- * Space above the composer: the greeting sits 120dp down and rises as the keyboard and a growing
- * composer take room, so it never runs under the input. When it no longer fits, its top (the orb)
- * slides out of view first, keeping the text readable.
- */
+@Preview(backgroundColor = 0xFF121212, showBackground = true, widthDp = 402, heightDp = 874)
 @Composable
-private fun GreetingArea(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Layout(content = content, modifier = modifier.fillMaxWidth().clipToBounds()) { measurables, constraints ->
-        val placeable = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity))
-        val top = (constraints.maxHeight - placeable.height - 24.dp.roundToPx())
-            .coerceAtMost(120.dp.roundToPx())
-        layout(constraints.maxWidth, constraints.maxHeight) {
-            placeable.place((constraints.maxWidth - placeable.width) / 2, top)
-        }
+private fun HomeScreenActivePreview() {
+    ZunoTheme {
+        HomeScreen(
+            copy = HomeCopy("Hola, Noah", "Spanish", "Responde en español…"),
+            userName = "Noah Carter",
+            userInitial = "N",
+            userImage = null,
+            streakDays = 22,
+            dailyGoalMinutesDone = 8,
+            dailyGoalTargetMinutes = 15,
+            level = "B1",
+            showUpgrade = true,
+            continueSession = ContinueSessionUi(
+                conversationId = "conv-1",
+                title = "At the café",
+                subtitle = "Spanish B1 · 2h ago",
+            ),
+            onStreakClick = {},
+            onAvatarClick = {},
+            onDailyGoalContinue = {},
+            onOpenTopics = {},
+            onOpenChats = {},
+            onOpenRoleplays = {},
+            onOpenScheduled = {},
+            onOpenSettings = {},
+            onStartHomeVoice = {},
+            onStartFreeTalk = {},
+            onOpenConversation = {},
+            onUpgrade = {},
+            onComingSoon = {},
+        )
     }
 }

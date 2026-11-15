@@ -11,10 +11,16 @@ import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.AttachmentFiles
 import com.zuno.ai.data.AttachmentKind
 import com.zuno.ai.data.AttachmentStatus
+import com.zuno.ai.data.ChatsOverview
+import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.data.DraftStore
+import com.zuno.ai.data.JoinPeerCallResult
 import com.zuno.ai.data.MaterialPart
+import com.zuno.ai.data.PeerConversationThread
+import com.zuno.ai.data.PeerMessage
 import com.zuno.ai.data.PreparedFile
 import com.zuno.ai.data.SavedDraftAttachment
+import com.zuno.ai.data.StartPeerCallResult
 import com.zuno.ai.data.Conversation
 import com.zuno.ai.data.ConversationThread
 import com.zuno.ai.data.Message
@@ -136,6 +142,15 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _chats = MutableStateFlow<Map<String, ChatState>>(emptyMap())
     val chats: StateFlow<Map<String, ChatState>> = _chats.asStateFlow()
+
+    private val _chatsOverview = MutableStateFlow(Loadable<ChatsOverview>())
+    val chatsOverview: StateFlow<Loadable<ChatsOverview>> = _chatsOverview.asStateFlow()
+
+    private val _peerChats = MutableStateFlow<Map<String, PeerConversationThread>>(emptyMap())
+    val peerChats: StateFlow<Map<String, PeerConversationThread>> = _peerChats.asStateFlow()
+
+    private val _coachPrompts = MutableStateFlow(CoachPrompts())
+    val coachPrompts: StateFlow<CoachPrompts> = _coachPrompts.asStateFlow()
 
     /** True while a create/open request that leads to navigation is running. */
     private val _busy = MutableStateFlow(false)
@@ -414,6 +429,9 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _lessonEvaluations.value = emptyMap()
         _roleplays.value = Loadable()
         _chats.value = emptyMap()
+        _chatsOverview.value = Loadable()
+        _peerChats.value = emptyMap()
+        _coachPrompts.value = CoachPrompts()
         _typingHint.value = null
         uploadJobs.values.forEach { it.cancel() }
         uploadJobs.clear()
@@ -501,6 +519,8 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _typingHint.value = null
         _topics.value = Loadable()
         _roleplays.value = Loadable()
+        _chatsOverview.value = Loadable()
+        _peerChats.value = emptyMap()
         _schedules.value = Loadable()
         _scheduleTargets.value = Loadable()
         refreshRecent()
@@ -719,6 +739,17 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onOpened(thread.conversation)
         if (!firstMessage.isNullOrBlank() || homeDrafts.isNotEmpty()) send(id, firstMessage.orEmpty(), viaVoice, onReplied)
         refreshRecent()
+    }
+
+    /** Sends an inline Home reply to an existing [conversationId], carrying any Home draft attachments. */
+    fun sendHomeReply(conversationId: String, text: String) {
+        val homeDrafts = _drafts.value[HOME_DRAFT_KEY].orEmpty()
+        if (homeDrafts.isNotEmpty()) {
+            _drafts.update { drafts ->
+                drafts - HOME_DRAFT_KEY + (conversationId to (homeDrafts + drafts[conversationId].orEmpty()))
+            }
+        }
+        send(conversationId, text)
     }
 
     fun loadConversation(id: String) = launchSafely { cacheThread(api.conversation(id)) }
@@ -1064,6 +1095,227 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             val saved = api.saveTranscript(conversationId, turns)
             updateChat(conversationId) { it.copy(messages = it.messages + saved) }
             refreshRecent()
+            loadChatsOverview(silent = true)
+        }
+    }
+
+    /** Saves a call summary card ("Video call · 03:42 · Ended") into an AI Tutor conversation. */
+    fun saveCallSummary(conversationId: String, durationSec: Int, isVideo: Boolean, tipsCount: Int = 2) {
+        if (durationSec <= 0) return
+        launchSafely(silent = true) {
+            val saved = api.saveCallSummary(conversationId, durationSec, isVideo, tipsCount)
+            updateChat(conversationId) { it.copy(messages = it.messages + saved) }
+            loadChatsOverview(silent = true)
+        }
+    }
+
+    // ── Unified Chats, Peer Messaging & 1:1 Call Rooms ──────────────────────
+
+    fun loadChatsOverview(silent: Boolean = false) {
+        if (!silent) _chatsOverview.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _chatsOverview.value = Loadable(api.chatsOverview())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!silent) _chatsOverview.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun toggleOpenToSpeak(enabled: Boolean) {
+        val previous = _chatsOverview.value.items ?: return
+        _chatsOverview.update { state -> state.copy(items = state.items?.copy(openToSpeak = enabled)) }
+        viewModelScope.launch {
+            try {
+                val updated = api.setOpenToSpeak(enabled)
+                _chatsOverview.update { state -> state.copy(items = state.items?.copy(openToSpeak = updated)) }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _chatsOverview.update { it.copy(items = previous) }
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun togglePartner(partnerId: String, add: Boolean, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                if (add) api.addPartner(partnerId) else api.removePartner(partnerId)
+                _peerChats.update { map ->
+                    map.mapValues { (_, thread) ->
+                        if (thread.partner?.id == partnerId) {
+                            thread.copy(partner = thread.partner.copy(isPartner = add))
+                        } else thread
+                    }
+                }
+                loadChatsOverview(silent = true)
+                onDone(add)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun openPeerChat(partnerId: String, onOpened: (PeerConversationThread) -> Unit) = runBusy {
+        val thread = api.openPeerChat(partnerId)
+        _peerChats.update { it + (thread.conversation.id to thread) }
+        loadChatsOverview(silent = true)
+        onOpened(thread)
+    }
+
+    fun loadPeerChat(conversationId: String, silent: Boolean = false) {
+        viewModelScope.launch {
+            try {
+                val thread = api.peerChat(conversationId)
+                _peerChats.update { it + (conversationId to thread) }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!silent && !e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun sendPeerMessage(conversationId: String, text: String, onSent: () -> Unit = {}) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val tempId = "temp-${System.currentTimeMillis()}"
+        val optimistic = PeerMessage(
+            id = tempId,
+            peerConversationId = conversationId,
+            senderId = "me",
+            isMine = true,
+            kind = "text",
+            text = trimmed,
+            callRoomId = null,
+            cameraEnabled = false,
+            durationSec = null,
+            createdAtMillis = System.currentTimeMillis(),
+        )
+        _peerChats.update { map ->
+            val current = map[conversationId] ?: return@update map
+            map + (conversationId to current.copy(messages = current.messages + optimistic))
+        }
+        viewModelScope.launch {
+            try {
+                val saved = api.sendPeerMessage(conversationId, trimmed)
+                _peerChats.update { map ->
+                    val current = map[conversationId] ?: return@update map
+                    map + (conversationId to current.copy(
+                        messages = current.messages.map { if (it.id == tempId) saved else it },
+                    ))
+                }
+                loadChatsOverview(silent = true)
+                onSent()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _peerChats.update { map ->
+                    val current = map[conversationId] ?: return@update map
+                    map + (conversationId to current.copy(
+                        messages = current.messages.filterNot { it.id == tempId },
+                    ))
+                }
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun mutePeerChat(conversationId: String, muted: Boolean, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val updated = api.mutePeerChat(conversationId, muted)
+                _peerChats.update { map ->
+                    val current = map[conversationId] ?: return@update map
+                    map + (conversationId to current.copy(conversation = current.conversation.copy(muted = updated)))
+                }
+                onDone(updated)
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun reportPeerUser(conversationId: String, reason: String, details: String, onSent: () -> Unit) = launchSafely {
+        api.reportPeerUser(conversationId, reason, details)
+        onSent()
+    }
+
+    fun deletePeerChat(conversationId: String, onDeleted: () -> Unit) = launchSafely {
+        api.deletePeerChat(conversationId)
+        _peerChats.update { it - conversationId }
+        loadChatsOverview(silent = true)
+        onDeleted()
+    }
+
+    fun startPeerCall(conversationId: String, cameraEnabled: Boolean = false, onReady: (StartPeerCallResult) -> Unit) = runBusy {
+        val result = api.startPeerCall(conversationId, cameraEnabled)
+        _peerChats.update { map ->
+            val current = map[conversationId] ?: return@update map
+            map + (conversationId to current.copy(
+                messages = current.messages + result.message,
+                activeCall = result.call,
+            ))
+        }
+        onReady(result)
+    }
+
+    fun joinPeerCall(callId: String, onReady: (JoinPeerCallResult) -> Unit) = runBusy {
+        onReady(api.joinPeerCall(callId))
+    }
+
+    fun declinePeerCall(conversationId: String, callId: String, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                api.declinePeerCall(callId)
+                loadPeerChat(conversationId, silent = true)
+                onDone()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun pingPeerCall(callId: String, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                api.pingPeerCall(callId)
+                onDone()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun endPeerCall(callId: String, conversationId: String, durationSec: Int, isVideo: Boolean, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                api.endPeerCall(callId, durationSec, isVideo)
+                loadPeerChat(conversationId, silent = true)
+                loadChatsOverview(silent = true)
+                onDone()
+            } catch (e: ApiException) {
+                handleAuth(e)
+                onDone()
+            }
+        }
+    }
+
+    fun loadCoachPrompts(
+        targetLanguage: String? = null,
+        contextLabel: String? = null,
+        partnerName: String? = null,
+        lastLine: String? = null,
+    ) {
+        viewModelScope.launch {
+            try {
+                _coachPrompts.value = api.coachPrompts(targetLanguage, contextLabel, partnerName, lastLine)
+            } catch (_: ApiException) {
+                // Keep existing/default prompts silently
+            }
         }
     }
 
