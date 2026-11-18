@@ -22,9 +22,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.zuno.ai.data.CoachPromptItem
+import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.data.LearningLanguages
+import com.zuno.ai.data.Message
 import com.zuno.ai.ui.components.ContinueSessionUi
 import com.zuno.ai.ui.components.ZunoDialog
+import com.zuno.ai.ui.screens.ChatScreen
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
@@ -49,7 +53,7 @@ class HomeScreensUiTest {
     private fun saveScreenshot(
         scenario: ActivityScenario<ComponentActivity>,
         name: String,
-        useFullScreen: Boolean = false,
+        useFullScreen: Boolean = true,
     ) {
         Thread.sleep(450)
         val dir = screenshotDir().apply { mkdirs() }
@@ -226,12 +230,69 @@ class HomeScreensUiTest {
                                     sessionKindLabel = "Free talk",
                                     languageLevelLabel = "Spanish B1",
                                     initialCaptionsOn = false,
+                                    coachPrompts = CoachPrompts(
+                                        answers = listOf(
+                                            CoachPromptItem("Un café con leche, por favor.", "A coffee with milk, please."),
+                                            CoachPromptItem("Solo un espresso, gracias.", "Just an espresso, thanks."),
+                                        ),
+                                        questions = listOf(
+                                            CoachPromptItem("¿Tienen leche de avena?", "Do you have oat milk?"),
+                                            CoachPromptItem("¿Cuánto cuesta?", "How much does it cost?"),
+                                        ),
+                                    ),
                                     onTranslate = {},
                                     onSlowReplay = { slowReplayCalledWith = it },
                                     onSwitchTopic = {},
                                     onEnd = {},
                                     onInterrupt = {},
                                     onToggleMute = {},
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
+                            "free_talk" -> {
+                                ChatScreen(
+                                    title = "Pedir un café",
+                                    sessionLabel = "New Free Talk · Just now",
+                                    messages = listOf(
+                                        Message(
+                                            id = "m1",
+                                            isUser = true,
+                                            text = "Un café con leche para llevar, por favor.",
+                                            translation = null,
+                                            feedback = "Natural Spanish · Native tip: “¿Me pones un café…?”",
+                                            glossary = emptyList(),
+                                        ),
+                                        Message(
+                                            id = "m2",
+                                            isUser = false,
+                                            text = "¡Claro! Son tres euros. ¿Algo más?",
+                                            translation = "Sure! That’s three euros. Anything else?",
+                                            feedback = null,
+                                            glossary = emptyList(),
+                                        ),
+                                    ),
+                                    pendingText = null,
+                                    pendingAttachments = emptyList(),
+                                    drafts = emptyList(),
+                                    error = null,
+                                    placeholder = "Responde en español…",
+                                    typingHint = null,
+                                    menu = emptyList(),
+                                    onBack = {},
+                                    onRetryLoad = {},
+                                    onSend = {},
+                                    onDraftChanged = {},
+                                    savedDraft = { "" },
+                                    onSaveDraft = {},
+                                    onStartVoice = {},
+                                    onListen = {},
+                                    onExplain = {},
+                                    onAttach = {},
+                                    onRemoveAttachment = {},
+                                    onRetryAttachment = {},
+                                    onOpenAttachment = {},
+                                    levelLabel = "B1",
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -294,18 +355,39 @@ class HomeScreensUiTest {
             waitForText("Start")
             saveScreenshot(scenario, "04_home_empty")
 
-            // 5. Chats · 6 · AI Tutor Call Mode
+            // 5. Home · 6 · Speaking — No captions
             stage = "voice"
-            waitForText("Free talk · Spanish B1")
-            waitForText("Sofía")
-            waitForText("AI Tutor")
-            waitForText("Sofía · Live captions")
+            waitForText("Live · 00:", substring = true)
+            waitForText("End call")
+            waitForText("Show captions")
+            saveScreenshot(scenario, "05_voice_no_captions")
+
+            // 6. Home · 7 · Speaking — Captions
+            tapText("Show captions")
+            waitForText("Sofía · Free talk")
             waitForText("¿Qué vas a pedir?", substring = true)
+            waitForText("Translate")
             waitForText("0.75×")
-            saveScreenshot(scenario, "05_voice_captions")
+            waitForText("You · Listening")
+            waitForText("Listen · Your turn next…")
+            waitForText("Free talk · Spanish B1")
+            waitForText("Answers")
+            waitForText("Switch topic")
+            waitForText("Questions")
+            saveScreenshot(scenario, "06_voice_captions")
 
             tapText("0.75×")
             assertTrue("Expected 0.75x chip callback to fire", slowReplayCalledWith != null)
+
+            // 7. Home · 4 · Send → Free Talk
+            stage = "free_talk"
+            waitForText("Sofía")
+            waitForText("Pedir un café · B1")
+            waitForText("New Free Talk · Just now")
+            waitForText("Un café con leche para llevar, por favor.")
+            waitForText("¡Claro! Son tres euros. ¿Algo más?")
+            waitForText("Responde en español…")
+            saveScreenshot(scenario, "07_free_talk_chat")
         }
     }
 }

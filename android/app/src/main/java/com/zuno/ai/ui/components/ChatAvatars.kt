@@ -89,7 +89,7 @@ fun ZunoOpenToSpeakAvatar(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape)
-                    .border(1.5.dp, ZunoColors.StatusSpeaking, CircleShape),
+                    .border(1.75.dp, ZunoColors.SurfaceInverse, CircleShape),
             )
         }
         val innerBg = if (inverseInner) ZunoColors.SurfaceInverse else ZunoColors.SurfaceStrong
@@ -243,6 +243,7 @@ fun ZunoTabbedCoachCard(
             ZunoChip(
                 label = stringResource(R.string.call_coach_answers),
                 leadingIcon = R.drawable.zuno_ic_t_message_circle,
+                leadingIconTint = ZunoColors.IconSecondary,
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
             )
@@ -254,7 +255,8 @@ fun ZunoTabbedCoachCard(
             )
             ZunoChip(
                 label = stringResource(R.string.call_coach_questions),
-                leadingIcon = R.drawable.zuno_ic_t_message_circle,
+                leadingIcon = R.drawable.zuno_ic_plus,
+                leadingIconTint = ZunoColors.IconSecondary,
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
             )

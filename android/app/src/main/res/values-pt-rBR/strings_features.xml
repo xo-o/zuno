@@ -275,4 +275,17 @@
     <string name="onboarding_recommended_next">Recomendado a seguir</string>
     <string name="onboarding_lessons_count">%1$d lições</string>
     <string name="onboarding_go_home">Ir para o Início</string>
+    <string name="call_live_title">Ao vivo · %1$s</string>
+    <string name="voice_chip_speed_slow">0.75×</string>
+    <string name="voice_listening_turn_placeholder">Ouça · Sua vez em seguida…</string>
+    <string name="voice_you_listening">Você · Ouvindo</string>
+    <string name="voice_you_speaking">Você · Falando</string>
+    <string name="call_coach_switch_topic">Trocar assunto</string>
+    <string name="voice_status_dot_speaking">Falando</string>
+    <string name="voice_status_dot_listening">Ouvindo</string>
+    <string name="voice_status_dot_thinking">Pensando</string>
+    <string name="voice_status_dot_muted">Mudo</string>
+    <string name="voice_status_dot_connecting">Conectando</string>
+    <string name="chats_recent_header">Recentes</string>
+    <string name="voice_chip_replay">Repetir</string>
 </resources>

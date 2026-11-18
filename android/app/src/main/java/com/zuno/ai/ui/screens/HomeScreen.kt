@@ -161,6 +161,7 @@ fun HomeScreen(
                         dailyGoalMinutesDone = dailyGoalMinutesDone,
                         dailyGoalTargetMinutes = dailyGoalTargetMinutes,
                         continueSession = continueSession,
+                        partnersOnlineCount = partnersOnlineCount,
                         onDailyGoalContinue = onDailyGoalContinue,
                         onResumeSession = onOpenConversation,
                         onStartFreeTalk = onStartFreeTalk,
@@ -214,6 +215,7 @@ private fun HomeActiveBody(
     dailyGoalMinutesDone: Int,
     dailyGoalTargetMinutes: Int,
     continueSession: ContinueSessionUi?,
+    partnersOnlineCount: Int,
     onDailyGoalContinue: () -> Unit,
     onResumeSession: (String) -> Unit,
     onStartFreeTalk: () -> Unit,
@@ -245,6 +247,7 @@ private fun HomeActiveBody(
         ZunoLiveNowSection(
             onLiveRoomClick = onLiveRoomClick,
             onPracticePartnerClick = onPracticePartnerClick,
+            partnersOnlineCount = partnersOnlineCount,
         )
     }
 }

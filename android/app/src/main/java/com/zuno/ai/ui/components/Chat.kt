@@ -93,6 +93,10 @@ fun ZunoAssistantBubble(
     senderLabel: String = "ZunoAI",
     onListen: (() -> Unit)? = null,
     onExplain: (() -> Unit)? = null,
+    listenLabel: String = "Listen",
+    listenIcon: Int = R.drawable.zuno_ic_volume,
+    explainLabel: String = "Explain grammar",
+    explainIcon: Int = R.drawable.zuno_ic_sparkles,
     contextNote: String? = null,
     onContextClick: (() -> Unit)? = null,
 ) {
@@ -146,8 +150,8 @@ fun ZunoAssistantBubble(
         }
         if (onListen != null || onExplain != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                onListen?.let { ZunoChip("Listen", it, leadingIcon = R.drawable.zuno_ic_volume) }
-                onExplain?.let { ZunoChip("Explain grammar", it, leadingIcon = R.drawable.zuno_ic_sparkles) }
+                onListen?.let { ZunoChip(listenLabel, it, leadingIcon = listenIcon) }
+                onExplain?.let { ZunoChip(explainLabel, it, leadingIcon = explainIcon) }
             }
         }
     }
@@ -200,14 +204,15 @@ fun ZunoComposer(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(ZunoColors.SurfaceStrong)
+            .background(ZunoColors.SurfaceDefault)
+            .border(1.dp, ZunoColors.BorderDefault, shape)
             .padding(
                 start = ZunoSpace.s8,
                 end = ZunoSpace.s8,
-                top = if (attachments != null) ZunoSpace.s12 else ZunoSpace.s20,
+                top = if (attachments != null) ZunoSpace.s12 else ZunoSpace.s16,
                 bottom = ZunoSpace.s8,
             ),
-        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
     ) {
         if (attachments != null) {
             Row(
@@ -271,8 +276,11 @@ fun ZunoComposer(
                 }
             } else {
                 ZunoIconButton(
-                    icon = R.drawable.zuno_ic_mic,
+                    icon = R.drawable.zuno_ic_t_audio_lines,
                     onClick = onVoice,
+                    style = ZunoIconButtonStyle.Strong,
+                    size = ZunoIconButtonSize.Medium,
+                    tint = ZunoColors.IconPrimary,
                     contentDescription = "Voice mode",
                 )
             }

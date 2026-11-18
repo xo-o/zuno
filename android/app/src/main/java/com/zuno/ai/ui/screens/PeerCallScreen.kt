@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,7 +45,10 @@ import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.data.PeerLearner
+import com.zuno.ai.model.ChatMessage
+import com.zuno.ai.model.Speaker
 import com.zuno.ai.ui.components.LiveKitVideoFeed
+import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoCallControlsBar
 import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
@@ -50,6 +57,7 @@ import com.zuno.ai.ui.components.ZunoIconButtonSize
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOverflowMenu
 import com.zuno.ai.ui.components.ZunoTabbedCoachCard
+import com.zuno.ai.ui.components.ZunoUserBubble
 import com.zuno.ai.ui.components.ZunoVoiceWaveform
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
@@ -71,6 +79,7 @@ fun PeerCallScreen(
     audioLevel: () -> Float,
     startedAtMillis: Long?,
     partnerLine: String?,
+    turns: List<ChatMessage> = emptyList(),
     isMuted: Boolean,
     isCameraOn: Boolean,
     isSpeakerOn: Boolean,
@@ -136,31 +145,16 @@ fun PeerCallScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         ) {
-            // 2-up Participants Row (`Chats · 8` and `Chats · 10`)
+            // 2-up Participants Row (`Chats · 13` waiting and `Chats · 14` active)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
             ) {
                 if (!partnerJoined) {
-                    // `Chats · 10`: Left tile = You (In room), Right tile = Partner (Waiting)
-                    ParticipantTile(
-                        name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
-                        initial = userInitial,
-                        subtitle = if (isCameraOn) stringResource(R.string.call_camera_on) else stringResource(R.string.call_camera_off_ready),
-                        badgeText = stringResource(R.string.call_in_room),
-                        highlightColor = ZunoColors.StatusListening,
-                        isSpeaking = false,
-                        isMuted = isMuted,
-                        audioLevel = audioLevel,
-                        room = room,
-                        videoTrack = localVideoTrack,
-                        mirrorVideo = true,
-                        modifier = Modifier.weight(1f),
-                    )
+                    // `Chats · 13`: Left tile = Partner (Waiting), Right tile = You (In room)
                     ParticipantTile(
                         name = partnerName,
                         initial = partnerInitial,
@@ -175,15 +169,29 @@ fun PeerCallScreen(
                         dimmed = true,
                         modifier = Modifier.weight(1f),
                     )
+                    ParticipantTile(
+                        name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
+                        initial = userInitial,
+                        subtitle = if (isCameraOn) stringResource(R.string.call_camera_on) else stringResource(R.string.call_camera_off_ready),
+                        badgeText = stringResource(R.string.call_in_room),
+                        highlightColor = ZunoColors.StatusListening,
+                        isSpeaking = false,
+                        isMuted = isMuted,
+                        audioLevel = audioLevel,
+                        room = room,
+                        videoTrack = localVideoTrack,
+                        mirrorVideo = true,
+                        modifier = Modifier.weight(1f),
+                    )
                 } else {
-                    // `Chats · 8`: Left tile = Partner, Right tile = You
+                    // `Chats · 14`: Left tile = Partner, Right tile = You
                     val partnerSpeaking = status == VoiceCallStatus.Speaking
                     val userSpeaking = status == VoiceCallStatus.Listening
                     ParticipantTile(
                         name = partnerName,
                         initial = partnerInitial,
                         subtitle = "Open to speak · $partnerLevel",
-                        badgeText = if (partnerSpeaking) stringResource(R.string.voice_status_speaking) else null,
+                        badgeText = if (partnerSpeaking) stringResource(R.string.voice_status_dot_speaking) else null,
                         highlightColor = if (partnerSpeaking) ZunoColors.StatusSpeaking else null,
                         isSpeaking = partnerSpeaking,
                         isMuted = false,
@@ -195,7 +203,7 @@ fun PeerCallScreen(
                     ParticipantTile(
                         name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
                         initial = userInitial,
-                        subtitle = "${if (isMuted) "Muted" else "Listening"} · $languageName $userLevel",
+                        subtitle = "${if (isMuted) stringResource(R.string.voice_status_dot_muted) else stringResource(R.string.voice_status_dot_listening)} · $languageName $userLevel",
                         badgeText = null,
                         highlightColor = if (userSpeaking && !isMuted) ZunoColors.StatusListening else null,
                         isSpeaking = false,
@@ -209,66 +217,18 @@ fun PeerCallScreen(
                 }
             }
 
-            // HUD Status Pill
-            val pillShape = RoundedCornerShape(ZunoRadius.md)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(pillShape)
-                    .background(ZunoColors.SurfaceSubtle)
-                    .border(1.dp, ZunoColors.BorderSubtle, pillShape)
-                    .padding(horizontal = ZunoSpace.s14, vertical = 7.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (!partnerJoined) {
-                        if (isCameraOn) stringResource(R.string.call_room_video_pill) else stringResource(R.string.call_room_voice_pill)
-                    } else {
-                        "1:1 Practice · $languageName $userLevel"
-                    },
-                    style = ZunoType.FootnoteStrong,
-                    color = ZunoColors.TextSecondary,
-                    maxLines = 1,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            if (!partnerJoined) {
+                // `Chats · 13`: Call room invite card + Tabbed Coach Card
+                val hudShape = RoundedCornerShape(ZunoRadius.xxxl)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(hudShape)
+                        .background(ZunoColors.SurfaceSubtle)
+                        .border(1.dp, ZunoColors.BorderSubtle, hudShape)
+                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 ) {
-                    val dotColor = when {
-                        !partnerJoined -> ZunoColors.StatusListening
-                        status == VoiceCallStatus.Speaking -> ZunoColors.StatusSpeaking
-                        status == VoiceCallStatus.Listening -> ZunoColors.StatusListening
-                        else -> ZunoColors.SurfaceInverse
-                    }
-                    Box(Modifier.size(6.dp).clip(CircleShape).background(dotColor))
-                    Text(
-                        text = when {
-                            !partnerJoined -> stringResource(R.string.call_waiting_for, partnerShort)
-                            status == VoiceCallStatus.Speaking -> stringResource(R.string.call_partner_speaking, partnerShort)
-                            status == VoiceCallStatus.Thinking -> stringResource(R.string.voice_status_thinking)
-                            isMuted -> stringResource(R.string.voice_status_muted)
-                            else -> stringResource(R.string.voice_status_listening)
-                        },
-                        style = ZunoType.FootnoteStrong,
-                        color = ZunoColors.TextPrimary,
-                        maxLines = 1,
-                    )
-                }
-            }
-
-            // Live Captions / Waiting HUD
-            val hudShape = RoundedCornerShape(ZunoRadius.xl)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(hudShape)
-                    .background(ZunoColors.SurfaceSubtle)
-                    .border(1.dp, ZunoColors.BorderSubtle, hudShape)
-                    .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-            ) {
-                if (!partnerJoined) {
                     Text(
                         text = stringResource(R.string.call_invite_sent),
                         style = ZunoType.FootnoteStrong,
@@ -281,52 +241,68 @@ fun PeerCallScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
                         ZunoChip(
-                            label = stringResource(if (isCameraOn) R.string.call_disable_camera else R.string.call_enable_camera),
-                            leadingIcon = if (isCameraOn) R.drawable.zuno_ic_t_video_off else R.drawable.zuno_ic_t_video,
-                            selected = isCameraOn,
-                            onClick = onToggleCamera,
-                        )
-                        ZunoChip(
                             label = stringResource(R.string.call_ping_partner, partnerShort),
                             onClick = onPingPartner,
                         )
                     }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.call_partner_captions, partnerName),
-                            style = ZunoType.FootnoteStrong,
-                            color = ZunoColors.TextSecondary,
-                        )
-                        ZunoVoiceWaveform(
-                            active = status == VoiceCallStatus.Speaking || status == VoiceCallStatus.Listening,
-                            audioLevel = audioLevel,
-                            modifier = Modifier.width(49.dp),
-                        )
+                }
+                Spacer(Modifier.weight(1f))
+            } else {
+                // `Chats · 14`: Top-aligned scrollable Conversation (`You` + `Partner · Speaking`)
+                val displayTurns = remember(turns, partnerLine) {
+                    if (turns.isNotEmpty()) {
+                        turns.filter { it.text.isNotBlank() }
+                    } else {
+                        buildList {
+                            partnerLine?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                                add(ChatMessage(id = "partner-preview", speaker = Speaker.AGENT, text = it, isFinal = true))
+                            }
+                        }
                     }
-                    val captionText = partnerLine?.takeIf { it.isNotBlank() } ?: stringResource(R.string.voice_listening)
-                    Text(
-                        text = captionText,
-                        style = ZunoType.BodyMediumStrong,
-                        color = ZunoColors.TextPrimary,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
-                        ZunoChip(
-                            label = stringResource(R.string.voice_chip_translate),
-                            leadingIcon = R.drawable.zuno_ic_languages,
-                            onClick = { partnerLine?.takeIf { it.isNotBlank() }?.let(onTranslate) },
-                        )
-                        ZunoChip(
-                            label = stringResource(R.string.voice_chip_slow),
-                            leadingIcon = R.drawable.zuno_ic_rotate_ccw,
-                            onClick = { partnerLine?.takeIf { it.isNotBlank() }?.let(onSlowReplay) },
-                        )
+                }
+                val listState = rememberLazyListState()
+                val lastText = displayTurns.lastOrNull()?.text.orEmpty()
+                LaunchedEffect(displayTurns.size, lastText) {
+                    if (displayTurns.isNotEmpty()) {
+                        delay(50)
+                        listState.animateScrollToItem(displayTurns.size - 1)
+                    }
+                }
+                val partnerLabel = if (status == VoiceCallStatus.Speaking) {
+                    "$partnerName · ${stringResource(R.string.voice_status_dot_speaking)}"
+                } else {
+                    "$partnerName · ${stringResource(R.string.voice_status_dot_listening)}"
+                }
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = ZunoSpace.s4),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                ) {
+                    items(displayTurns, key = { it.id }) { turn ->
+                        when (turn.speaker) {
+                            Speaker.USER -> {
+                                ZunoUserBubble(
+                                    message = turn.text,
+                                    senderLabel = if (turn.isFinal) "You" else stringResource(R.string.voice_you_speaking),
+                                )
+                            }
+                            Speaker.AGENT -> {
+                                ZunoAssistantBubble(
+                                    message = turn.text,
+                                    senderLabel = partnerLabel,
+                                    onListen = { onTranslate(turn.text) },
+                                    listenLabel = stringResource(R.string.voice_chip_translate),
+                                    listenIcon = R.drawable.zuno_ic_languages,
+                                    onExplain = { onSlowReplay(turn.text) },
+                                    explainLabel = stringResource(R.string.voice_chip_replay),
+                                    explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                )
+                            }
+                        }
                     }
                 }
             }

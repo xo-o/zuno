@@ -1,18 +1,12 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="18"
+    android:viewportHeight="18">
     <path
-        android:strokeColor="#EBFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M22 12C22 17.523 17.523 22 12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2C17.523 2 22 6.477 22 12Z"/>
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.8212 9C15.8212 5.2203 12.7572 2.15625 8.97748 2.15625C5.19778 2.15625 2.13373 5.2203 2.13373 9C2.13373 12.7797 5.19778 15.8438 8.97748 15.8438C12.7572 15.8438 15.8212 12.7797 15.8212 9ZM17.1337 9C17.1337 13.5046 13.482 17.1562 8.97748 17.1562C4.47291 17.1562 0.821228 13.5046 0.821228 9C0.821228 4.49543 4.47291 0.84375 8.97748 0.84375C13.482 0.84375 17.1337 4.49543 17.1337 9Z" />
     <path
-        android:strokeColor="#EBFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M10 8.5V15.5L15.5 12L10 8.5Z"/>
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.94684 5.7659C7.66467 5.35099 8.53962 5.47422 9.336 5.93435L11.5098 7.19412C12.3063 7.6543 12.8508 8.35086 12.8509 9.17971C12.8509 10.0087 12.3071 10.7058 11.5106 11.166L11.5098 11.1653L9.33673 12.4251L9.336 12.4258C8.53965 12.8859 7.66465 13.0091 6.94684 12.5943C6.22932 12.1795 5.89879 11.36 5.89874 10.4402V7.91995C5.89875 7.00014 6.22927 6.18069 6.94684 5.7659ZM7.21124 10.4402C7.21129 11.08 7.43196 11.3593 7.60309 11.4583C7.77399 11.5571 8.12545 11.6089 8.67902 11.2891L10.8536 10.0293C11.4069 9.70957 11.5384 9.37822 11.5384 9.17971C11.5383 8.98118 11.4074 8.65042 10.8543 8.33084L10.8536 8.3301L8.67902 7.07034C8.12559 6.75067 7.77397 6.8031 7.60309 6.90188C7.43195 7.00095 7.21125 7.28011 7.21124 7.91995V10.4402Z" />
 </vector>

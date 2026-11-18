@@ -155,6 +155,7 @@ fun ChatScreen(
                                 message = message.text,
                                 translation = message.translation.takeIf { showTranslations },
                                 glossary = message.glossary,
+                                senderLabel = stringResource(R.string.onboarding_sender_sofia),
                                 onListen = { onListen(message.text) },
                                 onExplain = { onExplain(message) },
                                 contextNote = message.contextNote,

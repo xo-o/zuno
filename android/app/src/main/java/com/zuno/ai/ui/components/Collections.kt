@@ -294,7 +294,7 @@ fun ZunoEmptyState(
             modifier = Modifier.size(52.dp).clip(CircleShape).background(ZunoColors.SurfaceStrong),
             contentAlignment = Alignment.Center,
         ) {
-            ZunoIcon(icon, 22.dp)
+            ZunoIcon(icon, 24.dp, tint = ZunoColors.IconPrimary)
         }
         Box(Modifier.height(ZunoSpace.s16))
         Text(title, style = ZunoType.Headline, color = ZunoColors.TextPrimary, textAlign = TextAlign.Center)

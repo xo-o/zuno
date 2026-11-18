@@ -31,8 +31,16 @@ import com.zuno.ai.data.PeerConversationMeta
 import com.zuno.ai.data.PeerConversationThread
 import com.zuno.ai.data.PeerLearner
 import com.zuno.ai.data.PeerMessage
+import com.zuno.ai.data.ReportReason
 import com.zuno.ai.data.UnifiedChatItem
 import com.zuno.ai.data.UnifiedChatKind
+import com.zuno.ai.model.ChatMessage
+import com.zuno.ai.model.Speaker
+import com.zuno.ai.ui.components.ZunoDialog
+import com.zuno.ai.ui.components.ZunoInputDialog
+import com.zuno.ai.ui.components.ZunoMenuAction
+import com.zuno.ai.ui.components.ZunoReportSheet
+import com.zuno.ai.ui.components.ZunoShareSheet
 import com.zuno.ai.ui.screens.ChatScreen
 import com.zuno.ai.ui.screens.ChatsScreen
 import com.zuno.ai.ui.screens.PeerCallScreen
@@ -58,30 +66,10 @@ class ChatsScreensUiTest {
         File(instrumentation.targetContext.filesDir, "chats_verify")
 
     private fun saveScreenshot(scenario: ActivityScenario<ComponentActivity>, name: String) {
-        Thread.sleep(350)
+        Thread.sleep(400)
         val dir = screenshotDir().apply { mkdirs() }
         val file = File(dir, "$name.png")
-        var captured: Bitmap? = null
-        val latch = CountDownLatch(1)
-        scenario.onActivity { activity ->
-            val view = activity.window.decorView
-            if (view.width > 0 && view.height > 0) {
-                val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                PixelCopy.request(
-                    activity.window,
-                    bmp,
-                    { result ->
-                        if (result == PixelCopy.SUCCESS) captured = bmp else bmp.recycle()
-                        latch.countDown()
-                    },
-                    Handler(Looper.getMainLooper()),
-                )
-            } else {
-                latch.countDown()
-            }
-        }
-        latch.await(5, TimeUnit.SECONDS)
-        val bmp = captured ?: instrumentation.uiAutomation.takeScreenshot()
+        val bmp = instrumentation.uiAutomation.takeScreenshot()
             ?: throw AssertionError("Failed to capture $name")
         FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.PNG, 95, it) }
         bmp.recycle()
@@ -257,6 +245,41 @@ class ChatsScreensUiTest {
         var openToSpeak by mutableStateOf(true)
         var partnerJoined by mutableStateOf(false)
         var peerInviteJoined by mutableStateOf(false)
+        var hasPinned by mutableStateOf(false)
+        var activeActionModal by mutableStateOf<String?>(null)
+        var sharePublic by mutableStateOf(false)
+        var aiCameraOn by mutableStateOf(false)
+
+        val pinnedOverview = sampleOverview.copy(
+            conversations = listOf(
+                UnifiedChatItem(
+                    id = "ai-pinned",
+                    kind = UnifiedChatKind.Ai,
+                    conversationId = "ai-pinned",
+                    peerConversationId = null,
+                    partnerId = null,
+                    title = "Café en Madrid",
+                    badge = "AI Tutor",
+                    isVoice = false,
+                    openToSpeak = false,
+                    snippet = "Sofía · ¡Claro! Son tres euros. ¿Algo más?",
+                    unread = true,
+                    pinned = true,
+                    updatedAtMillis = now - 10_000L,
+                    avatarInitial = "S",
+                    avatarUrl = null,
+                ),
+            ) + sampleOverview.conversations.drop(1),
+        )
+        val emptyOverview = ChatsOverview(
+            openToSpeak = false,
+            language = "es",
+            languageName = "Spanish",
+            level = "B1",
+            openSpeakers = listOf(lucia, priya, carlos),
+            partners = emptyList(),
+            conversations = emptyList(),
+        )
 
         ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
@@ -269,7 +292,7 @@ class ChatsScreensUiTest {
                     ZunoTheme {
                         when (stage) {
                             "chats" -> ChatsScreen(
-                                overview = Loadable(sampleOverview.copy(openToSpeak = openToSpeak)),
+                                overview = Loadable((if (hasPinned) pinnedOverview else sampleOverview).copy(openToSpeak = openToSpeak)),
                                 userInitial = "N",
                                 userImageUrl = null,
                                 initialFilter = ChatsFilter.All,
@@ -286,37 +309,94 @@ class ChatsScreensUiTest {
                                 modifier = Modifier.fillMaxSize(),
                             )
 
-                            "ai_chat" -> ChatScreen(
-                                title = "Pedir un café",
-                                sessionLabel = "Pedir un café · Today",
-                                messages = listOf(
-                                    Message("m1", isUser = true, text = "Un café con leche para llevar, por favor.", translation = null, feedback = "Natural Spanish · Native tip: “¿Me pones un café…?”", glossary = emptyList()),
-                                    Message("m2", isUser = false, text = "¡Claro! Son tres euros. ¿Algo más?", translation = "Sure! That's three euros. Anything else?", glossary = emptyList(), feedback = null),
-                                    Message("m3", isUser = false, text = "Video call · 03:42 · Ended", translation = null, feedback = null, glossary = emptyList(), kind = "call_summary", callDurationSec = 222, callIsVideo = true, callTipsCount = 2),
-                                ),
-                                pendingText = null,
-                                pendingAttachments = emptyList(),
-                                drafts = emptyList(),
-                                error = null,
-                                placeholder = "Responde en español…",
-                                typingHint = null,
-                                menu = emptyList(),
-                                onBack = { stage = "chats" },
-                                onRetryLoad = {},
-                                onSend = {},
-                                onDraftChanged = {},
-                                savedDraft = { "" },
-                                onSaveDraft = {},
-                                onStartVoice = { stage = "ai_call" },
-                                onListen = {},
-                                onExplain = {},
-                                onAttach = {},
-                                onRemoveAttachment = {},
-                                onRetryAttachment = {},
-                                onOpenAttachment = {},
-                                levelLabel = "B1",
+                            "chats_empty" -> ChatsScreen(
+                                overview = Loadable(emptyOverview),
+                                userInitial = "N",
+                                userImageUrl = null,
+                                initialFilter = ChatsFilter.All,
+                                onRetry = {},
+                                onToggleOpenToSpeak = {},
+                                onOpenAiConversation = {},
+                                onStartAiChat = {},
+                                onStartAiVoiceCall = {},
+                                onOpenRoleplays = {},
+                                onOpenPeerChat = {},
+                                onInvitePeerToTalk = {},
+                                onTogglePartner = { _, _ -> },
+                                onNavigateTab = {},
                                 modifier = Modifier.fillMaxSize(),
                             )
+
+                            "ai_chat" -> {
+                                val chatMenu = listOf(
+                                    ZunoMenuAction("Rename", icon = R.drawable.zuno_ic_t_pencil) { activeActionModal = "rename" },
+                                    ZunoMenuAction("Pin", icon = R.drawable.zuno_ic_t_pin) {},
+                                    ZunoMenuAction("Share", icon = R.drawable.zuno_ic_t_share) { activeActionModal = "share" },
+                                    ZunoMenuAction("Report", icon = R.drawable.zuno_ic_t_flag) { activeActionModal = "report" },
+                                    ZunoMenuAction("Delete", icon = R.drawable.zuno_ic_t_trash, destructive = true, dividerBefore = true) { activeActionModal = "delete" },
+                                )
+                                ChatScreen(
+                                    title = "Pedir un café",
+                                    sessionLabel = "Pedir un café · Today",
+                                    messages = listOf(
+                                        Message("m1", isUser = true, text = "Un café con leche para llevar, por favor.", translation = null, feedback = "Natural Spanish · Native tip: “¿Me pones un café…?”", glossary = emptyList()),
+                                        Message("m2", isUser = false, text = "¡Claro! Son tres euros. ¿Algo más?", translation = "Sure! That's three euros. Anything else?", glossary = emptyList(), feedback = null),
+                                        Message("m3", isUser = false, text = "Video call · 03:42 · Ended", translation = null, feedback = null, glossary = emptyList(), kind = "call_summary", callDurationSec = 222, callIsVideo = true, callTipsCount = 2),
+                                    ),
+                                    pendingText = null,
+                                    pendingAttachments = emptyList(),
+                                    drafts = emptyList(),
+                                    error = null,
+                                    placeholder = "Responde en español…",
+                                    typingHint = null,
+                                    menu = chatMenu,
+                                    onBack = { stage = "chats" },
+                                    onRetryLoad = {},
+                                    onSend = {},
+                                    onDraftChanged = {},
+                                    savedDraft = { "" },
+                                    onSaveDraft = {},
+                                    onStartVoice = { stage = "ai_call" },
+                                    onListen = {},
+                                    onExplain = {},
+                                    onAttach = {},
+                                    onRemoveAttachment = {},
+                                    onRetryAttachment = {},
+                                    onOpenAttachment = {},
+                                    levelLabel = "B1",
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                when (activeActionModal) {
+                                    "rename" -> ZunoInputDialog(
+                                        title = "Rename chat",
+                                        initialValue = "Café en Madrid",
+                                        confirmLabel = "Save",
+                                        onConfirm = { activeActionModal = null },
+                                        onDismiss = { activeActionModal = null },
+                                    )
+                                    "share" -> ZunoShareSheet(
+                                        isPublic = sharePublic,
+                                        shareUrl = if (sharePublic) "https://heyzuno.app/s/demo" else null,
+                                        busy = false,
+                                        onSelectPublic = { sharePublic = it },
+                                        onShare = {},
+                                        onCopyLink = {},
+                                        onDismiss = { activeActionModal = null },
+                                    )
+                                    "report" -> ZunoReportSheet(
+                                        onSubmit = { _, _ -> activeActionModal = null },
+                                        onDismiss = { activeActionModal = null },
+                                    )
+                                    "delete" -> ZunoDialog(
+                                        title = "Delete chat?",
+                                        body = "“Café en Madrid” and its corrections will be deleted. Words saved to Vocabulary stay. This can’t be undone.",
+                                        confirmLabel = "Delete",
+                                        destructive = true,
+                                        onConfirm = { activeActionModal = null },
+                                        onDismiss = { activeActionModal = null },
+                                    )
+                                }
+                            }
 
                             "ai_call" -> VoiceModeScreen(
                                 status = VoiceCallStatus.Speaking,
@@ -324,6 +404,7 @@ class ChatsScreensUiTest {
                                 startedAtMillis = now - 134_000L,
                                 tutorLine = "¿Qué vas a pedir? ¿Con leche o solo?",
                                 isMuted = false,
+                                isCameraOn = aiCameraOn,
                                 menu = emptyList(),
                                 sessionKindLabel = "Free talk",
                                 languageLevelLabel = "Spanish B1",
@@ -335,6 +416,7 @@ class ChatsScreensUiTest {
                                 onEnd = { stage = "ai_chat" },
                                 onInterrupt = {},
                                 onToggleMute = {},
+                                onToggleCamera = { aiCameraOn = !aiCameraOn },
                                 modifier = Modifier.fillMaxSize(),
                             )
 
@@ -376,7 +458,15 @@ class ChatsScreensUiTest {
                                 status = if (partnerJoined) VoiceCallStatus.Speaking else VoiceCallStatus.Listening,
                                 audioLevel = { 0.6f },
                                 startedAtMillis = now - 6_000L,
-                                partnerLine = "¿Cómo sueles empezar tu mañana?",
+                                partnerLine = "¿Qué bien! ¿Y a qué hora te despiertas normalmente?",
+                                turns = if (partnerJoined) {
+                                    listOf(
+                                        ChatMessage("u1", Speaker.USER, "Normalmente tomo un café y leo un poco antes de trabajar.", isFinal = true),
+                                        ChatMessage("a1", Speaker.AGENT, "¡Qué bien! ¿Y a qué hora te despiertas normalmente?", isFinal = true),
+                                    )
+                                } else {
+                                    emptyList()
+                                },
                                 isMuted = false,
                                 isCameraOn = false,
                                 isSpeakerOn = true,
@@ -400,65 +490,117 @@ class ChatsScreensUiTest {
                 }
             }
 
-            // 1. Unified Chats screen
+            // 1. Unified Chats screen (`Chats · 1 · All Conversations`)
             waitForText("Chats")
             waitForText("Open to speak")
-            waitForText("Open to speak now")
-            waitForText("All conversations")
             waitForText("Pedir un café")
             waitForText("Lucía M.")
             saveScreenshot(scenario, "01_chats_all")
 
-            // Switch to AI Tutor filter
+            // 1b. Pinned + Recent (`Chat actions · 5 · Chats · Pinned`)
+            hasPinned = true
+            waitForText("Pinned")
+            waitForText("Café en Madrid")
+            waitForText("Recent")
+            saveScreenshot(scenario, "02_chats_pinned")
+            hasPinned = false
+            waitForText("Pedir un café")
+
+            // 2. Switch to AI Tutor filter (`Chats · 2`)
             tapText("AI Tutor")
             waitForText("Chat with Sofía")
             waitForText("Sofía · AI Tutor (1)")
-            saveScreenshot(scenario, "02_chats_ai_filter")
+            saveScreenshot(scenario, "03_chats_ai_filter")
 
-            // Switch to People filter
+            // 3. Switch to People filter (`Chats · 3`)
             tapText("People")
-            waitForText("1:1 Conversations (1)")
-            waitForText("Added partners")
-            saveScreenshot(scenario, "03_chats_people_filter")
+            waitForText("Lucía M.")
+            saveScreenshot(scenario, "04_chats_people_filter")
 
-            // Switch to Open filter & open Member Profile Sheet
+            // 4. Switch to Open filter (`Chats · 4`) & open Member Profile Sheet (`Chats · 16`)
             tapText("Open")
-            waitForText("Open to speak right now")
+            waitForText("Carlos Vega")
+            saveScreenshot(scenario, "05_chats_open_filter")
             tapText("View")
             waitForText("Invite to talk")
             waitForText("Send message")
-            saveScreenshot(scenario, "04_member_profile_sheet")
+            saveScreenshot(scenario, "06_member_profile_sheet")
 
-            // Tap Send message -> Peer 1:1 Chat
+            // 5. Tap Send message -> Peer 1:1 Chat (`Chats · 12`)
             tapText("Send message")
             waitForText("Lucía M.")
             waitForText("Decline")
             waitForText("Join")
-            saveScreenshot(scenario, "05_peer_chat")
+            saveScreenshot(scenario, "07_peer_chat")
 
-            // Tap Join -> Peer Call Waiting Room -> Ping -> Active Member Call
+            // 6. Tap Join -> Peer Call Waiting Room (`Chats · 13`) -> Ping -> Active Member Call (`Chats · 14`)
             tapText("Join")
             assertTrue("Expected Join callback", peerInviteJoined)
             waitForText("Waiting for Lucía M. to join…")
-            saveScreenshot(scenario, "06_peer_call_waiting")
+            saveScreenshot(scenario, "08_peer_call_waiting")
 
             tapText("Ping Lucía")
-            waitForText("Lucía M. · Live captions")
-            waitForText("¿Cómo sueles empezar tu mañana?")
-            saveScreenshot(scenario, "07_peer_call_active")
+            waitForText("Lucía M. · Speaking")
+            waitForText("Replay")
+            saveScreenshot(scenario, "09_peer_call_active")
 
-            // Switch to AI Tutor Chat + Returned Call Summary + AI Tutor Call Mode
+            // 7. Empty All (`Chats · 6 · Empty — All`)
+            stage = "chats_empty"
+            waitForText("No conversations yet")
+            waitForText("Choose a way to start practicing below.")
+            waitForText("Ways to start")
+            saveScreenshot(scenario, "10_chats_empty_all")
+
+            // 8. AI Tutor Chat + Returned Call Summary + Chat Actions (`06 · Chat actions`)
             stage = "ai_chat"
             waitForText("Sofía")
             waitForText("Video call · 03:42 · Ended")
             waitForText("Notes")
-            saveScreenshot(scenario, "08_ai_tutor_chat")
+            saveScreenshot(scenario, "11_ai_tutor_chat")
 
+            tapText("More options")
+            waitForText("Rename")
+            waitForText("Pin")
+            waitForText("Share")
+            waitForText("Report")
+            waitForText("Delete")
+            saveScreenshot(scenario, "12_chat_actions_menu")
+
+            tapText("Rename")
+            waitForText("Rename chat")
+            saveScreenshot(scenario, "13_chat_actions_rename")
+            tapText("Cancel")
+
+            activeActionModal = "share"
+            waitForText("Only me")
+            waitForText("Public access")
+            saveScreenshot(scenario, "14_chat_actions_share")
+            activeActionModal = null
+
+            activeActionModal = "report"
+            waitForText("Report chat")
+            saveScreenshot(scenario, "15_chat_actions_report")
+            activeActionModal = null
+
+            activeActionModal = "delete"
+            waitForText("Delete chat?")
+            saveScreenshot(scenario, "16_chat_actions_delete")
+            activeActionModal = null
+
+            // 9. AI Tutor Call (`Home · 7` portrait + `Chats · 11` video call)
             stage = "ai_call"
-            waitForText("Free talk · Spanish B1")
-            waitForText("Sofía · Live captions")
+            waitForText("Live · ", substring = true)
+            waitForText("Sofía · Free talk")
+            waitForText("Answers")
+            waitForText("Switch topic")
+            waitForText("Questions")
+            saveScreenshot(scenario, "17_ai_tutor_call")
+
+            aiCameraOn = true
+            waitForText("Video call · ", substring = true)
+            waitForText("AI Tutor")
             waitForText("Follow-ups")
-            saveScreenshot(scenario, "09_ai_tutor_call")
+            saveScreenshot(scenario, "18_ai_tutor_video_call")
         }
     }
 }

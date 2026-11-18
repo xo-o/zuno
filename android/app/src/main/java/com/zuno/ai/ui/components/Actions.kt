@@ -170,6 +170,7 @@ fun ZunoChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     @DrawableRes leadingIcon: Int? = null,
+    leadingIconTint: Color? = null,
     selected: Boolean = false,
 ) {
     val shape = CircleShape
@@ -184,7 +185,7 @@ fun ZunoChip(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        leadingIcon?.let { ZunoIcon(it, 14.dp) }
+        leadingIcon?.let { ZunoIcon(it, 14.dp, tint = leadingIconTint) }
         Text(label, style = ZunoType.FootnoteStrong, color = ZunoColors.TextPrimary, maxLines = 1)
     }
 }

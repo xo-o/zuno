@@ -275,4 +275,17 @@
     <string name="onboarding_recommended_next">Hierna aanbevolen</string>
     <string name="onboarding_lessons_count">%1$d lessen</string>
     <string name="onboarding_go_home">Naar Home</string>
+    <string name="call_live_title">Live · %1$s</string>
+    <string name="voice_chip_speed_slow">0.75×</string>
+    <string name="voice_listening_turn_placeholder">Luister · Daarna ben jij…</string>
+    <string name="voice_you_listening">Jij · Luistert</string>
+    <string name="voice_you_speaking">Jij · Spreekt</string>
+    <string name="call_coach_switch_topic">Ander onderwerp</string>
+    <string name="voice_status_dot_speaking">Spreekt</string>
+    <string name="voice_status_dot_listening">Luistert</string>
+    <string name="voice_status_dot_thinking">Denkt na</string>
+    <string name="voice_status_dot_muted">Gedempt</string>
+    <string name="voice_status_dot_connecting">Verbinden</string>
+    <string name="chats_recent_header">Recent</string>
+    <string name="voice_chip_replay">Opnieuw</string>
 </resources>

@@ -1258,6 +1258,9 @@ fun ZunoApp(
                 )
 
                 ZunoRoute.Home -> {
+                    LaunchedEffect(Unit) {
+                        if (chatsOverview.items == null) zunoViewModel.loadChatsOverview(silent = true)
+                    }
                     val latestChatSession = recent.firstOrNull {
                         it.kind == RecentKind.FreeTalk || it.conversationId != null
                     }
@@ -1291,6 +1294,7 @@ fun ZunoApp(
                     val dailyMinutesDone = 8
                     val dailyTargetMin = preferences?.dailyGoalMin ?: 15
                     val currentLevel = profile?.level ?: "B1"
+                    val partnersOnline = chatsOverview.items?.openSpeakers?.size?.takeIf { it > 0 } ?: 12
                     val nextSchedule = schedules.items?.filter { it.active }?.minByOrNull { it.nextRunAtMillis ?: Long.MAX_VALUE }
                     val scheduledTimeLabel = nextSchedule?.let { ScheduleFormat.time(localizedContext, it.timeOfDay) }
 
@@ -1305,6 +1309,7 @@ fun ZunoApp(
                         level = currentLevel,
                         showUpgrade = profile?.isPro != true,
                         continueSession = continueSession,
+                        partnersOnlineCount = partnersOnline,
                         scheduledTimeLabel = scheduledTimeLabel,
                         onStreakClick = {
                             toasts.show(ToastEvent(str(R.string.home_streak_toast, streakDays), ToastIcon.Check))
@@ -1491,7 +1496,8 @@ fun ZunoApp(
                         if (thread == null) zunoViewModel.loadPeerChat(screen.peerConversationId)
                     }
                     val status = voiceCallStatus(agentState, isMuted)
-                    val partnerLine = voiceMessages.lastOrNull { it.speaker == Speaker.AGENT }?.text
+                    val peerTurns = voiceMessages.drop(voiceMessageStart)
+                    val partnerLine = peerTurns.lastOrNull { it.speaker == Speaker.AGENT }?.text
                     val userName = profile?.firstName?.ifBlank { null } ?: profile?.displayName.orEmpty().ifBlank { "You" }
                     val userInitial = userName.take(1).uppercase()
                     PeerCallScreen(
@@ -1511,6 +1517,7 @@ fun ZunoApp(
                         },
                         startedAtMillis = callStartedAt,
                         partnerLine = partnerLine,
+                        turns = peerTurns,
                         isMuted = isMuted,
                         isCameraOn = isCameraOn,
                         isSpeakerOn = isSpeakerOn,
@@ -1785,6 +1792,7 @@ fun ZunoApp(
                         startedAtMillis = callStartedAt.takeIf { inVoice },
                         tutorLine = recentTurns.lastOrNull { it.speaker == Speaker.AGENT }?.text,
                         userLine = recentTurns.lastOrNull { it.speaker == Speaker.USER }?.text,
+                        turns = recentTurns,
                         isMuted = isMuted,
                         menu = conversationMenu(screen.conversationId),
                         sessionKindLabel = sessionKindLabel,

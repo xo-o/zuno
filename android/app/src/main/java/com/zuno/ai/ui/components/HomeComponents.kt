@@ -532,7 +532,8 @@ fun ZunoFloatingBottomNav(
             .shadow(16.dp, dockShape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(dockShape)
             .background(ZunoColors.BgElevated)
-            .border(1.dp, ZunoColors.BorderDefault, dockShape)
+            .background(ZunoColors.SurfaceSubtle)
+            .border(1.dp, ZunoColors.BorderSubtle, dockShape)
             .padding(horizontal = ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {

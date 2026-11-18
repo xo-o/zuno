@@ -1,24 +1,12 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="22dp"
-    android:height="22dp"
-    android:viewportWidth="22"
-    android:viewportHeight="22">
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="18"
+    android:viewportHeight="18">
     <path
-        android:strokeColor="#8FFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M20.1667 11C20.1667 16.0626 16.0626 20.1667 11 20.1667C5.93739 20.1667 1.83333 16.0626 1.83333 11C1.83333 5.93739 5.93739 1.83333 11 1.83333C16.0626 1.83333 20.1667 5.93739 20.1667 11Z"/>
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12.0938 5.25C12.0938 3.54137 10.7086 2.15625 9 2.15625C7.29137 2.15625 5.90625 3.54137 5.90625 5.25C5.90625 6.95863 7.29137 8.34375 9 8.34375C10.7086 8.34375 12.0938 6.95863 12.0938 5.25ZM13.4062 5.25C13.4062 7.6835 11.4335 9.65625 9 9.65625C6.5665 9.65625 4.59375 7.6835 4.59375 5.25C4.59375 2.8165 6.5665 0.84375 9 0.84375C11.4335 0.84375 13.4062 2.8165 13.4062 5.25Z" />
     <path
-        android:strokeColor="#8FFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M13.75 9.16667C13.75 10.6854 12.5188 11.9167 11 11.9167C9.48122 11.9167 8.25 10.6854 8.25 9.16667C8.25 7.64788 9.48122 6.41667 11 6.41667C12.5188 6.41667 13.75 7.64788 13.75 9.16667Z"/>
-    <path
-        android:strokeColor="#8FFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M6.41667 18.9402V17.4167C6.41667 16.9304 6.60982 16.4641 6.95364 16.1203C7.29745 15.7765 7.76377 15.5833 8.25 15.5833H13.75C14.2362 15.5833 14.7025 15.7765 15.0464 16.1203C15.3902 16.4641 15.5833 16.9304 15.5833 17.4167V18.9402"/>
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14.786 16.5C14.786 14.0795 12.3249 11.9062 8.99991 11.9062C5.67498 11.9063 3.21378 14.0795 3.21378 16.5C3.21378 16.8624 2.91996 17.1562 2.55753 17.1562C2.19509 17.1562 1.90128 16.8624 1.90128 16.5C1.90128 13.1155 5.21494 10.5938 8.99991 10.5938C12.7849 10.5938 16.0985 13.1155 16.0985 16.5C16.0985 16.8624 15.8047 17.1562 15.4423 17.1562C15.08 17.1561 14.786 16.8624 14.786 16.5Z" />
 </vector>

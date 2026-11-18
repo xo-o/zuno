@@ -138,7 +138,11 @@ fun ChatsScreen(
         }
     }
 
-    val hasAnyContent = data != null && (data.conversations.isNotEmpty() || data.openSpeakers.isNotEmpty() || data.partners.isNotEmpty())
+    val showSearch = (data != null && (
+        data.conversations.isNotEmpty() ||
+            (selectedFilter == ChatsFilter.Open && data.openSpeakers.isNotEmpty()) ||
+            (selectedFilter == ChatsFilter.People && data.partners.isNotEmpty())
+        )) || searchVisible
 
     Box(
         modifier = modifier
@@ -151,7 +155,7 @@ fun ChatsScreen(
                 .statusBarsPadding(),
         ) {
             ChatsTopBar(
-                showActions = hasAnyContent || searchVisible,
+                showSearch = showSearch,
                 searchActive = searchVisible,
                 onSearchToggle = {
                     searchVisible = !searchVisible
@@ -230,22 +234,12 @@ fun ChatsScreen(
                     } else {
                         when (selectedFilter) {
                             ChatsFilter.All -> {
-                                if (filteredOpenSpeakers.isNotEmpty()) {
-                                    item(key = "speaker-rail") {
-                                        OpenSpeakersRail(
-                                            speakers = filteredOpenSpeakers,
-                                            onSelectSpeaker = { selectedMember = it },
-                                        )
-                                    }
-                                }
                                 if (filteredConversations.isEmpty()) {
                                     item(key = "empty-all") {
                                         ChatsEmptySection(
                                             icon = R.drawable.zuno_ic_messages_square,
                                             title = stringResource(R.string.chats_empty_all_title),
                                             description = stringResource(R.string.chats_empty_all_body),
-                                            ctaLabel = stringResource(R.string.chats_start_ai_title),
-                                            onCta = onStartAiChat,
                                             quickStartsTitle = stringResource(R.string.chats_ways_to_start),
                                             quickStarts = {
                                                 QuickStartAiRow(onClick = onStartAiChat)
@@ -259,37 +253,59 @@ fun ChatsScreen(
                                         )
                                     }
                                 } else {
-                                    item(key = "all-convs") {
-                                        ConversationsSection(
-                                            header = stringResource(R.string.chats_all_conversations),
-                                            items = filteredConversations,
-                                            onClickItem = { item ->
-                                                if (item.kind == UnifiedChatKind.Ai && item.conversationId != null) {
-                                                    onOpenAiConversation(item.conversationId)
-                                                } else if (item.kind == UnifiedChatKind.Peer && item.partnerId != null) {
-                                                    val partner = data.openSpeakers.firstOrNull { it.id == item.partnerId }
-                                                        ?: data.partners.firstOrNull { it.id == item.partnerId }
-                                                        ?: PeerLearner(
-                                                            id = item.partnerId,
-                                                            name = item.title,
-                                                            shortName = item.title.substringBefore(" "),
-                                                            initial = item.avatarInitial,
-                                                            imageUrl = item.avatarUrl,
-                                                            language = data.language,
-                                                            languageName = data.languageName,
-                                                            level = data.level,
-                                                            nativeLanguage = "English",
-                                                            streakDays = 7,
-                                                            sessionsCount = 12,
-                                                            interests = emptyList(),
-                                                            openToSpeak = item.openToSpeak,
-                                                            isPartner = false,
-                                                            activeLabel = if (item.openToSpeak) "Open to speak" else "Online",
-                                                        )
-                                                    onOpenPeerChat(partner)
-                                                }
-                                            },
-                                        )
+                                    val openUnifiedChat = { item: UnifiedChatItem ->
+                                        if (item.kind == UnifiedChatKind.Ai && item.conversationId != null) {
+                                            onOpenAiConversation(item.conversationId)
+                                        } else if (item.kind == UnifiedChatKind.Peer && item.partnerId != null) {
+                                            val partner = data.openSpeakers.firstOrNull { it.id == item.partnerId }
+                                                ?: data.partners.firstOrNull { it.id == item.partnerId }
+                                                ?: PeerLearner(
+                                                    id = item.partnerId,
+                                                    name = item.title,
+                                                    shortName = item.title.substringBefore(" "),
+                                                    initial = item.avatarInitial,
+                                                    imageUrl = item.avatarUrl,
+                                                    language = data.language,
+                                                    languageName = data.languageName,
+                                                    level = data.level,
+                                                    nativeLanguage = "English",
+                                                    streakDays = 7,
+                                                    sessionsCount = 12,
+                                                    interests = emptyList(),
+                                                    openToSpeak = item.openToSpeak,
+                                                    isPartner = false,
+                                                    activeLabel = if (item.openToSpeak) "Open to speak" else "Online",
+                                                )
+                                            onOpenPeerChat(partner)
+                                        }
+                                    }
+                                    val pinnedItems = filteredConversations.filter { it.pinned }
+                                    val recentItems = filteredConversations.filterNot { it.pinned }
+                                    if (pinnedItems.isNotEmpty()) {
+                                        item(key = "pinned-convs") {
+                                            ConversationsSection(
+                                                header = stringResource(R.string.drawer_pinned),
+                                                items = pinnedItems,
+                                                onClickItem = openUnifiedChat,
+                                            )
+                                        }
+                                        if (recentItems.isNotEmpty()) {
+                                            item(key = "recent-convs") {
+                                                ConversationsSection(
+                                                    header = stringResource(R.string.chats_recent_header),
+                                                    items = recentItems,
+                                                    onClickItem = openUnifiedChat,
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        item(key = "all-convs") {
+                                            ConversationsSection(
+                                                header = null,
+                                                items = recentItems,
+                                                onClickItem = openUnifiedChat,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -297,21 +313,13 @@ fun ChatsScreen(
                             ChatsFilter.AiTutor -> {
                                 if (filteredConversations.isEmpty()) {
                                     item(key = "empty-ai") {
-                                        ChatsEmptySection(
-                                            icon = R.drawable.zuno_ic_sparkles,
+                                        ChatsEmptyHero(
+                                            icon = R.drawable.zuno_ic_t_sparkles,
                                             title = stringResource(R.string.chats_empty_ai_title),
                                             description = stringResource(R.string.chats_empty_ai_body),
                                             ctaLabel = stringResource(R.string.chats_start_ai_title),
                                             onCta = onStartAiChat,
-                                            quickStartsTitle = stringResource(R.string.chats_ways_to_start),
-                                            quickStarts = {
-                                                QuickStartAiRow(onClick = onStartAiChat)
-                                                QuickStartRoleplayRow(
-                                                    languageName = data.languageName,
-                                                    level = data.level,
-                                                    onClick = onOpenRoleplays,
-                                                )
-                                            },
+                                            modifier = Modifier.fillParentMaxHeight(0.75f),
                                         )
                                     }
                                 } else {
@@ -333,34 +341,20 @@ fun ChatsScreen(
                             ChatsFilter.People -> {
                                 if (filteredConversations.isEmpty() && filteredPartners.isEmpty()) {
                                     item(key = "empty-people") {
-                                        ChatsEmptySection(
+                                        ChatsEmptyHero(
                                             icon = R.drawable.zuno_ic_users,
                                             title = stringResource(R.string.chats_empty_people_title),
                                             description = stringResource(R.string.chats_empty_people_body),
                                             ctaLabel = stringResource(R.string.chats_empty_people_cta),
                                             onCta = { selectedFilter = ChatsFilter.Open },
-                                            quickStartsTitle = stringResource(R.string.chats_ways_to_start),
-                                            quickStarts = {
-                                                if (data.openSpeakers.isNotEmpty()) {
-                                                    QuickStartOpenSpeakersRow(
-                                                        speakers = data.openSpeakers,
-                                                        onClick = { selectedFilter = ChatsFilter.Open },
-                                                    )
-                                                }
-                                                QuickStartTurnOnOpenRow(
-                                                    userInitial = userInitial,
-                                                    languageName = data.languageName,
-                                                    openToSpeak = data.openToSpeak,
-                                                    onClick = { onToggleOpenToSpeak(!data.openToSpeak) },
-                                                )
-                                            },
+                                            modifier = Modifier.fillParentMaxHeight(0.75f),
                                         )
                                     }
                                 } else {
                                     if (filteredConversations.isNotEmpty()) {
                                         item(key = "people-convs") {
                                             ConversationsSection(
-                                                header = stringResource(R.string.chats_people_conversations_count, filteredConversations.size),
+                                                header = null,
                                                 items = filteredConversations,
                                                 onClickItem = { item ->
                                                     if (item.partnerId != null) {
@@ -388,8 +382,7 @@ fun ChatsScreen(
                                                 },
                                             )
                                         }
-                                    }
-                                    if (filteredPartners.isNotEmpty()) {
+                                    } else if (filteredPartners.isNotEmpty()) {
                                         item(key = "added-partners") {
                                             AddedPartnersSection(
                                                 partners = filteredPartners,
@@ -405,16 +398,13 @@ fun ChatsScreen(
                             ChatsFilter.Open -> {
                                 if (filteredOpenSpeakers.isEmpty()) {
                                     item(key = "empty-open") {
-                                        ChatsEmptySection(
-                                            icon = R.drawable.zuno_ic_mic,
+                                        ChatsEmptyHero(
+                                            icon = R.drawable.zuno_ic_t_mic,
                                             title = stringResource(R.string.chats_empty_open_title),
                                             description = stringResource(R.string.chats_empty_open_body),
-                                            ctaLabel = stringResource(R.string.chats_empty_open_cta),
-                                            onCta = { onToggleOpenToSpeak(true) },
-                                            quickStartsTitle = stringResource(R.string.chats_while_you_wait),
-                                            quickStarts = {
-                                                QuickStartAiRow(onClick = onStartAiChat)
-                                            },
+                                            ctaLabel = stringResource(R.string.chats_start_ai_title),
+                                            onCta = onStartAiChat,
+                                            modifier = Modifier.fillParentMaxHeight(0.75f),
                                         )
                                     }
                                 } else {
@@ -508,7 +498,7 @@ fun ChatsScreen(
 
 @Composable
 private fun ChatsTopBar(
-    showActions: Boolean,
+    showSearch: Boolean,
     searchActive: Boolean,
     onSearchToggle: () -> Unit,
     onNewChat: () -> Unit,
@@ -528,11 +518,11 @@ private fun ChatsTopBar(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (showActions) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showSearch) {
                 ZunoIconButton(
                     icon = if (searchActive) R.drawable.zuno_ic_t_x else R.drawable.zuno_ic_t_search,
                     onClick = onSearchToggle,
@@ -541,14 +531,14 @@ private fun ChatsTopBar(
                     tint = ZunoColors.IconPrimary,
                     contentDescription = stringResource(R.string.chats_search),
                 )
-                ZunoIconButton(
-                    icon = R.drawable.zuno_ic_plus,
-                    onClick = onNewChat,
-                    style = ZunoIconButtonStyle.Strong,
-                    size = ZunoIconButtonSize.Medium,
-                    contentDescription = stringResource(R.string.chats_new_chat),
-                )
             }
+            ZunoIconButton(
+                icon = R.drawable.zuno_ic_plus,
+                onClick = onNewChat,
+                style = ZunoIconButtonStyle.Strong,
+                size = ZunoIconButtonSize.Medium,
+                contentDescription = stringResource(R.string.chats_new_chat),
+            )
         }
     }
 }
@@ -738,69 +728,6 @@ private fun FilterPill(
 }
 
 @Composable
-private fun OpenSpeakersRail(
-    speakers: List<PeerLearner>,
-    onSelectSpeaker: (PeerLearner) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.chats_open_now_header),
-                style = ZunoType.LabelMedium,
-                color = ZunoColors.TextSecondary,
-            )
-            Text(
-                text = stringResource(R.string.chats_online_count, speakers.size),
-                style = ZunoType.FootnoteRegular,
-                color = ZunoColors.TextPrimary,
-            )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-        ) {
-            speakers.forEach { speaker ->
-                Column(
-                    modifier = Modifier
-                        .width(78.dp)
-                        .clip(RoundedCornerShape(ZunoRadius.lg))
-                        .clickable(role = Role.Button, onClick = { onSelectSpeaker(speaker) })
-                        .padding(vertical = ZunoSpace.s2),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
-                ) {
-                    ZunoOpenToSpeakAvatar(
-                        initial = speaker.initial,
-                        imageUrl = speaker.imageUrl,
-                        size = 48.dp,
-                        openToSpeak = true,
-                    )
-                    Text(
-                        text = speaker.shortName,
-                        style = ZunoType.FootnoteStrong,
-                        color = ZunoColors.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${speaker.languageName} · ${speaker.level}",
-                        style = ZunoType.Micro,
-                        color = ZunoColors.TextTertiary,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun StartAiChatCard(onChat: () -> Unit) {
     val shape = RoundedCornerShape(ZunoRadius.xl)
     Row(
@@ -843,18 +770,20 @@ private fun StartAiChatCard(onChat: () -> Unit) {
 
 @Composable
 private fun ConversationsSection(
-    header: String,
+    header: String?,
     items: List<UnifiedChatItem>,
     onClickItem: (UnifiedChatItem) -> Unit,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.xl)
     Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-        Text(
-            text = header,
-            style = ZunoType.LabelMedium,
-            color = ZunoColors.TextSecondary,
-            modifier = Modifier.padding(start = ZunoSpace.s4),
-        )
+        if (!header.isNullOrBlank()) {
+            Text(
+                text = header,
+                style = ZunoType.LabelMedium,
+                color = ZunoColors.TextSecondary,
+                modifier = Modifier.padding(start = ZunoSpace.s4),
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -944,12 +873,24 @@ private fun UnifiedConversationRow(
                         }
                     }
                 }
-                Text(
-                    text = formatCompactTime(item.updatedAtMillis),
-                    style = ZunoType.FootnoteRegular,
-                    color = if (item.unread) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
-                    maxLines = 1,
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (item.pinned) {
+                        ZunoIcon(
+                            icon = R.drawable.zuno_ic_t_pin,
+                            size = 12.dp,
+                            tint = ZunoColors.IconSecondary,
+                        )
+                    }
+                    Text(
+                        text = formatCompactTime(item.updatedAtMillis, capitalizeNow = item.pinned),
+                        style = ZunoType.FootnoteRegular,
+                        color = if (item.unread) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
+                        maxLines = 1,
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1019,15 +960,18 @@ private fun AddedPartnersSection(
 private fun OpenSpeakersFullListSection(
     speakers: List<PeerLearner>,
     onView: (PeerLearner) -> Unit,
+    header: String? = null,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.xl)
     Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-        Text(
-            text = stringResource(R.string.chats_open_right_now_header),
-            style = ZunoType.LabelMedium,
-            color = ZunoColors.TextSecondary,
-            modifier = Modifier.padding(start = ZunoSpace.s4),
-        )
+        if (!header.isNullOrBlank()) {
+            Text(
+                text = header,
+                style = ZunoType.LabelMedium,
+                color = ZunoColors.TextSecondary,
+                modifier = Modifier.padding(start = ZunoSpace.s4),
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1108,31 +1052,46 @@ private fun LearnerActionRow(
 }
 
 @Composable
-private fun ChatsEmptySection(
+private fun ChatsEmptyHero(
     @DrawableRes icon: Int,
     title: String,
     description: String,
     ctaLabel: String,
     onCta: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16, Alignment.CenterVertically),
+    ) {
+        ZunoEmptyState(icon = icon, title = title, description = description)
+        ZunoButton(
+            label = ctaLabel,
+            onClick = onCta,
+            variant = ZunoButtonVariant.Primary,
+            size = ZunoButtonSize.Medium,
+        )
+    }
+}
+
+@Composable
+private fun ChatsEmptySection(
+    @DrawableRes icon: Int,
+    title: String,
+    description: String,
     quickStartsTitle: String,
     quickStarts: @Composable () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s16),
-        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
+        modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s48),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s40),
     ) {
-        Column(
+        Box(
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+            contentAlignment = Alignment.Center,
         ) {
             ZunoEmptyState(icon = icon, title = title, description = description)
-            ZunoButton(
-                label = ctaLabel,
-                onClick = onCta,
-                variant = ZunoButtonVariant.Primary,
-                size = ZunoButtonSize.Medium,
-            )
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
@@ -1169,19 +1128,6 @@ private fun QuickStartAiRow(onClick: () -> Unit) {
 }
 
 @Composable
-private fun QuickStartRoleplayRow(languageName: String, level: String, onClick: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
-    QuickStartRow(
-        leading = { ZunoAiTutorAvatar(size = 44.dp) },
-        title = "Order at a café",
-        badge = stringResource(R.string.session_kind_roleplay),
-        trailing = "5 min",
-        subtitle = "$languageName $level · Guided speaking practice",
-        onClick = onClick,
-    )
-}
-
-@Composable
 private fun QuickStartOpenSpeakersRow(speakers: List<PeerLearner>, onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
     val first = speakers.firstOrNull()
@@ -1197,30 +1143,6 @@ private fun QuickStartOpenSpeakersRow(speakers: List<PeerLearner>, onClick: () -
         badge = stringResource(R.string.chats_open_to_speak_badge),
         trailing = "Live",
         subtitle = "${first?.languageName ?: "Spanish"} · Ready for 1:1 practice",
-        onClick = onClick,
-    )
-}
-
-@Composable
-private fun QuickStartTurnOnOpenRow(
-    userInitial: String,
-    languageName: String,
-    openToSpeak: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
-    QuickStartRow(
-        leading = {
-            ZunoOpenToSpeakAvatar(
-                initial = userInitial,
-                size = 44.dp,
-                openToSpeak = true,
-            )
-        },
-        title = stringResource(R.string.chats_turn_on_open_title),
-        badge = null,
-        trailing = if (openToSpeak) "On" else stringResource(R.string.chats_off),
-        subtitle = stringResource(R.string.chats_turn_on_open_sub, languageName),
         onClick = onClick,
     )
 }
@@ -1579,11 +1501,11 @@ fun MemberProfileSheet(
     }
 }
 
-internal fun formatCompactTime(millis: Long): String {
+internal fun formatCompactTime(millis: Long, capitalizeNow: Boolean = false): String {
     val diffMs = (System.currentTimeMillis() - millis).coerceAtLeast(0L)
     val mins = diffMs / 60_000L
     return when {
-        mins < 1 -> "now"
+        mins < 1 -> if (capitalizeNow) "Now" else "now"
         mins < 60 -> "${mins}m"
         mins < 60 * 24 -> "${mins / 60}h"
         else -> "${mins / (60 * 24)}d"
