@@ -106,6 +106,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        Push.setAppForeground(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Push.setAppForeground(false)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

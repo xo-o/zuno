@@ -6,13 +6,13 @@ import { device } from "../db/app-schema.js";
 import { db } from "../db/index.js";
 
 /** Kinds the Android app maps to notification channels and deep links. */
-export type PushType = "reminder" | "schedule" | "progress" | "news";
+export type PushType = "reminder" | "schedule" | "progress" | "news" | "peer_message" | "peer_invite";
 
 export type PushMessage = {
   type: PushType;
   title: string;
   body: string;
-  /** Deep-link extras: conversationId, scheduleId, topicId, roleplayId… */
+  /** Deep-link extras: conversationId, scheduleId, topicId, peerConversationId, partnerId, callId, messageId… */
   data?: Record<string, string | undefined>;
 };
 

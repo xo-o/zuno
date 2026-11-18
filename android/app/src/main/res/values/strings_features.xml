@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Milestones like finishing a topic</string>
     <string name="push_channel_news">News</string>
     <string name="push_channel_news_desc">New topics, roleplays and product news</string>
+    <string name="push_channel_messages">Messages</string>
+    <string name="push_channel_messages_desc">New 1:1 messages from practice partners</string>
+    <string name="push_channel_call_invites">Call invites</string>
+    <string name="push_channel_call_invites_desc">Invites to join a 1:1 voice or video practice call</string>
     <string name="push_action_snooze">Snooze 10 min</string>
+    <string name="push_action_join">Join</string>
+    <string name="push_action_decline">Decline</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Scheduled</string>

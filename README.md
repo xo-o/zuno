@@ -59,8 +59,23 @@ player/
 │   ├── requirements.txt           # Python dependencies
 │   └── .env.example               # Environment variables template
 │
+├── docs/                          # Architecture & feature flow specifications
+│   ├── ONBOARDING_AND_AUTH_FLOW_SPEC.md
+│   ├── PEER_CHAT_AND_NOTIFICATIONS_FLOW.md
+│   └── VOICE_LESSON_FLOW_SPEC.md
+│
 └── docker-compose.yml             # Docker stack: PostgreSQL + Backend + Voice Agent
 ```
+
+---
+
+## Developer Flow Documentation
+
+Detailed end-to-end specifications (state machines, database schemas, API contracts, FCM payloads, and client routing) live in `docs/`:
+
+- **[Onboarding & Passwordless Auth Flow (`01 · Onboarding`)](docs/ONBOARDING_AND_AUTH_FLOW_SPEC.md)** — Splash, magic-link email & cross-device browser verification (`4d`–`4g`), 35-language picker, and progressive Voice/Chat onboarding (`5b`–`5f`).
+- **[Peer Chat, 1:1 Calls & Push Notifications Flow](docs/PEER_CHAT_AND_NOTIFICATIONS_FLOW.md)** — Unified Chats, `Open to speak`, 1:1 messaging & call invites, foreground active-chat notification suppression, notification channels/actions, and deep linking.
+- **[Interactive Voice Lesson Flow (`03g`)](docs/VOICE_LESSON_FLOW_SPEC.md)** — 5-stage voice lesson state machine, LiveKit data channel events, and post-lesson evaluation.
 
 ---
 

@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Osiągnięcia, np. ukończenie tematu</string>
     <string name="push_channel_news">Nowości</string>
     <string name="push_channel_news_desc">Nowe tematy, scenki i nowości w aplikacji</string>
+    <string name="push_channel_messages">Wiadomości</string>
+    <string name="push_channel_messages_desc">Nowe wiadomości 1:1 od partnerów do nauki</string>
+    <string name="push_channel_call_invites">Zaproszenia do rozmów</string>
+    <string name="push_channel_call_invites_desc">Zaproszenia do rozmowy głosowej lub wideo 1:1</string>
     <string name="push_action_snooze">Odłóż o 10 min</string>
+    <string name="push_action_join">Dołącz</string>
+    <string name="push_action_decline">Odrzuć</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Zaplanowane</string>

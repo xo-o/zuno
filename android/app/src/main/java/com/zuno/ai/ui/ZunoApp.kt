@@ -281,6 +281,7 @@ private val BackStackSaver = listSaver<SnapshotStateList<ZunoRoute>, String>(
 
 private const val PREFS = "zuno_prefs"
 private const val KEY_MIC_ASKED = "mic_permission_asked"
+private const val KEY_CHATS_NOTIF_ASKED = "chats_notif_permission_asked"
 
 private const val TERMS_URL = "https://heyzuno.app/terms"
 private const val PRIVACY_URL = "https://heyzuno.app/privacy"
@@ -562,6 +563,30 @@ fun ZunoApp(
         }
     }
 
+    // ── Active peer-chat tracking & foreground push refresh ─────────────────
+    LaunchedEffect(route) {
+        val activePeerId = when (route) {
+            is ZunoRoute.PeerChat -> route.peerConversationId
+            is ZunoRoute.PeerCall -> route.peerConversationId
+            else -> null
+        }
+        Push.setActivePeerConversation(activePeerId)
+        if (activePeerId != null) {
+            Push.clearPeerNotifications(context, activePeerId)
+        }
+    }
+
+    LaunchedEffect(authState) {
+        if (authState !is AuthState.SignedIn) return@LaunchedEffect
+        Push.peerEvents.collect { event ->
+            zunoViewModel.loadChatsOverview(silent = true)
+            val current = backStack.lastOrNull()
+            if (current is ZunoRoute.PeerChat && current.peerConversationId == event.peerConversationId) {
+                zunoViewModel.loadPeerChat(event.peerConversationId, silent = true)
+            }
+        }
+    }
+
     // ── Auth transitions & Onboarding gate ──────────────────────────────────
     LaunchedEffect(authState) {
         val current = backStack.last()
@@ -746,6 +771,36 @@ fun ZunoApp(
         zunoViewModel.startLevelCheck(str(R.string.level_check_first_message)) { openChat(it.id) }
     }
 
+    fun requestChatsNotificationsOnce() {
+        if (!Reminders.canNotify(context) && !prefs.getBoolean(KEY_CHATS_NOTIF_ASKED, false)) {
+            prefs.edit { putBoolean(KEY_CHATS_NOTIF_ASKED, true) }
+            withNotificationPermission {}
+        }
+    }
+
+    fun joinPeerCallRoom(peerConversationId: String, partnerId: String, callId: String) {
+        withMicrophone {
+            runWithVoicePermissions {
+                tts.stop()
+                zunoViewModel.joinPeerCall(callId) { joined ->
+                    if (joined.call.status != "waiting" && joined.call.status != "active") {
+                        zunoViewModel.loadPeerChat(peerConversationId, silent = true)
+                        return@joinPeerCall
+                    }
+                    activePeerCallId = joined.call.id
+                    callStartedAt = System.currentTimeMillis()
+                    callUsedVideo = false
+                    zunoViewModel.loadCoachPrompts(
+                        targetLanguage = language.code,
+                        partnerName = peerChats[peerConversationId]?.partner?.name,
+                    )
+                    viewModel.connectPeerCall(joined.livekit, enableCamera = false)
+                    navigate(ZunoRoute.PeerCall(joined.call.id, peerConversationId, partnerId))
+                }
+            }
+        }
+    }
+
     // ── Deep links from notifications ───────────────────────────────────────
     LaunchedEffect(pendingLink, authState, route) {
         val link = pendingLink ?: return@LaunchedEffect
@@ -778,10 +833,16 @@ fun ZunoApp(
                 backStack.add(ZunoRoute.Topic(link.topicId))
             }
             is DeepLink.PeerChat -> {
+                Push.clearPeerNotifications(context, link.peerConversationId)
+                if (voiceConversationId != null) endVoice()
                 backStack.clear()
                 backStack.add(ZunoRoute.Home)
                 backStack.add(ZunoRoute.Chats())
                 backStack.add(ZunoRoute.PeerChat(link.peerConversationId, link.partnerId))
+                zunoViewModel.loadPeerChat(link.peerConversationId, silent = true)
+                if (link.joinCall && !link.callId.isNullOrBlank()) {
+                    joinPeerCallRoom(link.peerConversationId, link.partnerId, link.callId)
+                }
             }
         }
     }
@@ -1275,7 +1336,17 @@ fun ZunoApp(
                 }
 
                 is ZunoRoute.Chats -> {
-                    LaunchedEffect(Unit) { zunoViewModel.loadChatsOverview() }
+                    LaunchedEffect(Unit) {
+                        zunoViewModel.loadChatsOverview()
+                        requestChatsNotificationsOnce()
+                        while (true) {
+                            kotlinx.coroutines.delay(3_000)
+                            zunoViewModel.loadChatsOverview(silent = true)
+                        }
+                    }
+                    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                        zunoViewModel.loadChatsOverview(silent = true)
+                    }
                     val userInitial = profile?.displayName?.take(1)?.uppercase()?.ifBlank { "Z" } ?: "Z"
                     ChatsScreen(
                         overview = chatsOverview,
@@ -1283,7 +1354,10 @@ fun ZunoApp(
                         userImageUrl = profile?.imageUrl,
                         initialFilter = screen.initialFilter,
                         onRetry = { zunoViewModel.loadChatsOverview() },
-                        onToggleOpenToSpeak = { zunoViewModel.toggleOpenToSpeak(it) },
+                        onToggleOpenToSpeak = { enabled ->
+                            if (enabled) requestChatsNotificationsOnce()
+                            zunoViewModel.toggleOpenToSpeak(enabled)
+                        },
                         onOpenAiConversation = ::openChat,
                         onStartAiChat = { startFreeTalk(null) },
                         onStartAiVoiceCall = { withMicrophone(::startHomeCall) },
@@ -1345,6 +1419,7 @@ fun ZunoApp(
                     val thread = peerChats[screen.peerConversationId]
                     LaunchedEffect(screen.peerConversationId) {
                         zunoViewModel.loadPeerChat(screen.peerConversationId)
+                        requestChatsNotificationsOnce()
                     }
                     PeerChatScreen(
                         thread = thread,
@@ -1370,22 +1445,7 @@ fun ZunoApp(
                             }
                         },
                         onJoinCall = { callId ->
-                            withMicrophone {
-                                runWithVoicePermissions {
-                                    tts.stop()
-                                    zunoViewModel.joinPeerCall(callId) { joined ->
-                                        activePeerCallId = joined.call.id
-                                        callStartedAt = System.currentTimeMillis()
-                                        callUsedVideo = false
-                                        zunoViewModel.loadCoachPrompts(
-                                            targetLanguage = language.code,
-                                            partnerName = thread?.partner?.name,
-                                        )
-                                        viewModel.connectPeerCall(joined.livekit, enableCamera = false)
-                                        navigate(ZunoRoute.PeerCall(joined.call.id, screen.peerConversationId, screen.partnerId))
-                                    }
-                                }
-                            }
+                            joinPeerCallRoom(screen.peerConversationId, screen.partnerId, callId)
                         },
                         onDeclineCall = { callId ->
                             zunoViewModel.declinePeerCall(screen.peerConversationId, callId)

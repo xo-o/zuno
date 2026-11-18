@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Meilensteine wie ein abgeschlossenes Thema</string>
     <string name="push_channel_news">Neuigkeiten</string>
     <string name="push_channel_news_desc">Neue Themen, Rollenspiele und Produktneuigkeiten</string>
+    <string name="push_channel_messages">Nachrichten</string>
+    <string name="push_channel_messages_desc">Neue 1:1-Nachrichten von Lernpartnern</string>
+    <string name="push_channel_call_invites">Gesprächseinladungen</string>
+    <string name="push_channel_call_invites_desc">Einladungen zu einem 1:1-Sprach- oder Videoanruf</string>
     <string name="push_action_snooze">10 Min. später</string>
+    <string name="push_action_join">Beitreten</string>
+    <string name="push_action_decline">Ablehnen</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Geplant</string>

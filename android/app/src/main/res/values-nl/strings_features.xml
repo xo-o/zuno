@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Mijlpalen zoals het afronden van een onderwerp</string>
     <string name="push_channel_news">Nieuws</string>
     <string name="push_channel_news_desc">Nieuwe onderwerpen, rollenspellen en productnieuws</string>
+    <string name="push_channel_messages">Berichten</string>
+    <string name="push_channel_messages_desc">Nieuwe 1:1-berichten van oefenpartners</string>
+    <string name="push_channel_call_invites">Gespreksuitnodigingen</string>
+    <string name="push_channel_call_invites_desc">Uitnodigingen voor een 1:1-spraak- of videogesprek</string>
     <string name="push_action_snooze">10 min uitstellen</string>
+    <string name="push_action_join">Deelnemen</string>
+    <string name="push_action_decline">Weigeren</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Gepland</string>

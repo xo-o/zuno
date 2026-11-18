@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Étapes comme terminer un sujet</string>
     <string name="push_channel_news">Actualités</string>
     <string name="push_channel_news_desc">Nouveaux sujets, jeux de rôle et actualités du produit</string>
+    <string name="push_channel_messages">Messages</string>
+    <string name="push_channel_messages_desc">Nouveaux messages 1:1 de partenaires de pratique</string>
+    <string name="push_channel_call_invites">Invitations d\'appel</string>
+    <string name="push_channel_call_invites_desc">Invitations à rejoindre un appel audio ou vidéo 1:1</string>
     <string name="push_action_snooze">Rappel dans 10 min</string>
+    <string name="push_action_join">Rejoindre</string>
+    <string name="push_action_decline">Refuser</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Programmées</string>

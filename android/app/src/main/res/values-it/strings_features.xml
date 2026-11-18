@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Traguardi come il completamento di un argomento</string>
     <string name="push_channel_news">Novità</string>
     <string name="push_channel_news_desc">Nuovi argomenti, giochi di ruolo e novità sul prodotto</string>
+    <string name="push_channel_messages">Messaggi</string>
+    <string name="push_channel_messages_desc">Nuovi messaggi 1:1 dai compagni di pratica</string>
+    <string name="push_channel_call_invites">Inviti alle chiamate</string>
+    <string name="push_channel_call_invites_desc">Inviti per partecipare a una chiamata vocale o video 1:1</string>
     <string name="push_action_snooze">Posticipa 10 min</string>
+    <string name="push_action_join">Partecipa</string>
+    <string name="push_action_decline">Rifiuta</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Programmate</string>

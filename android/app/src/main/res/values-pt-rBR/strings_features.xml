@@ -90,7 +90,13 @@
     <string name="push_channel_progress_desc">Conquistas como concluir um tópico</string>
     <string name="push_channel_news">Novidades</string>
     <string name="push_channel_news_desc">Novos tópicos, roleplays e novidades do app</string>
+    <string name="push_channel_messages">Mensagens</string>
+    <string name="push_channel_messages_desc">Novas mensagens 1:1 de parceiros de prática</string>
+    <string name="push_channel_call_invites">Convites de chamada</string>
+    <string name="push_channel_call_invites_desc">Convites para participar de uma chamada 1:1 por voz ou vídeo</string>
     <string name="push_action_snooze">Adiar 10 min</string>
+    <string name="push_action_join">Entrar</string>
+    <string name="push_action_decline">Recusar</string>
 
     <!-- Scheduled -->
     <string name="schedule_title">Agendados</string>

@@ -15,7 +15,9 @@ import {
 import { user } from "../db/auth-schema.js";
 import { db } from "../db/index.js";
 import { generateJson } from "./gemini.js";
+import { quote, t } from "./copy.js";
 import { languageName, type LanguageCode } from "./languages.js";
+import { displayLanguage } from "./notifications.js";
 import { getProfile, type LearnerProfile } from "./profile.js";
 import { sendToUser } from "./push.js";
 import { cartesiaVoiceFor } from "./voices.js";
@@ -667,6 +669,10 @@ function serializePeerCall(c: typeof peerCallRoom.$inferSelect) {
   };
 }
 
+function isRecipientMuted(conv: typeof peerConversation.$inferSelect, recipientId: string): boolean {
+  return conv.userAId === recipientId ? conv.mutedByUserA : conv.mutedByUserB;
+}
+
 const peerReplySchema = z.object({
   reply: z.string().min(1).max(320),
 });
@@ -711,14 +717,16 @@ async function triggerSeededReply(
     }
 
     const isPartnerA = conv.userAId === partnerSpec.id;
+    const recipientId = isPartnerA ? conv.userBId : conv.userAId;
+    const replyMsgId = randomUUID();
     await db.insert(peerMessage).values({
-      id: randomUUID(),
+      id: replyMsgId,
       peerConversationId: conv.id,
       senderId: partnerSpec.id,
       kind: "text",
       text: replyText,
     });
-    await db
+    const [updatedConv] = await db
       .update(peerConversation)
       .set({
         lastMessageText: replyText,
@@ -727,7 +735,17 @@ async function triggerSeededReply(
           ? { unreadCountB: sql`${peerConversation.unreadCountB} + 1` }
           : { unreadCountA: sql`${peerConversation.unreadCountA} + 1` }),
       })
-      .where(eq(peerConversation.id, conv.id));
+      .where(eq(peerConversation.id, conv.id))
+      .returning();
+
+    if (!isSeedUser(recipientId) && !(updatedConv && isRecipientMuted(updatedConv, recipientId))) {
+      sendToUser(recipientId, {
+        type: "peer_message",
+        title: partnerSpec.name,
+        body: quote(replyText, 120),
+        data: { peerConversationId: conv.id, partnerId: partnerSpec.id, messageId: replyMsgId },
+      }).catch(() => {});
+    }
   } catch (err) {
     console.warn("Seeded learner reply failed:", err);
   }
@@ -772,13 +790,16 @@ export async function sendPeerMessage(userId: string, peerConversationId: string
   const seed = SEED_BY_ID.get(partnerId);
   if (seed) {
     setTimeout(() => void triggerSeededReply(conv, seed, text), 700);
-  } else {
-    const [sender] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId));
+  } else if (!isRecipientMuted(conv, partnerId)) {
+    const [[sender], recipientProfile] = await Promise.all([
+      db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
+      getProfile(partnerId),
+    ]);
     sendToUser(partnerId, {
-      type: "reminder",
-      title: sender?.name || "New message",
-      body: text,
-      data: { peerConversationId: conv.id, partnerId: userId },
+      type: "peer_message",
+      title: sender?.name?.trim() || t(recipientProfile.nativeLanguage, "peerMessageNewTitle"),
+      body: quote(text, 120),
+      data: { peerConversationId: conv.id, partnerId: userId, messageId: saved.id },
     }).catch(() => {});
   }
 
@@ -952,16 +973,30 @@ export async function startPeerCall(userId: string, peerConversationId: string, 
     })
     .returning();
 
+  const isA = conv.userAId === userId;
   await db
     .update(peerConversation)
-    .set({ lastMessageText: "Voice call invite", lastMessageAt: new Date() })
+    .set({
+      lastMessageText: "Voice call invite",
+      lastMessageAt: new Date(),
+      deletedByUserA: false,
+      deletedByUserB: false,
+      ...(isA
+        ? { unreadCountB: sql`${peerConversation.unreadCountB} + 1` }
+        : { unreadCountA: sql`${peerConversation.unreadCountA} + 1` }),
+    })
     .where(eq(peerConversation.id, conv.id));
 
-  if (!isSeedUser(partnerId)) {
+  if (!isSeedUser(partnerId) && !isRecipientMuted(conv, partnerId)) {
+    const recipientProfile = await getProfile(partnerId);
+    const lang = recipientProfile.nativeLanguage;
     sendToUser(partnerId, {
-      type: "schedule",
-      title: `${shortName(callerName)} invited you to talk`,
-      body: `1:1 ${languageName(conv.language as LanguageCode)} ${callerProfile.level} · Tap to join call room`,
+      type: "peer_invite",
+      title: t(lang, "peerInviteTitle", { name: shortName(callerName) }),
+      body: t(lang, "peerInviteBody", {
+        language: displayLanguage(conv.language, lang),
+        level: callerProfile.level,
+      }),
       data: { peerConversationId: conv.id, partnerId: userId, callId: call.id },
     }).catch(() => {});
   }
@@ -1060,13 +1095,20 @@ export async function pingPeerCall(userId: string, callId: string) {
 
   const partnerId = call.hostUserId === userId ? call.guestUserId : call.hostUserId;
   if (!isSeedUser(partnerId)) {
-    const [sender] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId));
-    sendToUser(partnerId, {
-      type: "schedule",
-      title: `${shortName(sender?.name || "Partner")} is waiting in the call room`,
-      body: "Tap to join the 1:1 practice call",
-      data: { peerConversationId: call.peerConversationId, partnerId: userId, callId: call.id },
-    }).catch(() => {});
+    const [conv, [sender], recipientProfile] = await Promise.all([
+      db.query.peerConversation.findFirst({ where: eq(peerConversation.id, call.peerConversationId) }),
+      db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
+      getProfile(partnerId),
+    ]);
+    if (!conv || !isRecipientMuted(conv, partnerId)) {
+      const lang = recipientProfile.nativeLanguage;
+      sendToUser(partnerId, {
+        type: "peer_invite",
+        title: t(lang, "peerPingTitle", { name: shortName(sender?.name || "Partner") }),
+        body: t(lang, "peerPingBody"),
+        data: { peerConversationId: call.peerConversationId, partnerId: userId, callId: call.id },
+      }).catch(() => {});
+    }
   }
   return { ok: true, status: call.status };
 }

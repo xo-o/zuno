@@ -1169,7 +1169,19 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val thread = api.peerChat(conversationId)
-                _peerChats.update { it + (conversationId to thread) }
+                _peerChats.update { map ->
+                    val inFlight = map[conversationId]?.messages
+                        ?.filter { it.id.startsWith("temp-") }
+                        .orEmpty()
+                    val merged = if (inFlight.isEmpty()) {
+                        thread
+                    } else {
+                        val existingTexts = thread.messages.filter { it.isMine }.map { it.text }.toSet()
+                        val remaining = inFlight.filterNot { it.text in existingTexts }
+                        thread.copy(messages = thread.messages + remaining)
+                    }
+                    map + (conversationId to merged)
+                }
             } catch (e: ApiException) {
                 handleAuth(e)
                 if (!silent && !e.unauthorized) e.message?.let { _messages.tryEmit(it) }
