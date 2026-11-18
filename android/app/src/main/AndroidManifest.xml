@@ -60,15 +60,14 @@
                     android:path="/auth/verify" />
             </intent-filter>
 
-            <!-- Fallback from the web verify page: zuno://auth/verify?token=… -->
+            <!-- Fallback from the web verify page: zuno://auth/verify?token=… or zuno://auth -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="zuno"
-                    android:host="auth"
-                    android:path="/verify" />
+                    android:host="auth" />
             </intent-filter>
         </activity>
 
@@ -94,6 +93,9 @@
         </service>
         <receiver
             android:name=".push.ScheduleActionReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".push.PeerCallActionReceiver"
             android:exported="false" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

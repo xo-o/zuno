@@ -303,11 +303,8 @@ class OnboardingScreensUiTest {
 
             // 5b · Step 1 (Voice) — Name
             tapText("Continue")
-            waitForText("Onboarding · Step 1 of 3")
-            waitForText("Your name")
             waitForText("Sofía · Your Spanish tutor")
-            waitForText("“¡Hola! I’m Sofía. What should I call you?”")
-            waitForText("Listening")
+            waitForText("Hi, I’m Sofía. What should I call you?")
             waitForText("Type instead")
             saveScreenshot(scenario, "05b_voice_name")
 
@@ -335,16 +332,15 @@ class OnboardingScreensUiTest {
 
             // 5c · Step 2 (Voice) — Level
             tapText("Speak instead")
-            waitForText("Onboarding · Step 2 of 3")
-            waitForText("Spanish level")
             waitForText("Sofía · Spanish level")
+            waitForText("Nice to meet you, Noah. How much Spanish do you know?")
+            waitForText("“Call me Noah.”")
             saveScreenshot(scenario, "05c_voice_level")
 
             // Tap Intermediate chip in Voice mode -> advances to 5d Voice
             tapText("Intermediate")
-            waitForText("Onboarding · Step 3 of 3")
-            waitForText("Your goals")
             waitForText("Sofía · Learning goals")
+            waitForText("Why are you learning Spanish, Noah?")
             waitForText("Work")
             waitForText("Travel")
             waitForText("Interviews")

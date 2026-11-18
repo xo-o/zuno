@@ -313,7 +313,16 @@ const noStore = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" 
 app.get("/auth/verify", (c) => {
   const token = c.req.query("token");
   if (!token) {
-    return c.html(renderVerifyResultPage("Link not valid", "This sign-in link is invalid or incomplete. Request a new one from the app."), 400, noStore);
+    return c.html(
+      renderVerifyResultPage("Link not valid", "This sign-in link is invalid or incomplete. Request a new one from the app.", {
+        variant: "error",
+        badge: "Invalid",
+        actionLabel: "Back to Zuno app",
+        actionUrl: "zuno://auth",
+      }),
+      400,
+      noStore,
+    );
   }
   const flowId = c.req.query("flowId");
   const flow = flowId ? getFlow(flowId) : undefined;
@@ -331,7 +340,16 @@ app.post("/auth/verify", async (c) => {
   const flowId = typeof form.flowId === "string" ? form.flowId : "";
   const flow = flowId ? getFlow(flowId) : undefined;
   if (!token || flow?.status !== "pending") {
-    return c.html(renderVerifyResultPage("Request expired", "This sign-in request is no longer waiting. Request a new link from the app."), 400, noStore);
+    return c.html(
+      renderVerifyResultPage("This link has expired", "This sign-in request is no longer waiting. Request a new link from the Zuno app.", {
+        variant: "error",
+        badge: "Expired",
+        actionLabel: "Back to Zuno app",
+        actionUrl: "zuno://auth",
+      }),
+      400,
+      noStore,
+    );
   }
 
   let result: Awaited<ReturnType<typeof auth.api.magicLinkVerify>> | undefined;
@@ -342,16 +360,42 @@ app.post("/auth/verify", async (c) => {
   }
   const session = result as { token?: string; user?: { email?: string } } | undefined;
   if (!session?.token) {
-    return c.html(renderVerifyResultPage("Link expired", "This sign-in link has expired or was already used. Request a new one from the app."), 400, noStore);
+    return c.html(
+      renderVerifyResultPage("This link has expired", "Sign-in links work once and expire after 15 minutes. Request a new one from the Zuno app.", {
+        variant: "error",
+        badge: "Expired",
+        actionLabel: "Back to Zuno app",
+        actionUrl: "zuno://auth",
+      }),
+      400,
+      noStore,
+    );
   }
   if (session.user?.email?.toLowerCase() !== flow.email.toLowerCase()) {
-    return c.html(renderVerifyResultPage("Link not valid", "This link doesn't match the sign-in request. Request a new one from the app."), 400, noStore);
+    return c.html(
+      renderVerifyResultPage("Link not valid", "This link doesn't match the sign-in request. Request a new one from the Zuno app.", {
+        variant: "error",
+        badge: "Invalid",
+        actionLabel: "Back to Zuno app",
+        actionUrl: "zuno://auth",
+      }),
+      400,
+      noStore,
+    );
   }
 
   // The bearer plugin requires signed tokens, the same form it returns in `set-auth-token`.
   const { secret } = await auth.$context;
   completeFlow(flowId, `${session.token}.${await makeSignature(session.token, secret)}`, session.user);
-  return c.html(renderVerifyResultPage("You're signed in", "Zuno on your phone is signing in now."), 200, noStore);
+  return c.html(
+    renderVerifyResultPage("You’re signed in", "Zuno on your phone is signing in now. You can safely close this window.", {
+      variant: "success",
+      badge: "Verified",
+      email: flow.email,
+    }),
+    200,
+    noStore,
+  );
 });
 
 // 6. Health check & Root

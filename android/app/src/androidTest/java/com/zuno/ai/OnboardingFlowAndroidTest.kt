@@ -74,9 +74,8 @@ class OnboardingFlowAndroidTest {
             composeRule.onNodeWithText("Not now").performClick()
             composeRule.mainClock.advanceTimeBy(400)
         } else {
-            advanceUntilText("Onboarding · Step 1 of 3", timeoutMs = 10_000L)
-            composeRule.onNodeWithText("Your name").assertIsDisplayed()
-            composeRule.onNodeWithText("Sofía · Your Spanish tutor").assertIsDisplayed()
+            advanceUntilText("Sofía · Your Spanish tutor", timeoutMs = 10_000L)
+            composeRule.onNodeWithText("Hi, I’m Sofía. What should I call you?").assertIsDisplayed()
             saveScreenshot("02_5b_voice_name")
             composeRule.onNodeWithText("Type instead").performClick()
             composeRule.mainClock.advanceTimeBy(400)

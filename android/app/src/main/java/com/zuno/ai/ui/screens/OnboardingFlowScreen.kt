@@ -909,9 +909,9 @@ private fun ConversationalOnboardingStep(
             when (mode) {
                 OnboardingInputMode.Voice -> VoiceStepBody(
                     step = step,
+                    history = state.chatHistory,
                     appLanguage = appLanguage,
                     targetLanguageName = targetLanguageName,
-                    prompt = prompt,
                     liveTranscript = liveTranscript,
                     orbState = orbState,
                     submitting = state.submittingTurn,
@@ -954,9 +954,9 @@ private fun ConversationalOnboardingStep(
 @Composable
 private fun VoiceStepBody(
     step: OnboardingStep,
+    history: List<OnboardingChatItem>,
     appLanguage: AppLanguage,
     targetLanguageName: String,
-    prompt: String,
     liveTranscript: String,
     orbState: VoiceOrbState,
     submitting: Boolean,
@@ -968,268 +968,178 @@ private fun VoiceStepBody(
     onTapGoalChip: (label: String) -> Unit,
     onTypeInstead: () -> Unit,
 ) {
-    val stepIndex = when (step) {
-        OnboardingStep.Name -> 1
-        OnboardingStep.Level -> 2
-        OnboardingStep.Goals -> 3
-        else -> 1
-    }
-    val stepLabel = when (step) {
-        OnboardingStep.Name -> stringResource(R.string.onboarding_hud_step_name)
-        OnboardingStep.Level -> stringResource(R.string.onboarding_hud_step_level, targetLanguageName)
-        OnboardingStep.Goals -> stringResource(R.string.onboarding_hud_step_goals)
-        else -> ""
-    }
-    val tutorEyebrow = when (step) {
-        OnboardingStep.Name -> stringResource(R.string.onboarding_tutor_eyebrow_name, targetLanguageName)
-        OnboardingStep.Level -> stringResource(R.string.onboarding_tutor_eyebrow_level, targetLanguageName)
-        OnboardingStep.Goals -> stringResource(R.string.onboarding_tutor_eyebrow_goals)
-        else -> stringResource(R.string.onboarding_sender_sofia)
-    }
     val youHeader = if (step == OnboardingStep.Name) {
         stringResource(R.string.onboarding_you_speaking_in, appLanguage.nativeLabel)
     } else {
         stringResource(R.string.onboarding_you_speaking)
     }
-    val badgeLabel = when (orbState) {
-        VoiceOrbState.Listening -> stringResource(R.string.onboarding_badge_listening)
-        VoiceOrbState.Speaking -> stringResource(R.string.onboarding_badge_speaking)
-        VoiceOrbState.Thinking -> stringResource(R.string.onboarding_badge_thinking)
-        VoiceOrbState.Idle -> stringResource(R.string.onboarding_badge_idle)
-    }
-    val badgeDotColor = when (orbState) {
-        VoiceOrbState.Listening -> ZunoColors.StatusListening
-        VoiceOrbState.Speaking -> ZunoColors.TextPrimary
-        VoiceOrbState.Thinking -> ZunoColors.TextSecondary
-        VoiceOrbState.Idle -> ZunoColors.IconTertiary
-    }
-    val placeholderText = when (step) {
-        OnboardingStep.Name -> stringResource(R.string.onboarding_voice_placeholder_name)
-        OnboardingStep.Level -> stringResource(R.string.onboarding_voice_placeholder_level)
-        OnboardingStep.Goals -> stringResource(R.string.onboarding_voice_placeholder_goals)
-        else -> ""
-    }
-    val quotedPrompt = remember(prompt) {
-        val trimmed = prompt.trim()
-        if (trimmed.startsWith("“") && trimmed.endsWith("”")) trimmed else "“$trimmed”"
-    }
+    val youNameLabel = stringResource(R.string.onboarding_hud_step_name)
+    val youLevelLabel = stringResource(R.string.onboarding_hud_step_level, targetLanguageName)
+    val tutorNameLabel = stringResource(R.string.onboarding_tutor_eyebrow_name, targetLanguageName)
+    val tutorLevelLabel = stringResource(R.string.onboarding_tutor_eyebrow_level, targetLanguageName)
+    val tutorGoalsLabel = stringResource(R.string.onboarding_tutor_eyebrow_goals)
+    val nameHelper = stringResource(R.string.onboarding_name_helper)
     val canAdvance = !submitting && liveTranscript.isNotBlank()
     val isMicActive = orbState == VoiceOrbState.Listening || orbState == VoiceOrbState.Speaking
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val portraitHeight = (maxHeight * 0.49f).coerceIn(220.dp, 380.dp)
-
-        // Portrait Stage Card (`2805:14014` / `2805:14015` / `2805:14016`)
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(portraitHeight),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.sofia_tutor_avatar),
-                contentDescription = stringResource(R.string.onboarding_sender_sofia),
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.TopCenter,
-                modifier = Modifier.fillMaxSize(),
-            )
-            // Top Scrim
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            0f to ZunoColors.BgCanvas,
-                            0.45f to ZunoColors.BgCanvas.copy(alpha = 0.55f),
-                            1f to Color.Transparent,
-                        ),
-                    ),
-            )
-            // Bottom Scrim
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(140.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.45f to ZunoColors.BgCanvas.copy(alpha = 0.62f),
-                            0.85f to ZunoColors.BgCanvas.copy(alpha = 0.96f),
-                            1f to ZunoColors.BgCanvas,
-                        ),
-                    ),
-            )
+    val listState = rememberLazyListState()
+    val totalItems = history.size + if (liveTranscript.isNotBlank()) 1 else 0
+    LaunchedEffect(totalItems, step) {
+        if (totalItems > 0) {
+            delay(60)
+            listState.animateScrollToItem(totalItems - 1)
         }
+    }
 
-        // Tactile HUD · S5 + Call controls anchored at bottom
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-        ) {
-            Column(
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val portraitHeight = (maxHeight * 0.36f).coerceIn(200.dp, 296.dp)
+
+        Column(Modifier.fillMaxSize()) {
+            // 1. Portrait Stage Card (`296dp` max, light 52dp bottom feather scrim)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = ZunoSpace.s20),
+                    .height(portraitHeight)
+                    .clip(RoundedCornerShape(0.dp)),
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.sofia_tutor_avatar),
+                    contentDescription = stringResource(R.string.onboarding_sender_sofia),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(28.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to ZunoColors.BgCanvas.copy(alpha = 0.70f),
+                                0.5f to ZunoColors.BgCanvas.copy(alpha = 0.25f),
+                                1f to Color.Transparent,
+                            ),
+                        ),
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.45f to ZunoColors.BgCanvas.copy(alpha = 0.22f),
+                                0.80f to ZunoColors.BgCanvas.copy(alpha = 0.68f),
+                                1f to ZunoColors.BgCanvas,
+                            ),
+                        ),
+                )
+            }
+
+            // 2. Top-aligned scrollable Conversation (bubbles appear progressively as user speaks)
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(
+                    start = ZunoSpace.s20,
+                    end = ZunoSpace.s20,
+                    top = ZunoSpace.s10,
+                    bottom = ZunoSpace.s8,
+                ),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             ) {
-                // HUD Status Pill
-                val pillShape = RoundedCornerShape(ZunoRadius.md)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(pillShape)
-                        .background(ZunoColors.SurfaceSubtle)
-                        .border(1.dp, ZunoColors.BorderSubtle, pillShape)
-                        .padding(horizontal = ZunoSpace.s14, vertical = 7.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_hud_step, stepIndex),
-                        style = ZunoType.FootnoteStrong,
-                        color = ZunoColors.TextSecondary,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = stepLabel,
-                        style = ZunoType.FootnoteStrong,
-                        color = ZunoColors.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                // Tutor Question Card
-                val questionShape = RoundedCornerShape(ZunoRadius.xxxl)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(questionShape)
-                        .background(ZunoColors.SurfaceDefault)
-                        .border(1.dp, ZunoColors.BorderDefault, questionShape)
-                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-                ) {
-                    Text(
-                        text = tutorEyebrow,
-                        style = ZunoType.FootnoteStrong,
-                        color = ZunoColors.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = quotedPrompt,
-                        style = ZunoType.Headline,
-                        color = ZunoColors.TextPrimary,
-                    )
-                    when (step) {
-                        OnboardingStep.Name -> {
-                            Text(
-                                text = stringResource(R.string.onboarding_name_helper),
-                                style = ZunoType.BodySmall,
-                                color = ZunoColors.TextSecondary,
+                itemsIndexed(history, key = { _, item -> item.id }) { index, item ->
+                    when (item.role) {
+                        OnboardingChatRole.Assistant -> {
+                            val sender = when (item.step) {
+                                OnboardingStep.Name -> tutorNameLabel
+                                OnboardingStep.Level -> tutorLevelLabel
+                                OnboardingStep.Goals -> tutorGoalsLabel
+                                else -> stringResource(R.string.onboarding_sender_sofia)
+                            }
+                            val helperTranslation = if (item.step == OnboardingStep.Name && index == 0) {
+                                nameHelper
+                            } else {
+                                null
+                            }
+                            ZunoAssistantBubble(
+                                message = item.text,
+                                translation = helperTranslation,
+                                senderLabel = sender,
                             )
                         }
-                        OnboardingStep.Level -> {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                levelChips.forEach { (label, key) ->
-                                    ZunoChip(
-                                        label = label,
-                                        onClick = { if (!submitting) onSelectLevelChip(label, key) },
-                                    )
-                                }
+                        OnboardingChatRole.User -> {
+                            val userSender = when (item.step) {
+                                OnboardingStep.Name -> "You · $youNameLabel"
+                                OnboardingStep.Level -> "You · $youLevelLabel"
+                                else -> youHeader
                             }
+                            val trimmed = item.text.trim()
+                            val quoted = if (trimmed.startsWith("“") && trimmed.endsWith("”")) trimmed else "“$trimmed”"
+                            ZunoUserBubble(
+                                message = quoted,
+                                senderLabel = userSender,
+                            )
                         }
-                        OnboardingStep.Goals -> {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                goalChips.forEach { chip ->
-                                    ZunoChip(
-                                        label = chip,
-                                        onClick = { if (!submitting) onTapGoalChip(chip) },
-                                    )
-                                }
-                            }
-                        }
-                        else -> Unit
                     }
                 }
 
-                // You & Feedback · HUD
-                val hudShape = RoundedCornerShape(ZunoRadius.xl)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(hudShape)
-                        .background(ZunoColors.SurfaceSubtle)
-                        .border(1.dp, ZunoColors.BorderDefault, hudShape)
-                        .clickable(role = Role.Button, onClick = onMicTap)
-                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = youHeader,
-                            style = ZunoType.FootnoteStrong,
-                            color = ZunoColors.TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false).padding(end = ZunoSpace.s8),
+                if (liveTranscript.isNotBlank()) {
+                    item(key = "live_transcript") {
+                        ZunoUserBubble(
+                            message = "“${liveTranscript.trim()}”",
+                            senderLabel = youHeader,
                         )
-                        Row(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(ZunoColors.SurfaceStrong)
-                                .padding(horizontal = ZunoSpace.s8, vertical = 3.dp),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(badgeDotColor),
-                            )
-                            Text(
-                                text = badgeLabel,
-                                style = ZunoType.Micro,
-                                color = ZunoColors.TextPrimary,
-                                maxLines = 1,
-                            )
-                        }
                     }
-                    Text(
-                        text = if (liveTranscript.isNotBlank()) "“${liveTranscript.trim()}”" else placeholderText,
-                        style = ZunoType.BodyMedium,
-                        color = if (liveTranscript.isNotBlank()) ZunoColors.TextPrimary else ZunoColors.TextPlaceholder,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            // 3. Optional quick-tap chips for Level & Goals
+            when (step) {
+                OnboardingStep.Level -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        levelChips.forEach { (label, key) ->
+                            ZunoChip(
+                                label = label,
+                                onClick = { if (!submitting) onSelectLevelChip(label, key) },
+                            )
+                        }
+                    }
+                }
+                OnboardingStep.Goals -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        goalChips.forEach { chip ->
+                            ZunoChip(
+                                label = chip,
+                                onClick = { if (!submitting) onTapGoalChip(chip) },
+                            )
+                        }
+                    }
+                }
+                else -> Unit
+            }
 
-            // Call controls (`2749:13290` / `2749:13363` / `2749:13434`)
+            Spacer(Modifier.height(ZunoSpace.s8))
+
+            // 4. Call controls (`Mic`, `Type instead`, `Next`)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

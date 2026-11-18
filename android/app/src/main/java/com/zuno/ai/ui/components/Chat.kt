@@ -49,6 +49,7 @@ fun ZunoUserBubble(
     message: String,
     modifier: Modifier = Modifier,
     showSender: Boolean = true,
+    senderLabel: String = "You",
 ) {
     val shape = RoundedCornerShape(
         topStart = ZunoRadius.xl,
@@ -62,7 +63,7 @@ fun ZunoUserBubble(
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
     ) {
         if (showSender) {
-            Text("You", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
+            Text(senderLabel, style = ZunoType.Micro, color = ZunoColors.TextTertiary)
         }
         Box(
             modifier = Modifier
