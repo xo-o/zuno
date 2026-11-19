@@ -29,6 +29,14 @@ export function topicProgressLabel(lessons: LessonRow[]) {
   return status === "completed" ? "Completed" : `${completed} of ${total} lessons`;
 }
 
+export function topicShareUrlOf(row: Pick<TopicRow, "visibility" | "shareToken">) {
+  return row.visibility === "public" && row.shareToken ? `${publicBaseUrl()}/t/${row.shareToken}` : null;
+}
+
+export function roleplayShareUrlOf(row: Pick<typeof roleplay.$inferSelect, "visibility" | "shareToken">) {
+  return row.visibility === "public" && row.shareToken ? `${publicBaseUrl()}/r/${row.shareToken}` : null;
+}
+
 export function serializeTopicSummary(row: TopicRow, lessons: LessonRow[]) {
   const progress = progressOf(lessons);
   return {
@@ -36,6 +44,15 @@ export function serializeTopicSummary(row: TopicRow, lessons: LessonRow[]) {
     title: row.title,
     translation: row.translation,
     language: row.language,
+    category: row.category ?? "daily_life",
+    visibility: row.visibility ?? "private",
+    sourceKind: row.sourceKind ?? "user",
+    shareUrl: topicShareUrlOf(row),
+    sourceTopicId: row.sourceTopicId ?? null,
+    authorHandle: row.authorHandle ?? null,
+    learnersCount: row.learnersCount ?? 0,
+    pinned: row.pinnedAt !== null && row.pinnedAt !== undefined,
+    pinnedAt: row.pinnedAt?.toISOString() ?? null,
     totalLessons: progress.total,
     completedLessons: progress.completed,
     estimatedMinutesLeft: progress.estimatedMinutesLeft,
@@ -97,6 +114,15 @@ export function serializeRoleplay(row: typeof roleplay.$inferSelect) {
     aiRole: row.aiRole,
     setting: row.setting,
     language: row.language,
+    category: row.category ?? "social",
+    visibility: row.visibility ?? "private",
+    sourceKind: row.sourceKind ?? "user",
+    shareUrl: roleplayShareUrlOf(row),
+    sourceRoleplayId: row.sourceRoleplayId ?? null,
+    authorHandle: row.authorHandle ?? null,
+    practicedCount: row.practicedCount ?? 0,
+    pinned: row.pinnedAt !== null && row.pinnedAt !== undefined,
+    pinnedAt: row.pinnedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
   };
 }

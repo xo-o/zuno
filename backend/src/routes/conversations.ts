@@ -138,7 +138,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
           title: row.title,
           meta: `Topic · ${topicProgressLabel(row.lessons)}`,
           at: row.updatedAt,
-          pinnedAt: latestPin(pins),
+          pinnedAt: latestPin([...pins, { pinnedAt: row.pinnedAt }]),
         };
       }),
       ...roleplays.map((row) => {
@@ -150,7 +150,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
           title: row.title,
           meta: "Roleplay",
           at: row.updatedAt,
-          pinnedAt: latestPin(pins),
+          pinnedAt: latestPin([...pins, { pinnedAt: row.pinnedAt }]),
         };
       }),
     ];

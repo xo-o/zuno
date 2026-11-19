@@ -425,12 +425,14 @@ fun NewScheduleScreen(
     onRetry: () -> Unit,
     onSave: (ScheduleDraft) -> Unit,
     modifier: Modifier = Modifier,
+    prefillTargetId: String? = null,
+    prefillIsRoleplay: Boolean = false,
 ) {
     val context = LocalContext.current
-    var step by rememberSaveable { mutableIntStateOf(if (editing != null) 2 else 1) }
-    var roleplayTab by rememberSaveable { mutableStateOf(editing?.isRoleplay ?: false) }
-    var targetId by rememberSaveable { mutableStateOf(editing?.let { it.roleplayId ?: it.topicId }) }
-    var targetIsRoleplay by rememberSaveable { mutableStateOf(editing?.isRoleplay ?: false) }
+    var step by rememberSaveable { mutableIntStateOf(if (editing != null || prefillTargetId != null) 2 else 1) }
+    var roleplayTab by rememberSaveable { mutableStateOf(editing?.isRoleplay ?: prefillIsRoleplay) }
+    var targetId by rememberSaveable { mutableStateOf(editing?.let { it.roleplayId ?: it.topicId } ?: prefillTargetId) }
+    var targetIsRoleplay by rememberSaveable { mutableStateOf(editing?.isRoleplay ?: prefillIsRoleplay) }
 
     var repeat by rememberSaveable { mutableStateOf(editing?.repeat ?: ScheduleRepeat.Daily) }
     var timeOfDay by rememberSaveable { mutableStateOf(editing?.timeOfDay ?: "09:00") }

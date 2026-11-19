@@ -11,14 +11,21 @@ import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.AttachmentFiles
 import com.zuno.ai.data.AttachmentKind
 import com.zuno.ai.data.AttachmentStatus
+import com.zuno.ai.data.BuilderTurnMessage
 import com.zuno.ai.data.ChatsOverview
 import com.zuno.ai.data.CoachPrompts
+import com.zuno.ai.data.DiscoverRoleplay
+import com.zuno.ai.data.DiscoverRoleplaysResult
+import com.zuno.ai.data.DiscoverTopic
+import com.zuno.ai.data.DiscoverTopicsResult
 import com.zuno.ai.data.DraftStore
 import com.zuno.ai.data.JoinPeerCallResult
 import com.zuno.ai.data.MaterialPart
 import com.zuno.ai.data.PeerConversationThread
 import com.zuno.ai.data.PeerMessage
 import com.zuno.ai.data.PreparedFile
+import com.zuno.ai.data.RoleplayDraft
+import com.zuno.ai.data.RoleplayShareResult
 import com.zuno.ai.data.SavedDraftAttachment
 import com.zuno.ai.data.StartPeerCallResult
 import com.zuno.ai.data.Conversation
@@ -41,6 +48,8 @@ import com.zuno.ai.data.Schedule
 import com.zuno.ai.data.ScheduleDraft
 import com.zuno.ai.data.ScheduleTargets
 import com.zuno.ai.data.TopicDetail
+import com.zuno.ai.data.TopicDraft
+import com.zuno.ai.data.TopicShareResult
 import com.zuno.ai.data.TopicSummary
 import com.zuno.ai.data.ZunoApi
 import kotlinx.coroutines.Job
@@ -105,6 +114,25 @@ const val HOME_DRAFT_KEY = "home"
 /** Draft key for learning material on the New topic screen. */
 const val TOPIC_DRAFT_KEY = "topic-new"
 
+/** Draft key for context attachments on the New roleplay screen. */
+const val ROLEPLAY_DRAFT_KEY = "roleplay-new"
+
+data class TopicBuilderState(
+    val turns: List<BuilderTurnMessage> = emptyList(),
+    val draft: TopicDraft? = null,
+    val sending: Boolean = false,
+    val attachmentIds: List<String> = emptyList(),
+    val error: String? = null,
+)
+
+data class RoleplayBuilderState(
+    val turns: List<BuilderTurnMessage> = emptyList(),
+    val draft: RoleplayDraft? = null,
+    val sending: Boolean = false,
+    val attachmentIds: List<String> = emptyList(),
+    val error: String? = null,
+)
+
 /** "Found in your material" for the New topic screen. [parts] is null until analysed. */
 data class MaterialAnalysis(
     val attachmentIds: List<String> = emptyList(),
@@ -139,6 +167,27 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _roleplays = MutableStateFlow(Loadable<List<Roleplay>>())
     val roleplays: StateFlow<Loadable<List<Roleplay>>> = _roleplays.asStateFlow()
+
+    private val _roleplayDetails = MutableStateFlow<Map<String, Roleplay>>(emptyMap())
+    val roleplayDetails: StateFlow<Map<String, Roleplay>> = _roleplayDetails.asStateFlow()
+
+    private val _discoverTopics = MutableStateFlow(Loadable<DiscoverTopicsResult>())
+    val discoverTopics: StateFlow<Loadable<DiscoverTopicsResult>> = _discoverTopics.asStateFlow()
+
+    private val _previewTopics = MutableStateFlow<Map<String, Loadable<DiscoverTopic>>>(emptyMap())
+    val previewTopics: StateFlow<Map<String, Loadable<DiscoverTopic>>> = _previewTopics.asStateFlow()
+
+    private val _discoverRoleplays = MutableStateFlow(Loadable<DiscoverRoleplaysResult>())
+    val discoverRoleplays: StateFlow<Loadable<DiscoverRoleplaysResult>> = _discoverRoleplays.asStateFlow()
+
+    private val _previewRoleplays = MutableStateFlow<Map<String, Loadable<DiscoverRoleplay>>>(emptyMap())
+    val previewRoleplays: StateFlow<Map<String, Loadable<DiscoverRoleplay>>> = _previewRoleplays.asStateFlow()
+
+    private val _topicBuilder = MutableStateFlow(TopicBuilderState())
+    val topicBuilder: StateFlow<TopicBuilderState> = _topicBuilder.asStateFlow()
+
+    private val _roleplayBuilder = MutableStateFlow(RoleplayBuilderState())
+    val roleplayBuilder: StateFlow<RoleplayBuilderState> = _roleplayBuilder.asStateFlow()
 
     private val _chats = MutableStateFlow<Map<String, ChatState>>(emptyMap())
     val chats: StateFlow<Map<String, ChatState>> = _chats.asStateFlow()
@@ -189,7 +238,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             var saved = emptyMap<String, List<SavedDraftAttachment>>()
             _drafts.collect { drafts ->
                 val next = drafts
-                    .filterKeys { it != TOPIC_DRAFT_KEY }
+                    .filterKeys { it != TOPIC_DRAFT_KEY && it != ROLEPLAY_DRAFT_KEY }
                     .mapValues { (_, list) -> list.mapNotNull { it.toSaved() } }
                 (saved.keys - next.keys).forEach { draftStore.saveAttachments(it, emptyList()) }
                 next.forEach { (key, list) -> if (saved[key] != list) draftStore.saveAttachments(key, list) }
@@ -428,6 +477,13 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _topicDetails.value = emptyMap()
         _lessonEvaluations.value = emptyMap()
         _roleplays.value = Loadable()
+        _roleplayDetails.value = emptyMap()
+        _discoverTopics.value = Loadable()
+        _previewTopics.value = emptyMap()
+        _discoverRoleplays.value = Loadable()
+        _previewRoleplays.value = emptyMap()
+        _topicBuilder.value = TopicBuilderState()
+        _roleplayBuilder.value = RoleplayBuilderState()
         _chats.value = emptyMap()
         _chatsOverview.value = Loadable()
         _peerChats.value = emptyMap()
@@ -519,6 +575,8 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _typingHint.value = null
         _topics.value = Loadable()
         _roleplays.value = Loadable()
+        _discoverTopics.value = Loadable()
+        _discoverRoleplays.value = Loadable()
         _chatsOverview.value = Loadable()
         _peerChats.value = emptyMap()
         _schedules.value = Loadable()
@@ -605,6 +663,153 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _drafts.value[TOPIC_DRAFT_KEY].orEmpty().forEach { removeAttachment(TOPIC_DRAFT_KEY, it.localId) }
         analysisJob?.cancel()
         _materialAnalysis.value = MaterialAnalysis()
+        _topicBuilder.value = TopicBuilderState()
+    }
+
+    /** Resets the conversational Topic Builder (`10a`), optionally seeding an initial query. */
+    fun resetTopicBuilder(initialQuery: String = "") {
+        _topicBuilder.value = TopicBuilderState()
+        if (initialQuery.isNotBlank()) {
+            sendTopicBuilderTurn(initialQuery.trim())
+        }
+    }
+
+    /** Sends one learner turn + any ready mid-chat attachments to Sofía (`10a` → `10b`). */
+    fun sendTopicBuilderTurn(text: String) {
+        val currentAttachments = _drafts.value[TOPIC_DRAFT_KEY].orEmpty()
+        if (currentAttachments.any { it.state != DraftUploadState.Ready }) {
+            _messages.tryEmit("Wait for your files to finish uploading")
+            return
+        }
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() && currentAttachments.isEmpty()) return
+
+        val effectiveText = trimmed.ifEmpty {
+            "Use my attached file: ${currentAttachments.joinToString { it.name }}"
+        }
+        val attachmentNames = currentAttachments.map { it.name.ifBlank { "Attachment" } }
+        val newServerIds = currentAttachments.mapNotNull { it.serverId }
+        val allIds = (_topicBuilder.value.attachmentIds + newServerIds).distinct()
+
+        // Consume queued composer attachments into the builder session
+        _drafts.update { it - TOPIC_DRAFT_KEY }
+        currentAttachments.forEach { it.file?.file?.delete() }
+
+        val userMsg = BuilderTurnMessage(
+            id = java.util.UUID.randomUUID().toString(),
+            isUser = true,
+            text = effectiveText,
+            attachmentNames = attachmentNames,
+        )
+        val nextTurns = _topicBuilder.value.turns + userMsg
+        _topicBuilder.update {
+            it.copy(turns = nextTurns, attachmentIds = allIds, sending = true, error = null)
+        }
+
+        viewModelScope.launch {
+            try {
+                val wireTurns = nextTurns.map { (if (it.isUser) "user" else "assistant") to it.text }
+                val res = api.topicBuilderTurn(wireTurns, allIds)
+                val assistantMsg = BuilderTurnMessage(
+                    id = java.util.UUID.randomUUID().toString(),
+                    isUser = false,
+                    text = res.reply,
+                    contextNote = res.contextNote,
+                )
+                _topicBuilder.update { state ->
+                    state.copy(
+                        turns = state.turns + assistantMsg,
+                        draft = res.draft ?: state.draft,
+                        sending = false,
+                        error = null,
+                    )
+                }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _topicBuilder.update { it.copy(sending = false, error = e.message) }
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Accepts the inline `DRAFT TOPIC` card (`10b`) and creates the topic for `10c · Topic settings`. */
+    fun acceptTopicDraft(draft: TopicDraft, onCreated: (TopicDetail) -> Unit) = runBusy {
+        val ids = _topicBuilder.value.attachmentIds
+        val created = api.createTopic(
+            prompt = draft.prompt.ifBlank { draft.title },
+            attachmentIds = ids,
+            draft = draft,
+        )
+        _topicBuilder.value = TopicBuilderState()
+        cacheTopic(created)
+        _topics.update { state ->
+            val rest = state.items.orEmpty().filterNot { it.id == created.summary.id }
+            state.copy(items = listOf(created.summary) + rest)
+        }
+        refreshRecent()
+        onCreated(created)
+    }
+
+    fun loadDiscoverTopics(category: String = "all", query: String = "") {
+        _discoverTopics.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _discoverTopics.value = Loadable(api.discoverTopics(category, query))
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _discoverTopics.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun loadDiscoverTopic(idOrToken: String) {
+        _previewTopics.update { it + (idOrToken to (it[idOrToken] ?: Loadable()).copy(loading = true, error = null)) }
+        viewModelScope.launch {
+            try {
+                val item = api.discoverTopic(idOrToken)
+                _previewTopics.update { it + (idOrToken to Loadable(item)) }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _previewTopics.update {
+                    it + (idOrToken to (it[idOrToken] ?: Loadable()).copy(loading = false, error = e.message))
+                }
+            }
+        }
+    }
+
+    fun saveDiscoverTopic(id: String, onSaved: (TopicDetail) -> Unit) = runBusy {
+        val saved = api.saveTopic(id)
+        cacheTopic(saved)
+        _topics.update { state ->
+            val rest = state.items.orEmpty().filterNot { it.id == saved.summary.id }
+            state.copy(items = listOf(saved.summary) + rest)
+        }
+        _previewTopics.update { map ->
+            map.mapValues { (_, v) ->
+                if (v.items?.id == id) Loadable(v.items.copy(alreadySaved = true, savedTopicId = saved.summary.id)) else v
+            }
+        }
+        refreshRecent()
+        onSaved(saved)
+    }
+
+    fun setTopicPinned(id: String, pinned: Boolean, onDone: (Boolean) -> Unit = {}) = launchSafely {
+        val updated = api.setTopicPinned(id, pinned)
+        cacheTopic(updated)
+        loadTopics()
+        refreshRecent()
+        onDone(updated.summary.pinned)
+    }
+
+    fun setTopicShare(id: String, public: Boolean, onDone: (TopicShareResult) -> Unit = {}) = runBusy {
+        val res = api.setTopicShare(id, public)
+        cacheTopic(res.topic)
+        onDone(res)
+    }
+
+    fun reportTopic(id: String, reason: ReportReason, details: String, onDone: () -> Unit = {}) = runBusy {
+        api.reportTopic(id, reason, details)
+        onDone()
     }
 
     /** "Turn into a topic": reuses the files and links shared in a chat as material. Returns a suggested goal. */
@@ -689,12 +894,199 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _roleplays.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             try {
-                _roleplays.value = Loadable(api.roleplays())
+                val list = api.roleplays()
+                _roleplays.value = Loadable(list)
+                _roleplayDetails.update { map -> map + list.associateBy { it.id } }
             } catch (e: ApiException) {
                 handleAuth(e)
                 _roleplays.update { it.copy(loading = false, error = e.message) }
             }
         }
+    }
+
+    fun loadRoleplay(id: String) = launchSafely {
+        val rp = api.roleplay(id)
+        cacheRoleplay(rp)
+    }
+
+    private fun cacheRoleplay(rp: Roleplay) {
+        _roleplayDetails.update { it + (rp.id to rp) }
+        _roleplays.update { state ->
+            state.copy(items = state.items?.map { if (it.id == rp.id) rp else it })
+        }
+    }
+
+    fun discardRoleplayDraft() {
+        _drafts.value[ROLEPLAY_DRAFT_KEY].orEmpty().forEach { removeAttachment(ROLEPLAY_DRAFT_KEY, it.localId) }
+        _roleplayBuilder.value = RoleplayBuilderState()
+    }
+
+    fun resetRoleplayBuilder(initialQuery: String = "") {
+        _roleplayBuilder.value = RoleplayBuilderState()
+        if (initialQuery.isNotBlank()) {
+            sendRoleplayBuilderTurn(initialQuery.trim())
+        }
+    }
+
+    fun prefillRoleplayFromChat(conversationId: String): String {
+        discardRoleplayDraft()
+        val chat = _chats.value[conversationId] ?: return ""
+        val shared = chat.messages.flatMap { it.attachments }
+            .filter { it.status == AttachmentStatus.Ready }
+            .takeLast(MAX_TOPIC_MATERIAL)
+        if (shared.isNotEmpty()) {
+            _drafts.update { it + (ROLEPLAY_DRAFT_KEY to shared.map { a -> a.toDraft(borrowed = true) }) }
+        }
+        return chat.conversation.title.takeUnless { it == "Free Talk" }.orEmpty()
+    }
+
+    fun sendRoleplayBuilderTurn(text: String) {
+        val currentAttachments = _drafts.value[ROLEPLAY_DRAFT_KEY].orEmpty()
+        if (currentAttachments.any { it.state != DraftUploadState.Ready }) {
+            _messages.tryEmit("Wait for your files to finish uploading")
+            return
+        }
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() && currentAttachments.isEmpty()) return
+
+        val effectiveText = trimmed.ifEmpty {
+            "Use my attached file: ${currentAttachments.joinToString { it.name }}"
+        }
+        val attachmentNames = currentAttachments.map { it.name.ifBlank { "Attachment" } }
+        val newServerIds = currentAttachments.mapNotNull { it.serverId }
+        val allIds = (_roleplayBuilder.value.attachmentIds + newServerIds).distinct()
+
+        _drafts.update { it - ROLEPLAY_DRAFT_KEY }
+        currentAttachments.forEach { it.file?.file?.delete() }
+
+        val userMsg = BuilderTurnMessage(
+            id = java.util.UUID.randomUUID().toString(),
+            isUser = true,
+            text = effectiveText,
+            attachmentNames = attachmentNames,
+        )
+        val nextTurns = _roleplayBuilder.value.turns + userMsg
+        _roleplayBuilder.update {
+            it.copy(turns = nextTurns, attachmentIds = allIds, sending = true, error = null)
+        }
+
+        viewModelScope.launch {
+            try {
+                val wireTurns = nextTurns.map { (if (it.isUser) "user" else "assistant") to it.text }
+                val res = api.roleplayBuilderTurn(wireTurns, allIds)
+                val assistantMsg = BuilderTurnMessage(
+                    id = java.util.UUID.randomUUID().toString(),
+                    isUser = false,
+                    text = res.reply,
+                    contextNote = res.contextNote,
+                )
+                _roleplayBuilder.update { state ->
+                    state.copy(
+                        turns = state.turns + assistantMsg,
+                        draft = res.draft ?: state.draft,
+                        sending = false,
+                        error = null,
+                    )
+                }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _roleplayBuilder.update { it.copy(sending = false, error = e.message) }
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Accepts the inline `DRAFT ROLEPLAY` card (`Roleplays · 3b`) and creates the roleplay for `3c · Roleplay settings`. */
+    fun acceptRoleplayDraft(draft: RoleplayDraft, onCreated: (Roleplay) -> Unit) = runBusy {
+        val ids = _roleplayBuilder.value.attachmentIds
+        val created = api.createRoleplayDraft(
+            scenario = draft.scenario.ifBlank { draft.title },
+            draft = draft,
+            attachmentIds = ids,
+        )
+        _roleplayBuilder.value = RoleplayBuilderState()
+        cacheRoleplay(created)
+        _roleplays.update { state ->
+            val rest = state.items.orEmpty().filterNot { it.id == created.id }
+            state.copy(items = listOf(created) + rest)
+        }
+        refreshRecent()
+        onCreated(created)
+    }
+
+    fun loadDiscoverRoleplays(category: String = "all", query: String = "") {
+        _discoverRoleplays.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _discoverRoleplays.value = Loadable(api.discoverRoleplays(category, query))
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _discoverRoleplays.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun loadDiscoverRoleplay(idOrToken: String) {
+        _previewRoleplays.update { it + (idOrToken to (it[idOrToken] ?: Loadable()).copy(loading = true, error = null)) }
+        viewModelScope.launch {
+            try {
+                val item = api.discoverRoleplay(idOrToken)
+                _previewRoleplays.update { it + (idOrToken to Loadable(item)) }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                _previewRoleplays.update {
+                    it + (idOrToken to (it[idOrToken] ?: Loadable()).copy(loading = false, error = e.message))
+                }
+            }
+        }
+    }
+
+    fun saveDiscoverRoleplay(id: String, onSaved: (Roleplay) -> Unit = {}) = runBusy {
+        val saved = api.saveRoleplay(id)
+        cacheRoleplay(saved)
+        _roleplays.update { state ->
+            val rest = state.items.orEmpty().filterNot { it.id == saved.id }
+            state.copy(items = listOf(saved) + rest)
+        }
+        _previewRoleplays.update { map ->
+            map.mapValues { (_, v) ->
+                if (v.items?.id == id) Loadable(v.items.copy(alreadySaved = true, savedRoleplayId = saved.id)) else v
+            }
+        }
+        refreshRecent()
+        onSaved(saved)
+    }
+
+    fun startDiscoverRoleplay(id: String, onOpened: (Conversation) -> Unit) = runBusy {
+        val saved = api.saveRoleplay(id)
+        cacheRoleplay(saved)
+        _roleplays.update { state ->
+            val rest = state.items.orEmpty().filterNot { it.id == saved.id }
+            state.copy(items = listOf(saved) + rest)
+        }
+        val thread = api.openRoleplay(saved.id)
+        cacheThread(thread)
+        refreshRecent()
+        onOpened(thread.conversation)
+    }
+
+    fun setRoleplayPinned(id: String, pinned: Boolean, onDone: (Boolean) -> Unit = {}) = launchSafely {
+        val updated = api.setRoleplayPinned(id, pinned)
+        cacheRoleplay(updated)
+        loadRoleplays()
+        refreshRecent()
+        onDone(updated.pinned)
+    }
+
+    fun setRoleplayShare(id: String, public: Boolean, onDone: (RoleplayShareResult) -> Unit = {}) = runBusy {
+        val res = api.setRoleplayShare(id, public)
+        cacheRoleplay(res.roleplay)
+        onDone(res)
+    }
+
+    fun reportRoleplay(id: String, reason: ReportReason, details: String, onDone: () -> Unit = {}) = runBusy {
+        api.reportRoleplay(id, reason, details)
+        onDone()
     }
 
     fun createRoleplay(scenario: String, userRole: String, aiRole: String, onOpened: (Conversation) -> Unit) = runBusy {
@@ -715,6 +1107,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteRoleplay(id: String) = launchSafely {
         api.deleteRoleplay(id)
         _roleplays.update { state -> state.copy(items = state.items?.filterNot { it.id == id }) }
+        _roleplayDetails.update { it - id }
         refreshRecent()
     }
 
@@ -894,11 +1287,12 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Attachments ─────────────────────────────────────────────────────────
 
-    /** How many attachments the composer (or topic material) for [key] can hold. */
-    fun maxAttachments(key: String) = if (key == TOPIC_DRAFT_KEY) MAX_TOPIC_MATERIAL else AttachmentFiles.MAX_PER_MESSAGE
+    /** How many attachments the composer (or topic/roleplay builder) for [key] can hold. */
+    fun maxAttachments(key: String) =
+        if (key == TOPIC_DRAFT_KEY || key == ROLEPLAY_DRAFT_KEY) MAX_TOPIC_MATERIAL else AttachmentFiles.MAX_PER_MESSAGE
 
     private fun limitMessage(key: String) =
-        if (key == TOPIC_DRAFT_KEY) "You can add up to $MAX_TOPIC_MATERIAL files"
+        if (key == TOPIC_DRAFT_KEY || key == ROLEPLAY_DRAFT_KEY) "You can add up to $MAX_TOPIC_MATERIAL files"
         else "You can attach up to ${AttachmentFiles.MAX_PER_MESSAGE} files per message"
 
     /** Adds picked files to the composer for [key] and uploads them right away. */

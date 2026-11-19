@@ -101,11 +101,16 @@ import com.zuno.ai.ui.screens.AuthMode
 import com.zuno.ai.ui.screens.AuthScreen
 import com.zuno.ai.ui.screens.ChatScreen
 import com.zuno.ai.ui.screens.ChatsScreen
+import com.zuno.ai.ui.screens.CommunityRoleplayPreviewScreen
+import com.zuno.ai.ui.screens.CommunityTopicPreviewScreen
+import com.zuno.ai.ui.screens.ExploreRoleplaysScreen
+import com.zuno.ai.ui.screens.ExploreTopicsScreen
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
 import com.zuno.ai.ui.screens.LessonEvaluationScreen
 import com.zuno.ai.ui.screens.PeerCallScreen
 import com.zuno.ai.ui.screens.PeerChatScreen
+import com.zuno.ai.ui.screens.RoleplaySettingsScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.VoiceModeScreen
 import com.zuno.ai.ui.screens.NewRoleplayScreen
@@ -126,6 +131,7 @@ import com.zuno.ai.ui.screens.SettingsOverviewScreen
 import com.zuno.ai.ui.screens.SettingsPreferencesScreen
 import com.zuno.ai.ui.screens.SplashScreen
 import com.zuno.ai.ui.screens.TopicScreen
+import com.zuno.ai.ui.screens.TopicSettingsScreen
 import com.zuno.ai.ui.screens.TopicsScreen
 import com.zuno.ai.ui.screens.displayName
 import com.zuno.ai.ui.theme.ZunoColors
@@ -134,6 +140,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.viewmodel.HOME_DRAFT_KEY
 import com.zuno.ai.viewmodel.MAX_TOPIC_MATERIAL
 import com.zuno.ai.viewmodel.OnboardingViewModel
+import com.zuno.ai.viewmodel.ROLEPLAY_DRAFT_KEY
 import com.zuno.ai.viewmodel.TOPIC_DRAFT_KEY
 import com.zuno.ai.viewmodel.ToastEvent
 import com.zuno.ai.viewmodel.ToastIcon
@@ -159,13 +166,23 @@ sealed interface ZunoRoute {
     data class PeerChat(val peerConversationId: String, val partnerId: String) : ZunoRoute
     data class PeerCall(val callId: String, val peerConversationId: String, val partnerId: String) : ZunoRoute
     data object Scheduled : ZunoRoute
-    /** New schedule, or editing [editId]. */
-    data class NewSchedule(val editId: String? = null) : ZunoRoute
+    /** New schedule, or editing [editId], or pre-filling a target Topic/Roleplay. */
+    data class NewSchedule(
+        val editId: String? = null,
+        val prefillTargetId: String? = null,
+        val prefillIsRoleplay: Boolean = false,
+    ) : ZunoRoute
     data object Topics : ZunoRoute
+    data class ExploreTopics(val initialQuery: String = "") : ZunoRoute
+    data class CommunityTopicPreview(val idOrToken: String) : ZunoRoute
     data object NewTopic : ZunoRoute
+    data class TopicSettings(val id: String) : ZunoRoute
     data class Topic(val id: String) : ZunoRoute
     data object Roleplays : ZunoRoute
+    data class ExploreRoleplays(val initialQuery: String = "") : ZunoRoute
+    data class CommunityRoleplayPreview(val idOrToken: String) : ZunoRoute
     data object NewRoleplay : ZunoRoute
+    data class RoleplaySettings(val id: String) : ZunoRoute
     data class Chat(val conversationId: String) : ZunoRoute
     /** Live voice call for a conversation (voice mode). */
     data class Voice(val conversationId: String) : ZunoRoute
@@ -201,12 +218,18 @@ private fun ZunoRoute.encode(): String = when (this) {
     is ZunoRoute.PeerChat -> "peer-chat:$peerConversationId:$partnerId"
     is ZunoRoute.PeerCall -> "peer-call:$callId:$peerConversationId:$partnerId"
     ZunoRoute.Scheduled -> "scheduled"
-    is ZunoRoute.NewSchedule -> "new-schedule:${editId.orEmpty()}"
+    is ZunoRoute.NewSchedule -> "new-schedule:${editId.orEmpty()}:${prefillTargetId.orEmpty()}:$prefillIsRoleplay"
     ZunoRoute.Topics -> "topics"
+    is ZunoRoute.ExploreTopics -> "explore-topics:$initialQuery"
+    is ZunoRoute.CommunityTopicPreview -> "topic-preview:$idOrToken"
     ZunoRoute.NewTopic -> "new-topic"
+    is ZunoRoute.TopicSettings -> "topic-settings:$id"
     is ZunoRoute.Topic -> "topic:$id"
     ZunoRoute.Roleplays -> "roleplays"
+    is ZunoRoute.ExploreRoleplays -> "explore-roleplays:$initialQuery"
+    is ZunoRoute.CommunityRoleplayPreview -> "roleplay-preview:$idOrToken"
     ZunoRoute.NewRoleplay -> "new-roleplay"
+    is ZunoRoute.RoleplaySettings -> "roleplay-settings:$id"
     is ZunoRoute.Chat -> "chat:$conversationId"
     is ZunoRoute.Voice -> "voice:$conversationId"
     is ZunoRoute.VoiceLesson -> "voice-lesson:$topicId:$lessonId:$conversationId:$position:$totalLessons"
@@ -238,12 +261,25 @@ private fun decodeRoute(value: String): ZunoRoute = when {
         if (parts.size >= 3) ZunoRoute.PeerCall(parts[0], parts[1], parts[2]) else ZunoRoute.Chats()
     }
     value == "scheduled" -> ZunoRoute.Scheduled
-    value.startsWith("new-schedule:") -> ZunoRoute.NewSchedule(value.removePrefix("new-schedule:").ifBlank { null })
+    value.startsWith("new-schedule:") -> {
+        val parts = value.removePrefix("new-schedule:").split(':')
+        ZunoRoute.NewSchedule(
+            editId = parts.getOrNull(0)?.ifBlank { null },
+            prefillTargetId = parts.getOrNull(1)?.ifBlank { null },
+            prefillIsRoleplay = parts.getOrNull(2)?.toBooleanStrictOrNull() ?: false,
+        )
+    }
     value == "topics" -> ZunoRoute.Topics
+    value.startsWith("explore-topics:") -> ZunoRoute.ExploreTopics(value.removePrefix("explore-topics:"))
+    value.startsWith("topic-preview:") -> ZunoRoute.CommunityTopicPreview(value.removePrefix("topic-preview:"))
     value == "new-topic" -> ZunoRoute.NewTopic
+    value.startsWith("topic-settings:") -> ZunoRoute.TopicSettings(value.removePrefix("topic-settings:"))
     value.startsWith("topic:") -> ZunoRoute.Topic(value.removePrefix("topic:"))
     value == "roleplays" -> ZunoRoute.Roleplays
+    value.startsWith("explore-roleplays:") -> ZunoRoute.ExploreRoleplays(value.removePrefix("explore-roleplays:"))
+    value.startsWith("roleplay-preview:") -> ZunoRoute.CommunityRoleplayPreview(value.removePrefix("roleplay-preview:"))
     value == "new-roleplay" -> ZunoRoute.NewRoleplay
+    value.startsWith("roleplay-settings:") -> ZunoRoute.RoleplaySettings(value.removePrefix("roleplay-settings:"))
     value.startsWith("chat:") -> ZunoRoute.Chat(value.removePrefix("chat:"))
     value.startsWith("voice-lesson:") -> {
         val parts = value.removePrefix("voice-lesson:").split(':')
@@ -322,6 +358,13 @@ fun ZunoApp(
     val topicDetails by zunoViewModel.topicDetails.collectAsStateWithLifecycle()
     val lessonEvaluations by zunoViewModel.lessonEvaluations.collectAsStateWithLifecycle()
     val roleplays by zunoViewModel.roleplays.collectAsStateWithLifecycle()
+    val roleplayDetails by zunoViewModel.roleplayDetails.collectAsStateWithLifecycle()
+    val discoverTopics by zunoViewModel.discoverTopics.collectAsStateWithLifecycle()
+    val previewTopics by zunoViewModel.previewTopics.collectAsStateWithLifecycle()
+    val discoverRoleplays by zunoViewModel.discoverRoleplays.collectAsStateWithLifecycle()
+    val previewRoleplays by zunoViewModel.previewRoleplays.collectAsStateWithLifecycle()
+    val topicBuilder by zunoViewModel.topicBuilder.collectAsStateWithLifecycle()
+    val roleplayBuilder by zunoViewModel.roleplayBuilder.collectAsStateWithLifecycle()
     val chats by zunoViewModel.chats.collectAsStateWithLifecycle()
     val chatsOverview by zunoViewModel.chatsOverview.collectAsStateWithLifecycle()
     val peerChats by zunoViewModel.peerChats.collectAsStateWithLifecycle()
@@ -832,6 +875,18 @@ fun ZunoApp(
                 backStack.add(ZunoRoute.Home)
                 backStack.add(ZunoRoute.Topic(link.topicId))
             }
+            is DeepLink.TopicPreview -> {
+                backStack.clear()
+                backStack.add(ZunoRoute.Home)
+                backStack.add(ZunoRoute.Topics)
+                backStack.add(ZunoRoute.CommunityTopicPreview(link.idOrToken))
+            }
+            is DeepLink.RoleplayPreview -> {
+                backStack.clear()
+                backStack.add(ZunoRoute.Home)
+                backStack.add(ZunoRoute.Roleplays)
+                backStack.add(ZunoRoute.CommunityRoleplayPreview(link.idOrToken))
+            }
             is DeepLink.PeerChat -> {
                 Push.clearPeerNotifications(context, link.peerConversationId)
                 if (voiceConversationId != null) endVoice()
@@ -872,7 +927,7 @@ fun ZunoApp(
     }
 
     fun limitMessage(key: String) =
-        if (key == TOPIC_DRAFT_KEY) str(R.string.attach_limit_material, MAX_TOPIC_MATERIAL)
+        if (key == TOPIC_DRAFT_KEY || key == ROLEPLAY_DRAFT_KEY) str(R.string.attach_limit_material, MAX_TOPIC_MATERIAL)
         else str(R.string.attach_limit_message, AttachmentFiles.MAX_PER_MESSAGE)
 
     fun openAttachmentSheet(key: String) {
@@ -907,7 +962,7 @@ fun ZunoApp(
 
     fun launchPhotos(key: String) = launchPicker(key) {
         val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-        if (key == TOPIC_DRAFT_KEY) materialPhotoPicker.launch(request) else photoPicker.launch(request)
+        if (key == TOPIC_DRAFT_KEY || key == ROLEPLAY_DRAFT_KEY) materialPhotoPicker.launch(request) else photoPicker.launch(request)
     }
 
     fun launchFiles(key: String) = launchPicker(key) { documentPicker.launch(AttachmentFiles.documentMimeTypes) }
@@ -1013,12 +1068,181 @@ fun ZunoApp(
         toasts.show(ToastEvent(str(R.string.share_link_copied), ToastIcon.Link))
     }
 
-    // ── New topic (optionally from a chat's material) ───────────────────────
-    var topicPrefill by rememberSaveable { mutableStateOf("") }
+    // ── New topic & New roleplay builders ───────────────────────────────────
+    var topicShareTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var roleplayShareTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var topicReportTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var roleplayReportTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var topicDeleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var roleplayDeleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun openNewTopic(initialQuery: String = "") {
+        zunoViewModel.resetTopicBuilder(initialQuery)
+        navigate(ZunoRoute.NewTopic)
+    }
 
     fun leaveNewTopic() {
         zunoViewModel.discardTopicDraft()
         pop()
+    }
+
+    fun openNewRoleplay(initialQuery: String = "") {
+        zunoViewModel.resetRoleplayBuilder(initialQuery)
+        navigate(ZunoRoute.NewRoleplay)
+    }
+
+    fun leaveNewRoleplay() {
+        zunoViewModel.discardRoleplayDraft()
+        pop()
+    }
+
+    fun handleSectionNavTab(tab: HomeNavTab) {
+        when (tab) {
+            HomeNavTab.Home -> openHome(explore = false)
+            HomeNavTab.Learn -> if (route != ZunoRoute.Topics) openSection(ZunoRoute.Topics)
+            HomeNavTab.Zuno -> withMicrophone(::startHomeCall)
+            HomeNavTab.Chats -> openSection(ZunoRoute.Chats())
+            HomeNavTab.More -> openHome(explore = true)
+        }
+    }
+
+    @Composable
+    fun topicMenu(summary: com.zuno.ai.data.TopicSummary, closeDetailOnDelete: Boolean = false): List<ZunoMenuAction> = buildList {
+        add(
+            ZunoMenuAction(stringResource(R.string.topics_menu_start_next), icon = R.drawable.zuno_ic_t_arrow_right) {
+                val detail = topicDetails[summary.id]
+                if (detail != null) {
+                    val target = detail.nextLesson ?: detail.lessons.firstOrNull()
+                    if (target != null) startLessonVoice(summary.id, target.id)
+                } else {
+                    navigate(ZunoRoute.Topic(summary.id))
+                }
+            },
+        )
+        add(
+            ZunoMenuAction(stringResource(R.string.topics_menu_schedule), icon = R.drawable.zuno_ic_t_clock) {
+                navigate(ZunoRoute.NewSchedule(prefillTargetId = summary.id, prefillIsRoleplay = false))
+            },
+        )
+        add(
+            ZunoMenuAction(
+                stringResource(if (summary.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin),
+                icon = if (summary.pinned) R.drawable.zuno_ic_t_pin_off else R.drawable.zuno_ic_t_pin,
+            ) {
+                zunoViewModel.setTopicPinned(summary.id, !summary.pinned) { pinned ->
+                    toasts.show(
+                        ToastEvent(str(if (pinned) R.string.chat_pinned_toast else R.string.chat_unpinned_toast), ToastIcon.Pin),
+                    )
+                }
+            },
+        )
+        // Share is strictly gated by visibility ("public") or saved community/system items.
+        if (summary.isPublic || !summary.isUserOwned) {
+            add(
+                ZunoMenuAction(stringResource(R.string.chat_menu_share), icon = R.drawable.zuno_ic_t_share) {
+                    if (summary.isUserOwned) {
+                        topicShareTarget = summary.id
+                    } else {
+                        summary.effectiveShareUrl?.let(::shareLink)
+                    }
+                },
+            )
+        }
+        if (summary.isUserOwned) {
+            add(
+                ZunoMenuAction(stringResource(R.string.topics_menu_settings), icon = R.drawable.zuno_ic_t_settings) {
+                    navigate(ZunoRoute.TopicSettings(summary.id))
+                },
+            )
+        } else {
+            add(
+                ZunoMenuAction(stringResource(R.string.chat_menu_report), icon = R.drawable.zuno_ic_t_flag) {
+                    topicReportTarget = summary.sourceTopicId ?: summary.id
+                },
+            )
+        }
+        if (summary.completedLessons > 0) {
+            add(
+                ZunoMenuAction(stringResource(R.string.topics_menu_reset), icon = R.drawable.zuno_ic_t_rotate_ccw) {
+                    zunoViewModel.resetTopic(summary.id)
+                },
+            )
+        }
+        add(
+            ZunoMenuAction(
+                stringResource(if (summary.isUserOwned) R.string.common_delete else R.string.topics_menu_remove),
+                icon = R.drawable.zuno_ic_t_trash,
+                destructive = true,
+                dividerBefore = true,
+            ) {
+                if (closeDetailOnDelete) {
+                    zunoViewModel.deleteTopic(summary.id)
+                    pop()
+                } else {
+                    topicDeleteTarget = summary.id
+                }
+            },
+        )
+    }
+
+    @Composable
+    fun roleplayMenu(rp: com.zuno.ai.data.Roleplay): List<ZunoMenuAction> = buildList {
+        add(
+            ZunoMenuAction(stringResource(R.string.roleplays_menu_start_over), icon = R.drawable.zuno_ic_t_rotate_ccw) {
+                zunoViewModel.openRoleplay(rp.id, restart = true) { openChat(it.id) }
+            },
+        )
+        add(
+            ZunoMenuAction(stringResource(R.string.topics_menu_schedule), icon = R.drawable.zuno_ic_t_clock) {
+                navigate(ZunoRoute.NewSchedule(prefillTargetId = rp.id, prefillIsRoleplay = true))
+            },
+        )
+        add(
+            ZunoMenuAction(
+                stringResource(if (rp.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin),
+                icon = if (rp.pinned) R.drawable.zuno_ic_t_pin_off else R.drawable.zuno_ic_t_pin,
+            ) {
+                zunoViewModel.setRoleplayPinned(rp.id, !rp.pinned) { pinned ->
+                    toasts.show(
+                        ToastEvent(str(if (pinned) R.string.chat_pinned_toast else R.string.chat_unpinned_toast), ToastIcon.Pin),
+                    )
+                }
+            },
+        )
+        if (rp.isPublic || !rp.isUserOwned) {
+            add(
+                ZunoMenuAction(stringResource(R.string.chat_menu_share), icon = R.drawable.zuno_ic_t_share) {
+                    if (rp.isUserOwned) {
+                        roleplayShareTarget = rp.id
+                    } else {
+                        rp.effectiveShareUrl?.let(::shareLink)
+                    }
+                },
+            )
+        }
+        if (rp.isUserOwned) {
+            add(
+                ZunoMenuAction(stringResource(R.string.roleplays_menu_settings), icon = R.drawable.zuno_ic_t_settings) {
+                    navigate(ZunoRoute.RoleplaySettings(rp.id))
+                },
+            )
+        } else {
+            add(
+                ZunoMenuAction(stringResource(R.string.chat_menu_report), icon = R.drawable.zuno_ic_t_flag) {
+                    roleplayReportTarget = rp.sourceRoleplayId ?: rp.id
+                },
+            )
+        }
+        add(
+            ZunoMenuAction(
+                stringResource(if (rp.isUserOwned) R.string.common_delete else R.string.topics_menu_remove),
+                icon = R.drawable.zuno_ic_t_trash,
+                destructive = true,
+                dividerBefore = true,
+            ) {
+                roleplayDeleteTarget = rp.id
+            },
+        )
     }
 
     // ── Scheduled sessions ──────────────────────────────────────────────────
@@ -1126,8 +1350,18 @@ fun ZunoApp(
                         dividerBefore = true,
                     ) {
                         if (inVoice) endVoice()
-                        topicPrefill = zunoViewModel.prefillTopicFromChat(conversationId)
-                        navigate(ZunoRoute.NewTopic)
+                        val seed = zunoViewModel.prefillTopicFromChat(conversationId)
+                        openNewTopic(seed)
+                    },
+                )
+                add(
+                    ZunoMenuAction(
+                        stringResource(R.string.chat_menu_turn_into_roleplay),
+                        icon = R.drawable.zuno_ic_t_sparkles,
+                    ) {
+                        if (inVoice) endVoice()
+                        val seed = zunoViewModel.prefillRoleplayFromChat(conversationId)
+                        openNewRoleplay(seed)
                     },
                 )
             }
@@ -1594,6 +1828,8 @@ fun ZunoApp(
                         targets = scheduleTargets,
                         editing = editing,
                         busy = busy,
+                        prefillTargetId = screen.prefillTargetId,
+                        prefillIsRoleplay = screen.prefillIsRoleplay,
                         onBack = ::pop,
                         onRetry = zunoViewModel::loadScheduleTargets,
                         onSave = { draft ->
@@ -1623,19 +1859,32 @@ fun ZunoApp(
                 }
 
                 ZunoRoute.Topics -> {
-                    LaunchedEffect(Unit) { zunoViewModel.loadTopics() }
+                    LaunchedEffect(Unit) {
+                        zunoViewModel.loadTopics()
+                        if (discoverTopics.items == null) zunoViewModel.loadDiscoverTopics()
+                    }
+                    val discoverItems = remember(discoverTopics.items) {
+                        val res = discoverTopics.items
+                        if (res == null) emptyList() else res.official + res.community
+                    }
+                    val itemMenus = topics.items.orEmpty().associate { summary ->
+                        summary.id to topicMenu(summary)
+                    }
                     TopicsScreen(
                         topics = topics.items,
                         loading = topics.loading,
                         error = topics.error,
-                        onBack = ::pop,
-                        onRetry = zunoViewModel::loadTopics,
-                        onOpen = { navigate(ZunoRoute.Topic(it)) },
-                        onCreate = {
-                            topicPrefill = ""
-                            navigate(ZunoRoute.NewTopic)
+                        discoverPreview = discoverItems,
+                        menuForTopic = { itemMenus[it.id].orEmpty() },
+                        onRetry = {
+                            zunoViewModel.loadTopics()
+                            zunoViewModel.loadDiscoverTopics()
                         },
-                        onDelete = { zunoViewModel.deleteTopic(it.id) },
+                        onOpen = { navigate(ZunoRoute.Topic(it)) },
+                        onCreate = { openNewTopic("") },
+                        onExplore = { q -> navigate(ZunoRoute.ExploreTopics(q)) },
+                        onOpenPreview = { id -> navigate(ZunoRoute.CommunityTopicPreview(id)) },
+                        onNavTabSelected = ::handleSectionNavTab,
                         recommendedTopics = profile?.recommendedTopics.orEmpty(),
                         busy = busy,
                         onSelectRecommended = { rec ->
@@ -1647,69 +1896,226 @@ fun ZunoApp(
                     )
                 }
 
+                is ZunoRoute.ExploreTopics -> {
+                    ExploreTopicsScreen(
+                        discover = discoverTopics,
+                        initialQuery = screen.initialQuery,
+                        languageName = language.displayName(appLanguage),
+                        onBack = ::pop,
+                        onFilterChanged = { cat, q -> zunoViewModel.loadDiscoverTopics(cat, q) },
+                        onOpenPreview = { item -> navigate(ZunoRoute.CommunityTopicPreview(item.id)) },
+                        onCreateFromQuery = { q -> openNewTopic(q) },
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.CommunityTopicPreview -> {
+                    LaunchedEffect(screen.idOrToken) { zunoViewModel.loadDiscoverTopic(screen.idOrToken) }
+                    val previewState = previewTopics[screen.idOrToken] ?: com.zuno.ai.viewmodel.Loadable(loading = true)
+                    CommunityTopicPreviewScreen(
+                        preview = previewState,
+                        busy = busy,
+                        onBack = ::pop,
+                        onRetry = { zunoViewModel.loadDiscoverTopic(screen.idOrToken) },
+                        onAddOrOpen = { item ->
+                            if (item.alreadySaved && item.savedTopicId != null) {
+                                replace(ZunoRoute.Topic(item.savedTopicId))
+                            } else {
+                                zunoViewModel.saveDiscoverTopic(item.id) { saved ->
+                                    toasts.show(ToastEvent(str(R.string.topic_saved_toast), ToastIcon.Check))
+                                    replace(ZunoRoute.Topic(saved.summary.id))
+                                }
+                            }
+                        },
+                        onShare = { item -> item.shareUrl?.let(::shareLink) },
+                        onReport = { item -> topicReportTarget = item.id },
+                        modifier = screenModifier,
+                    )
+                }
+
                 ZunoRoute.NewTopic -> {
                     BackHandler(enabled = true) { leaveNewTopic() }
                     NewTopicScreen(
+                        builder = topicBuilder,
+                        firstName = profile?.firstName?.ifBlank { null },
                         busy = busy,
-                        initialPrompt = topicPrefill,
-                        material = drafts[TOPIC_DRAFT_KEY].orEmpty(),
-                        analysis = materialAnalysis,
+                        attachments = drafts[TOPIC_DRAFT_KEY].orEmpty(),
                         onBack = ::leaveNewTopic,
-                        onCreate = { prompt -> zunoViewModel.createTopic(prompt) { replace(ZunoRoute.Topic(it.summary.id)) } },
-                        onAnalyze = zunoViewModel::analyzeMaterial,
-                        onTogglePart = zunoViewModel::toggleMaterialPart,
-                        onFiles = { launchFiles(TOPIC_DRAFT_KEY) },
-                        onPhotos = { launchPhotos(TOPIC_DRAFT_KEY) },
-                        onCamera = { launchCamera(TOPIC_DRAFT_KEY) },
-                        onAddMaterial = { openAttachmentSheet(TOPIC_DRAFT_KEY) },
-                        onRemoveMaterial = { zunoViewModel.removeAttachment(TOPIC_DRAFT_KEY, it.localId) },
-                        onRetryMaterial = { zunoViewModel.retryAttachment(TOPIC_DRAFT_KEY, it.localId) },
+                        onSendTurn = zunoViewModel::sendTopicBuilderTurn,
+                        onAcceptDraft = { draft ->
+                            zunoViewModel.acceptTopicDraft(draft) { created ->
+                                replace(ZunoRoute.TopicSettings(created.summary.id))
+                            }
+                        },
+                        onAttach = { openAttachmentSheet(TOPIC_DRAFT_KEY) },
+                        onRemoveAttachment = { zunoViewModel.removeAttachment(TOPIC_DRAFT_KEY, it.localId) },
+                        onRetryAttachment = { zunoViewModel.retryAttachment(TOPIC_DRAFT_KEY, it.localId) },
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.TopicSettings -> {
+                    val detail = topicDetails[screen.id]
+                    LaunchedEffect(screen.id) {
+                        if (detail == null) zunoViewModel.loadTopic(screen.id)
+                    }
+                    TopicSettingsScreen(
+                        topic = detail,
+                        languageName = language.displayName(appLanguage),
+                        level = profile?.level ?: "B1",
+                        busy = busy,
+                        onBack = {
+                            if (backStack.getOrNull(backStack.lastIndex - 1) == ZunoRoute.Topic(screen.id)) {
+                                pop()
+                            } else {
+                                replace(ZunoRoute.Topic(screen.id))
+                            }
+                        },
+                        onSelectPublic = { public -> zunoViewModel.setTopicShare(screen.id, public) },
+                        onShare = ::shareLink,
+                        onCopyLink = ::copyLink,
+                        onPrimaryAction = { topic ->
+                            if (topic.summary.status == com.zuno.ai.data.TopicStatus.NotStarted) {
+                                val firstLesson = topic.lessons.firstOrNull()
+                                replace(ZunoRoute.Topic(screen.id))
+                                if (firstLesson != null) startLessonVoice(screen.id, firstLesson.id)
+                            } else {
+                                replace(ZunoRoute.Topic(screen.id))
+                            }
+                        },
                         modifier = screenModifier,
                     )
                 }
 
                 is ZunoRoute.Topic -> {
                     LaunchedEffect(screen.id) { zunoViewModel.loadTopic(screen.id) }
+                    val detail = topicDetails[screen.id]
+                    val menu = detail?.let { topicMenu(it.summary, closeDetailOnDelete = true) }.orEmpty()
                     TopicScreen(
-                        topic = topicDetails[screen.id],
+                        topic = detail,
                         busy = busy,
+                        menu = menu,
                         onBack = ::pop,
                         onRetry = { zunoViewModel.loadTopic(screen.id) },
                         onStartLesson = { lesson -> startLessonVoice(screen.id, lesson.id) },
                         onOpenEvaluation = { lesson -> navigate(ZunoRoute.LessonEvaluation(screen.id, lesson.id)) },
-                        onReset = { zunoViewModel.resetTopic(screen.id) },
-                        onDelete = {
-                            zunoViewModel.deleteTopic(screen.id)
-                            pop()
-                        },
                         modifier = screenModifier,
                     )
                 }
 
                 ZunoRoute.Roleplays -> {
-                    LaunchedEffect(Unit) { zunoViewModel.loadRoleplays() }
+                    LaunchedEffect(Unit) {
+                        zunoViewModel.loadRoleplays()
+                        if (discoverRoleplays.items == null) zunoViewModel.loadDiscoverRoleplays()
+                    }
+                    val discoverItems = remember(discoverRoleplays.items) {
+                        val res = discoverRoleplays.items
+                        if (res == null) emptyList() else res.official + res.community
+                    }
+                    val itemMenus = roleplays.items.orEmpty().associate { rp ->
+                        rp.id to roleplayMenu(rp)
+                    }
                     RoleplaysScreen(
                         roleplays = roleplays.items,
                         loading = roleplays.loading,
                         error = roleplays.error,
-                        onBack = ::pop,
-                        onRetry = zunoViewModel::loadRoleplays,
+                        discoverPreview = discoverItems,
+                        menuForRoleplay = { itemMenus[it.id].orEmpty() },
+                        onRetry = {
+                            zunoViewModel.loadRoleplays()
+                            zunoViewModel.loadDiscoverRoleplays()
+                        },
                         onOpen = { id -> zunoViewModel.openRoleplay(id) { openChat(it.id) } },
-                        onCreate = { navigate(ZunoRoute.NewRoleplay) },
-                        onRestart = { roleplay -> zunoViewModel.openRoleplay(roleplay.id, restart = true) { openChat(it.id) } },
-                        onDelete = { zunoViewModel.deleteRoleplay(it.id) },
+                        onCreate = { openNewRoleplay("") },
+                        onExplore = { q -> navigate(ZunoRoute.ExploreRoleplays(q)) },
+                        onOpenPreview = { id -> navigate(ZunoRoute.CommunityRoleplayPreview(id)) },
+                        onNavTabSelected = ::handleSectionNavTab,
                         modifier = screenModifier,
                     )
                 }
 
-                ZunoRoute.NewRoleplay -> NewRoleplayScreen(
-                    busy = busy,
-                    onBack = ::pop,
-                    onCreate = { scenario, userRole, aiRole ->
-                        zunoViewModel.createRoleplay(scenario, userRole, aiRole) { replace(ZunoRoute.Chat(it.id)) }
-                    },
-                    modifier = screenModifier,
-                )
+                is ZunoRoute.ExploreRoleplays -> {
+                    ExploreRoleplaysScreen(
+                        discover = discoverRoleplays,
+                        initialQuery = screen.initialQuery,
+                        onBack = ::pop,
+                        onFilterChanged = { cat, q -> zunoViewModel.loadDiscoverRoleplays(cat, q) },
+                        onOpenPreview = { item -> navigate(ZunoRoute.CommunityRoleplayPreview(item.id)) },
+                        onCreateFromQuery = { q -> openNewRoleplay(q) },
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.CommunityRoleplayPreview -> {
+                    LaunchedEffect(screen.idOrToken) { zunoViewModel.loadDiscoverRoleplay(screen.idOrToken) }
+                    val previewState = previewRoleplays[screen.idOrToken] ?: com.zuno.ai.viewmodel.Loadable(loading = true)
+                    CommunityRoleplayPreviewScreen(
+                        preview = previewState,
+                        languageName = language.displayName(appLanguage),
+                        busy = busy,
+                        onBack = ::pop,
+                        onRetry = { zunoViewModel.loadDiscoverRoleplay(screen.idOrToken) },
+                        onStartLive = { item ->
+                            if (item.alreadySaved && item.savedRoleplayId != null) {
+                                zunoViewModel.openRoleplay(item.savedRoleplayId) { replace(ZunoRoute.Chat(it.id)) }
+                            } else {
+                                zunoViewModel.startDiscoverRoleplay(item.id) { replace(ZunoRoute.Chat(it.id)) }
+                            }
+                        },
+                        onSave = { item ->
+                            zunoViewModel.saveDiscoverRoleplay(item.id) {
+                                toasts.show(ToastEvent(str(R.string.roleplay_saved_toast), ToastIcon.Check))
+                            }
+                        },
+                        onShare = { item -> item.shareUrl?.let(::shareLink) },
+                        onReport = { item -> roleplayReportTarget = item.id },
+                        modifier = screenModifier,
+                    )
+                }
+
+                ZunoRoute.NewRoleplay -> {
+                    BackHandler(enabled = true) { leaveNewRoleplay() }
+                    NewRoleplayScreen(
+                        builder = roleplayBuilder,
+                        firstName = profile?.firstName?.ifBlank { null },
+                        busy = busy,
+                        attachments = drafts[ROLEPLAY_DRAFT_KEY].orEmpty(),
+                        onBack = ::leaveNewRoleplay,
+                        onSendTurn = zunoViewModel::sendRoleplayBuilderTurn,
+                        onAcceptDraft = { draft ->
+                            zunoViewModel.acceptRoleplayDraft(draft) { created ->
+                                replace(ZunoRoute.RoleplaySettings(created.id))
+                            }
+                        },
+                        onAttach = { openAttachmentSheet(ROLEPLAY_DRAFT_KEY) },
+                        onRemoveAttachment = { zunoViewModel.removeAttachment(ROLEPLAY_DRAFT_KEY, it.localId) },
+                        onRetryAttachment = { zunoViewModel.retryAttachment(ROLEPLAY_DRAFT_KEY, it.localId) },
+                        modifier = screenModifier,
+                    )
+                }
+
+                is ZunoRoute.RoleplaySettings -> {
+                    val rp = roleplayDetails[screen.id] ?: roleplays.items?.firstOrNull { it.id == screen.id }
+                    LaunchedEffect(screen.id) {
+                        if (rp == null) zunoViewModel.loadRoleplay(screen.id)
+                    }
+                    RoleplaySettingsScreen(
+                        roleplay = rp,
+                        languageName = language.displayName(appLanguage),
+                        level = profile?.level ?: "B1",
+                        busy = busy,
+                        onBack = ::pop,
+                        onSelectPublic = { public -> zunoViewModel.setRoleplayShare(screen.id, public) },
+                        onShare = ::shareLink,
+                        onCopyLink = ::copyLink,
+                        onStartLive = { current ->
+                            zunoViewModel.openRoleplay(current.id) { conv ->
+                                replace(ZunoRoute.Chat(conv.id))
+                            }
+                        },
+                        modifier = screenModifier,
+                    )
+                }
 
                 is ZunoRoute.Chat -> {
                     val chat = chats[screen.conversationId]
@@ -2067,10 +2473,13 @@ fun ZunoApp(
         }
 
     attachTarget?.let { key ->
-        // Conversations get "Remind me to continue"; Home and topic material have no chat to come back to yet.
-        val isConversation = key != HOME_DRAFT_KEY && key != TOPIC_DRAFT_KEY
+        // Conversations get "Remind me to continue"; Home and builder drafts have no chat to come back to yet.
+        val isConversation = key != HOME_DRAFT_KEY && key != TOPIC_DRAFT_KEY && key != ROLEPLAY_DRAFT_KEY
         ZunoAttachSheet(
-            title = stringResource(if (key == TOPIC_DRAFT_KEY) R.string.attach_title_material else R.string.attach_title_chat),
+            title = stringResource(
+                if (key == TOPIC_DRAFT_KEY || key == ROLEPLAY_DRAFT_KEY) R.string.attach_title_material
+                else R.string.attach_title_chat,
+            ),
             onDismiss = { attachTarget = null },
             onCamera = { pick(::launchCamera) },
             onPhotos = { pick(::launchPhotos) },
@@ -2163,6 +2572,120 @@ fun ZunoApp(
                 }
             },
             onDismiss = { reportTarget = null },
+        )
+    }
+
+    topicShareTarget?.let { id ->
+        val summary = topicDetails[id]?.summary ?: topics.items?.firstOrNull { it.id == id }
+        val displayUrl = summary?.shareUrl?.removePrefix("https://")?.removePrefix("http://")
+        val linkSub = if (displayUrl != null) {
+            if ((summary.learnersCount) > 0) {
+                "$displayUrl · ${str(R.string.topics_learners_count, summary.learnersCount)}"
+            } else {
+                displayUrl
+            }
+        } else {
+            null
+        }
+        ZunoShareSheet(
+            title = stringResource(R.string.topics_share_sheet_title),
+            onlyMeDescription = stringResource(R.string.topics_settings_only_me_desc),
+            publicTitle = stringResource(R.string.topics_settings_public_title),
+            publicDescription = stringResource(R.string.topics_settings_public_desc),
+            linkSubtitle = linkSub,
+            isPublic = summary?.isPublic == true,
+            shareUrl = summary?.shareUrl,
+            busy = busy,
+            onSelectPublic = { public -> zunoViewModel.setTopicShare(id, public) },
+            onShare = { summary?.shareUrl?.let(::shareLink) },
+            onCopyLink = { summary?.shareUrl?.let(::copyLink) },
+            onDismiss = { topicShareTarget = null },
+        )
+    }
+
+    roleplayShareTarget?.let { id ->
+        val rp = roleplayDetails[id] ?: roleplays.items?.firstOrNull { it.id == id }
+        val displayUrl = rp?.shareUrl?.removePrefix("https://")?.removePrefix("http://")
+        val linkSub = if (displayUrl != null) {
+            if ((rp.practicedCount) > 0) {
+                "$displayUrl · ${str(R.string.roleplays_practiced_count, rp.practicedCount)}"
+            } else {
+                displayUrl
+            }
+        } else {
+            null
+        }
+        ZunoShareSheet(
+            title = stringResource(R.string.roleplays_share_sheet_title),
+            onlyMeDescription = stringResource(R.string.topics_settings_only_me_desc),
+            publicTitle = stringResource(R.string.topics_settings_public_title),
+            publicDescription = stringResource(R.string.topics_settings_public_desc),
+            linkSubtitle = linkSub,
+            isPublic = rp?.isPublic == true,
+            shareUrl = rp?.shareUrl,
+            busy = busy,
+            onSelectPublic = { public -> zunoViewModel.setRoleplayShare(id, public) },
+            onShare = { rp?.shareUrl?.let(::shareLink) },
+            onCopyLink = { rp?.shareUrl?.let(::copyLink) },
+            onDismiss = { roleplayShareTarget = null },
+        )
+    }
+
+    topicReportTarget?.let { id ->
+        ZunoReportSheet(
+            busy = busy,
+            onSubmit = { reason, details ->
+                zunoViewModel.reportTopic(id, reason, details) {
+                    topicReportTarget = null
+                    toasts.show(ToastEvent(str(R.string.report_sent_toast), ToastIcon.Check))
+                }
+            },
+            onDismiss = { topicReportTarget = null },
+        )
+    }
+
+    roleplayReportTarget?.let { id ->
+        ZunoReportSheet(
+            busy = busy,
+            onSubmit = { reason, details ->
+                zunoViewModel.reportRoleplay(id, reason, details) {
+                    roleplayReportTarget = null
+                    toasts.show(ToastEvent(str(R.string.report_sent_toast), ToastIcon.Check))
+                }
+            },
+            onDismiss = { roleplayReportTarget = null },
+        )
+    }
+
+    topicDeleteTarget?.let { id ->
+        val summary = topics.items?.firstOrNull { it.id == id } ?: topicDetails[id]?.summary
+        val actionLabel = stringResource(if (summary?.isUserOwned != false) R.string.common_delete else R.string.topics_menu_remove)
+        ZunoDialog(
+            title = "$actionLabel “${summary?.title.orEmpty()}”?",
+            body = stringResource(R.string.chat_delete_body, summary?.title.orEmpty()),
+            confirmLabel = actionLabel,
+            destructive = true,
+            onConfirm = {
+                topicDeleteTarget = null
+                zunoViewModel.deleteTopic(id)
+            },
+            onDismiss = { topicDeleteTarget = null },
+        )
+    }
+
+    roleplayDeleteTarget?.let { id ->
+        val rp = roleplays.items?.firstOrNull { it.id == id } ?: roleplayDetails[id]
+        val actionLabel = stringResource(if (rp?.isUserOwned != false) R.string.common_delete else R.string.topics_menu_remove)
+        ZunoDialog(
+            title = "$actionLabel “${rp?.title.orEmpty()}”?",
+            body = stringResource(R.string.chat_delete_body, rp?.title.orEmpty()),
+            confirmLabel = actionLabel,
+            destructive = true,
+            onConfirm = {
+                roleplayDeleteTarget = null
+                zunoViewModel.deleteRoleplay(id)
+            },
+            onDismiss = { roleplayDeleteTarget = null },
         )
     }
 

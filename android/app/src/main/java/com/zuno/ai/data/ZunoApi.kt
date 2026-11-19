@@ -135,13 +135,67 @@ class ZunoApi(
         attachmentIds: List<String> = emptyList(),
         parts: List<String> = emptyList(),
         recommendationId: String? = null,
+        draft: TopicDraft? = null,
     ): TopicDetail {
         val body = JSONObject()
             .put("prompt", prompt)
             .put("attachmentIds", JSONArray(attachmentIds))
             .put("parts", JSONArray(parts))
         recommendationId?.takeIf { it.isNotBlank() }?.let { body.put("recommendationId", it) }
+        draft?.let { body.put("draft", it.toJson()) }
         return send("POST", "/topics", body).getJSONObject("topic").toTopicDetail()
+    }
+
+    suspend fun discoverTopics(category: String = "all", query: String = ""): DiscoverTopicsResult {
+        val encodedQ = java.net.URLEncoder.encode(query, "UTF-8")
+        val encodedCat = java.net.URLEncoder.encode(category, "UTF-8")
+        val json = get("/topics/discover?category=$encodedCat&q=$encodedQ")
+        return DiscoverTopicsResult(
+            official = json.listOf("official").map { it.toDiscoverTopic() },
+            community = json.listOf("community").map { it.toDiscoverTopic() },
+        )
+    }
+
+    suspend fun discoverTopic(idOrToken: String): DiscoverTopic {
+        val encoded = java.net.URLEncoder.encode(idOrToken, "UTF-8")
+        return get("/topics/discover/$encoded").getJSONObject("topic").toDiscoverTopic()
+    }
+
+    suspend fun topicBuilderTurn(
+        turns: List<Pair<String, String>>,
+        attachmentIds: List<String> = emptyList(),
+    ): TopicBuilderTurnResult {
+        val turnsArray = JSONArray().apply {
+            turns.forEach { (role, text) ->
+                put(JSONObject().put("role", role).put("text", text))
+            }
+        }
+        val body = JSONObject()
+            .put("turns", turnsArray)
+            .put("attachmentIds", JSONArray(attachmentIds))
+        return send("POST", "/topics/builder/turn", body).toTopicBuilderTurnResult()
+    }
+
+    suspend fun saveTopic(id: String): TopicDetail =
+        send("POST", "/topics/$id/save").getJSONObject("topic").toTopicDetail()
+
+    suspend fun setTopicPinned(id: String, pinned: Boolean): TopicDetail =
+        send("PATCH", "/topics/$id", JSONObject().put("pinned", pinned)).getJSONObject("topic").toTopicDetail()
+
+    suspend fun setTopicShare(id: String, public: Boolean): TopicShareResult =
+        send("PUT", "/topics/$id/share", JSONObject().put("visibility", if (public) "public" else "private")).let {
+            TopicShareResult(
+                public = it.optString("visibility") == "public",
+                shareUrl = if (it.isNull("shareUrl")) null else it.optString("shareUrl"),
+                learnersCount = it.optInt("learnersCount", 0),
+                topic = it.getJSONObject("topic").toTopicDetail(),
+            )
+        }
+
+    suspend fun reportTopic(id: String, reason: ReportReason, details: String) {
+        val body = JSONObject().put("reason", reason.code)
+        if (details.isNotBlank()) body.put("details", details.trim())
+        send("POST", "/topics/$id/report", body)
     }
 
     /** Sub-topics found in learning material, for the learner to include or skip. */
@@ -210,11 +264,78 @@ class ZunoApi(
 
     suspend fun roleplays(): List<Roleplay> = get("/roleplays").listOf("roleplays").map { it.toRoleplay() }
 
+    suspend fun roleplay(id: String): Roleplay = get("/roleplays/$id").getJSONObject("roleplay").toRoleplay()
+
+    suspend fun discoverRoleplays(category: String = "all", query: String = ""): DiscoverRoleplaysResult {
+        val encodedQ = java.net.URLEncoder.encode(query, "UTF-8")
+        val encodedCat = java.net.URLEncoder.encode(category, "UTF-8")
+        val json = get("/roleplays/discover?category=$encodedCat&q=$encodedQ")
+        return DiscoverRoleplaysResult(
+            official = json.listOf("official").map { it.toDiscoverRoleplay() },
+            community = json.listOf("community").map { it.toDiscoverRoleplay() },
+        )
+    }
+
+    suspend fun discoverRoleplay(idOrToken: String): DiscoverRoleplay {
+        val encoded = java.net.URLEncoder.encode(idOrToken, "UTF-8")
+        return get("/roleplays/discover/$encoded").getJSONObject("roleplay").toDiscoverRoleplay()
+    }
+
+    suspend fun roleplayBuilderTurn(
+        turns: List<Pair<String, String>>,
+        attachmentIds: List<String> = emptyList(),
+    ): RoleplayBuilderTurnResult {
+        val turnsArray = JSONArray().apply {
+            turns.forEach { (role, text) ->
+                put(JSONObject().put("role", role).put("text", text))
+            }
+        }
+        val body = JSONObject()
+            .put("turns", turnsArray)
+            .put("attachmentIds", JSONArray(attachmentIds))
+        return send("POST", "/roleplays/builder/turn", body).toRoleplayBuilderTurnResult()
+    }
+
     suspend fun createRoleplay(scenario: String, userRole: String, aiRole: String): ConversationThread {
         val body = JSONObject().put("scenario", scenario)
         if (userRole.isNotBlank()) body.put("userRole", userRole)
         if (aiRole.isNotBlank()) body.put("aiRole", aiRole)
         return send("POST", "/roleplays", body).toThread()
+    }
+
+    suspend fun createRoleplayDraft(
+        scenario: String,
+        draft: RoleplayDraft? = null,
+        attachmentIds: List<String> = emptyList(),
+    ): Roleplay {
+        val body = JSONObject()
+            .put("scenario", scenario)
+            .put("attachmentIds", JSONArray(attachmentIds))
+            .put("skipInitialRun", true)
+        draft?.let { body.put("draft", it.toJson()) }
+        return send("POST", "/roleplays", body).getJSONObject("roleplay").toRoleplay()
+    }
+
+    suspend fun saveRoleplay(id: String): Roleplay =
+        send("POST", "/roleplays/$id/save").getJSONObject("roleplay").toRoleplay()
+
+    suspend fun setRoleplayPinned(id: String, pinned: Boolean): Roleplay =
+        send("PATCH", "/roleplays/$id", JSONObject().put("pinned", pinned)).getJSONObject("roleplay").toRoleplay()
+
+    suspend fun setRoleplayShare(id: String, public: Boolean): RoleplayShareResult =
+        send("PUT", "/roleplays/$id/share", JSONObject().put("visibility", if (public) "public" else "private")).let {
+            RoleplayShareResult(
+                public = it.optString("visibility") == "public",
+                shareUrl = if (it.isNull("shareUrl")) null else it.optString("shareUrl"),
+                practicedCount = it.optInt("practicedCount", 0),
+                roleplay = it.getJSONObject("roleplay").toRoleplay(),
+            )
+        }
+
+    suspend fun reportRoleplay(id: String, reason: ReportReason, details: String) {
+        val body = JSONObject().put("reason", reason.code)
+        if (details.isNotBlank()) body.put("details", details.trim())
+        send("POST", "/roleplays/$id/report", body)
     }
 
     suspend fun openRoleplay(id: String): ConversationThread = send("POST", "/roleplays/$id/open").toThread()

@@ -80,6 +80,19 @@ export const topic = pgTable(
     title: text("title").notNull(),
     translation: text("translation").notNull(),
     language: text("language").notNull(),
+    category: text("category", {
+      enum: ["travel", "food", "work", "daily_life", "grammar", "culture"],
+    })
+      .default("daily_life")
+      .notNull(),
+    visibility: text("visibility", { enum: ["private", "public"] }).default("private").notNull(),
+    sourceKind: text("source_kind", { enum: ["user", "system", "community"] }).default("user").notNull(),
+    shareToken: text("share_token").unique(),
+    sourceTopicId: text("source_topic_id"),
+    authorHandle: text("author_handle"),
+    learnersCount: integer("learners_count").default(0).notNull(),
+    pinnedAt: timestamp("pinned_at"),
+    publishedAt: timestamp("published_at"),
     /** Digest of the learning material the topic was built from; lesson tutors use it as context. */
     material: text("material"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -88,7 +101,10 @@ export const topic = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("topic_userId_idx").on(table.userId)],
+  (table) => [
+    index("topic_userId_idx").on(table.userId),
+    index("topic_discover_idx").on(table.language, table.visibility, table.category),
+  ],
 );
 
 export type LessonCurriculum = {
@@ -167,13 +183,48 @@ export const roleplay = pgTable(
     aiRole: text("ai_role").notNull(),
     setting: text("setting").notNull(),
     language: text("language").notNull(),
+    category: text("category", {
+      enum: ["travel", "food", "work", "housing", "health", "social"],
+    })
+      .default("social")
+      .notNull(),
+    visibility: text("visibility", { enum: ["private", "public"] }).default("private").notNull(),
+    sourceKind: text("source_kind", { enum: ["user", "system", "community"] }).default("user").notNull(),
+    shareToken: text("share_token").unique(),
+    sourceRoleplayId: text("source_roleplay_id"),
+    authorHandle: text("author_handle"),
+    practicedCount: integer("practiced_count").default(0).notNull(),
+    pinnedAt: timestamp("pinned_at"),
+    publishedAt: timestamp("published_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("roleplay_userId_idx").on(table.userId)],
+  (table) => [
+    index("roleplay_userId_idx").on(table.userId),
+    index("roleplay_discover_idx").on(table.language, table.visibility, table.category),
+  ],
+);
+
+export const communityReport = pgTable(
+  "community_report",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    targetKind: text("target_kind", { enum: ["topic", "roleplay"] }).notNull(),
+    targetId: text("target_id").notNull(),
+    reason: text("reason", {
+      enum: ["wrong_correction", "wrong_language_level", "offensive", "unsafe", "other"],
+    }).notNull(),
+    details: text("details"),
+    status: text("status").default("open").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("community_report_target_idx").on(table.targetKind, table.targetId)],
 );
 
 /** A conversation thread: Free Talk, a roleplay run, or a topic lesson. */

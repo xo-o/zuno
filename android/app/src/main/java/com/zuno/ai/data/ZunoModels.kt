@@ -120,7 +120,21 @@ data class TopicSummary(
     val estimatedMinutesLeft: Int,
     val progress: Int,
     val status: TopicStatus,
-)
+    val language: String = "es",
+    val category: String = "daily_life",
+    val visibility: String = "private",
+    val sourceKind: String = "user",
+    val shareUrl: String? = null,
+    val sourceTopicId: String? = null,
+    val authorHandle: String? = null,
+    val learnersCount: Int = 0,
+    val pinned: Boolean = false,
+) {
+    val isPublic: Boolean get() = visibility == "public"
+    val isUserOwned: Boolean get() = sourceKind == "user"
+    val effectiveShareUrl: String?
+        get() = shareUrl ?: if (!isUserOwned && sourceTopicId != null) "https://api.heyzuno.app/t/$sourceTopicId" else null
+}
 
 data class TopicLesson(
     val id: String,
@@ -288,6 +302,138 @@ data class Roleplay(
     val scenario: String,
     val userRole: String,
     val aiRole: String,
+    val setting: String = "",
+    val language: String = "es",
+    val category: String = "social",
+    val visibility: String = "private",
+    val sourceKind: String = "user",
+    val shareUrl: String? = null,
+    val sourceRoleplayId: String? = null,
+    val authorHandle: String? = null,
+    val practicedCount: Int = 0,
+    val pinned: Boolean = false,
+) {
+    val isPublic: Boolean get() = visibility == "public"
+    val isUserOwned: Boolean get() = sourceKind == "user"
+    val effectiveShareUrl: String?
+        get() = shareUrl ?: if (!isUserOwned && sourceRoleplayId != null) "https://api.heyzuno.app/r/$sourceRoleplayId" else null
+}
+
+// ── 03 · Topics & 04 · Roleplays Discovery, Preview & Chat Builder Models ───
+
+data class DiscoverTopicLesson(
+    val position: Int,
+    val title: String,
+    val translation: String,
+    val objective: String,
+)
+
+data class DiscoverTopic(
+    val id: String,
+    val title: String,
+    val translation: String,
+    val language: String,
+    val category: String,
+    val sourceKind: String, // "system" | "community"
+    val authorHandle: String?,
+    val level: String,
+    val learnersCount: Int,
+    val totalLessons: Int,
+    val shareUrl: String?,
+    val alreadySaved: Boolean,
+    val savedTopicId: String? = null,
+    val lessons: List<DiscoverTopicLesson> = emptyList(),
+) {
+    val isOfficial: Boolean get() = sourceKind == "system"
+}
+
+data class DiscoverTopicsResult(
+    val official: List<DiscoverTopic>,
+    val community: List<DiscoverTopic>,
+)
+
+data class DiscoverRoleplay(
+    val id: String,
+    val title: String,
+    val scenario: String,
+    val userRole: String,
+    val aiRole: String,
+    val setting: String,
+    val language: String,
+    val category: String,
+    val sourceKind: String, // "system" | "community"
+    val authorHandle: String?,
+    val level: String,
+    val practicedCount: Int,
+    val shareUrl: String?,
+    val alreadySaved: Boolean,
+    val savedRoleplayId: String? = null,
+) {
+    val isOfficial: Boolean get() = sourceKind == "system"
+}
+
+data class DiscoverRoleplaysResult(
+    val official: List<DiscoverRoleplay>,
+    val community: List<DiscoverRoleplay>,
+)
+
+data class TopicDraftLesson(
+    val title: String,
+    val translation: String,
+    val objective: String,
+)
+
+data class TopicDraft(
+    val title: String,
+    val translation: String,
+    val category: String,
+    val prompt: String,
+    val lessons: List<TopicDraftLesson>,
+)
+
+data class TopicBuilderTurnResult(
+    val reply: String,
+    val ready: Boolean,
+    val draft: TopicDraft?,
+    val contextNote: String?,
+)
+
+data class RoleplayDraft(
+    val title: String,
+    val scenario: String,
+    val userRole: String,
+    val aiRole: String,
+    val setting: String,
+    val category: String,
+)
+
+data class RoleplayBuilderTurnResult(
+    val reply: String,
+    val ready: Boolean,
+    val draft: RoleplayDraft?,
+    val contextNote: String?,
+)
+
+data class BuilderTurnMessage(
+    val id: String,
+    val isUser: Boolean,
+    val text: String,
+    val attachmentNames: List<String> = emptyList(),
+    val contextNote: String? = null,
+)
+
+data class TopicShareResult(
+    val public: Boolean,
+    val shareUrl: String?,
+    val learnersCount: Int,
+    val topic: TopicDetail,
+)
+
+data class RoleplayShareResult(
+    val public: Boolean,
+    val shareUrl: String?,
+    val practicedCount: Int,
+    val roleplay: Roleplay,
 )
 
 enum class ConversationKind { FreeTalk, Roleplay, Lesson }
@@ -602,6 +748,15 @@ internal fun JSONObject.toTopicSummary(): TopicSummary {
             "in_progress" -> TopicStatus.InProgress
             else -> TopicStatus.NotStarted
         },
+        language = optString("language", "es"),
+        category = optString("category", "daily_life"),
+        visibility = optString("visibility", "private"),
+        sourceKind = optString("sourceKind", "user"),
+        shareUrl = optStringOrNull("shareUrl"),
+        sourceTopicId = optStringOrNull("sourceTopicId"),
+        authorHandle = optStringOrNull("authorHandle"),
+        learnersCount = optInt("learnersCount", 0),
+        pinned = optBoolean("pinned", false),
     )
 }
 
@@ -629,7 +784,123 @@ internal fun JSONObject.toRoleplay() = Roleplay(
     scenario = optString("scenario"),
     userRole = optString("userRole"),
     aiRole = optString("aiRole"),
+    setting = optString("setting", ""),
+    language = optString("language", "es"),
+    category = optString("category", "social"),
+    visibility = optString("visibility", "private"),
+    sourceKind = optString("sourceKind", "user"),
+    shareUrl = optStringOrNull("shareUrl"),
+    sourceRoleplayId = optStringOrNull("sourceRoleplayId"),
+    authorHandle = optStringOrNull("authorHandle"),
+    practicedCount = optInt("practicedCount", 0),
+    pinned = optBoolean("pinned", false),
 )
+
+internal fun JSONObject.toDiscoverTopic() = DiscoverTopic(
+    id = getString("id"),
+    title = optString("title"),
+    translation = optString("translation"),
+    language = optString("language", "es"),
+    category = optString("category", "daily_life"),
+    sourceKind = optString("sourceKind", "community"),
+    authorHandle = optStringOrNull("authorHandle"),
+    level = optString("level", "B1"),
+    learnersCount = optInt("learnersCount", 0),
+    totalLessons = optInt("totalLessons", 5),
+    shareUrl = optStringOrNull("shareUrl"),
+    alreadySaved = optBoolean("alreadySaved", false),
+    savedTopicId = optStringOrNull("savedTopicId"),
+    lessons = optJSONArray("lessons")?.objects()?.map {
+        DiscoverTopicLesson(
+            position = it.optInt("position"),
+            title = it.optString("title"),
+            translation = it.optString("translation"),
+            objective = it.optString("objective"),
+        )
+    }.orEmpty(),
+)
+
+internal fun JSONObject.toDiscoverRoleplay() = DiscoverRoleplay(
+    id = getString("id"),
+    title = optString("title"),
+    scenario = optString("scenario"),
+    userRole = optString("userRole"),
+    aiRole = optString("aiRole"),
+    setting = optString("setting", ""),
+    language = optString("language", "es"),
+    category = optString("category", "social"),
+    sourceKind = optString("sourceKind", "community"),
+    authorHandle = optStringOrNull("authorHandle"),
+    level = optString("level", "B1"),
+    practicedCount = optInt("practicedCount", 0),
+    shareUrl = optStringOrNull("shareUrl"),
+    alreadySaved = optBoolean("alreadySaved", false),
+    savedRoleplayId = optStringOrNull("savedRoleplayId"),
+)
+
+internal fun JSONObject.toTopicBuilderTurnResult() = TopicBuilderTurnResult(
+    reply = optString("reply"),
+    ready = optBoolean("ready", false),
+    draft = optJSONObject("draft")?.let { d ->
+        TopicDraft(
+            title = d.optString("title"),
+            translation = d.optString("translation"),
+            category = d.optString("category", "daily_life"),
+            prompt = d.optString("prompt", d.optString("title")),
+            lessons = d.optJSONArray("lessons")?.objects()?.map { l ->
+                TopicDraftLesson(
+                    title = l.optString("title"),
+                    translation = l.optString("translation"),
+                    objective = l.optString("objective"),
+                )
+            }.orEmpty(),
+        )
+    },
+    contextNote = optStringOrNull("contextNote"),
+)
+
+internal fun JSONObject.toRoleplayBuilderTurnResult() = RoleplayBuilderTurnResult(
+    reply = optString("reply"),
+    ready = optBoolean("ready", false),
+    draft = optJSONObject("draft")?.let { d ->
+        RoleplayDraft(
+            title = d.optString("title"),
+            scenario = d.optString("scenario"),
+            userRole = d.optString("userRole"),
+            aiRole = d.optString("aiRole"),
+            setting = d.optString("setting"),
+            category = d.optString("category", "social"),
+        )
+    },
+    contextNote = optStringOrNull("contextNote"),
+)
+
+internal fun TopicDraft.toJson(): JSONObject = JSONObject()
+    .put("title", title)
+    .put("translation", translation)
+    .put("category", category)
+    .put("prompt", prompt)
+    .put(
+        "lessons",
+        org.json.JSONArray().apply {
+            lessons.forEach { l ->
+                put(
+                    JSONObject()
+                        .put("title", l.title)
+                        .put("translation", l.translation)
+                        .put("objective", l.objective),
+                )
+            }
+        },
+    )
+
+internal fun RoleplayDraft.toJson(): JSONObject = JSONObject()
+    .put("title", title)
+    .put("scenario", scenario)
+    .put("userRole", userRole)
+    .put("aiRole", aiRole)
+    .put("setting", setting)
+    .put("category", category)
 
 internal fun JSONObject.toConversation() = Conversation(
     id = getString("id"),

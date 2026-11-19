@@ -9,9 +9,10 @@ import { AccessToken } from "livekit-server-sdk";
 import { makeSignature } from "better-auth/crypto";
 import { describeAttachment, startAttachmentJobs } from "./lib/attachments.js";
 import { auth } from "./lib/auth.js";
-import { eq } from "drizzle-orm";
-import { conversation } from "./db/app-schema.js";
+import { and, eq } from "drizzle-orm";
+import { conversation, roleplay, topic } from "./db/app-schema.js";
 import { db } from "./db/index.js";
+import { findSeedRoleplay, findSeedTopic } from "./lib/community-seeds.js";
 import { contextFor, findConversation, listMessages } from "./lib/conversations.js";
 import { GeminiError } from "./lib/gemini.js";
 import { startJobRunner } from "./lib/jobs.js";
@@ -19,7 +20,13 @@ import { languageList } from "./lib/languages.js";
 import { applyUnsubscribe, verifyUnsubscribe } from "./lib/notifications.js";
 import "./lib/schedule-service.js";
 import { publicBaseUrl } from "./lib/serializers.js";
-import { renderMessagePage, renderNotFoundPage, renderSharePage } from "./lib/share-page.js";
+import {
+  renderMessagePage,
+  renderNotFoundPage,
+  renderRoleplaySharePage,
+  renderSharePage,
+  renderTopicSharePage,
+} from "./lib/share-page.js";
 import { completeFlow, consumeFlow, getFlow } from "./lib/magic-link-flows.js";
 import { renderVerifyLandingPage, renderVerifyResultPage } from "./lib/verify-page.js";
 import { getProfile } from "./lib/profile.js";
@@ -144,6 +151,96 @@ app.get("/s/:token", async (c) => {
       language: row.language,
       messages,
       url: `${publicBaseUrl()}/s/${row.shareToken}`,
+    }),
+  );
+});
+
+/** Public preview page for a shared or official Topic (`/t/:token`). */
+app.get("/t/:token", async (c) => {
+  const token = c.req.param("token");
+  c.header("Cache-Control", "no-store");
+  const seed = findSeedTopic(token);
+  if (seed) {
+    return c.html(
+      renderTopicSharePage({
+        title: seed.generated.title,
+        translation: seed.generated.translation,
+        language: seed.language,
+        authorHandle: seed.authorHandle,
+        lessons: seed.generated.lessons.map((l, idx) => ({ position: idx + 1, ...l })),
+        url: `${publicBaseUrl()}/t/${seed.id}`,
+        appDeepLink: `zuno://topic-preview/${seed.id}`,
+      }),
+    );
+  }
+  const row =
+    (await db.query.topic.findFirst({
+      where: and(eq(topic.shareToken, token), eq(topic.visibility, "public")),
+      with: { lessons: true },
+    })) ??
+    (await db.query.topic.findFirst({
+      where: and(eq(topic.id, token), eq(topic.visibility, "public")),
+      with: { lessons: true },
+    }));
+  if (!row) return c.html(renderNotFoundPage(), 404);
+  const ordered = [...row.lessons].sort((a, b) => a.position - b.position);
+  return c.html(
+    renderTopicSharePage({
+      title: row.title,
+      translation: row.translation,
+      language: row.language,
+      authorHandle: row.authorHandle,
+      lessons: ordered.map((l) => ({
+        position: l.position,
+        title: l.title,
+        translation: l.translation,
+        objective: l.objective,
+      })),
+      url: `${publicBaseUrl()}/t/${row.shareToken ?? row.id}`,
+      appDeepLink: `zuno://topic-preview/${row.shareToken ?? row.id}`,
+    }),
+  );
+});
+
+/** Public preview page for a shared or official Roleplay (`/r/:token`). */
+app.get("/r/:token", async (c) => {
+  const token = c.req.param("token");
+  c.header("Cache-Control", "no-store");
+  const seed = findSeedRoleplay(token);
+  if (seed) {
+    return c.html(
+      renderRoleplaySharePage({
+        title: seed.generated.title,
+        scenario: seed.generated.scenario,
+        userRole: seed.generated.userRole,
+        aiRole: seed.generated.aiRole,
+        setting: seed.generated.setting,
+        language: seed.language,
+        authorHandle: seed.authorHandle,
+        url: `${publicBaseUrl()}/r/${seed.id}`,
+        appDeepLink: `zuno://roleplay-preview/${seed.id}`,
+      }),
+    );
+  }
+  const row =
+    (await db.query.roleplay.findFirst({
+      where: and(eq(roleplay.shareToken, token), eq(roleplay.visibility, "public")),
+    })) ??
+    (await db.query.roleplay.findFirst({
+      where: and(eq(roleplay.id, token), eq(roleplay.visibility, "public")),
+    }));
+  if (!row) return c.html(renderNotFoundPage(), 404);
+  return c.html(
+    renderRoleplaySharePage({
+      title: row.title,
+      scenario: row.scenario,
+      userRole: row.userRole,
+      aiRole: row.aiRole,
+      setting: row.setting,
+      language: row.language,
+      authorHandle: row.authorHandle,
+      url: `${publicBaseUrl()}/r/${row.shareToken ?? row.id}`,
+      appDeepLink: `zuno://roleplay-preview/${row.shareToken ?? row.id}`,
     }),
   );
 });

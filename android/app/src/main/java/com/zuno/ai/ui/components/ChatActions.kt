@@ -33,23 +33,36 @@ fun ZunoShareSheet(
     onShare: () -> Unit,
     onCopyLink: () -> Unit,
     onDismiss: () -> Unit,
+    title: String = stringResource(R.string.share_title),
+    onlyMeDescription: String = stringResource(R.string.share_only_me_desc),
+    publicTitle: String = stringResource(R.string.share_public),
+    publicDescription: String = stringResource(R.string.share_public_desc),
+    linkSubtitle: String? = null,
 ) {
-    ZunoSheet(onDismiss = onDismiss, title = stringResource(R.string.share_title)) {
+    ZunoSheet(onDismiss = onDismiss, title = title) {
         ZunoChoiceGroup(Modifier.padding(horizontal = ZunoSpace.s12)) {
             ZunoChoiceRow(
                 icon = R.drawable.zuno_ic_t_lock,
                 title = stringResource(R.string.share_only_me),
-                description = stringResource(R.string.share_only_me_desc),
+                description = onlyMeDescription,
                 selected = !isPublic,
                 onClick = { if (isPublic && !busy) onSelectPublic(false) },
             )
             ZunoChoiceRow(
                 icon = R.drawable.zuno_ic_t_globe,
-                title = stringResource(R.string.share_public),
-                description = stringResource(R.string.share_public_desc),
+                title = publicTitle,
+                description = publicDescription,
                 selected = isPublic,
                 onClick = { if (!isPublic && !busy) onSelectPublic(true) },
                 showDivider = true,
+            )
+        }
+        if (isPublic && !linkSubtitle.isNullOrBlank()) {
+            androidx.compose.material3.Text(
+                text = linkSubtitle,
+                style = com.zuno.ai.ui.theme.ZunoType.FootnoteRegular,
+                color = com.zuno.ai.ui.theme.ZunoColors.TextSecondary,
+                modifier = Modifier.padding(horizontal = ZunoSpace.s16),
             )
         }
         val ready = isPublic && shareUrl != null && !busy
@@ -61,12 +74,16 @@ fun ZunoShareSheet(
                 label = stringResource(R.string.share_action),
                 onClick = onShare,
                 variant = ZunoButtonVariant.Secondary,
+                leadingIcon = R.drawable.zuno_ic_t_share,
+                leadingIconTint = com.zuno.ai.ui.theme.ZunoColors.IconPrimary,
                 enabled = ready,
                 modifier = Modifier.weight(1f),
             )
             ZunoButton(
                 label = stringResource(R.string.share_copy_link),
                 onClick = onCopyLink,
+                leadingIcon = R.drawable.zuno_ic_t_copy,
+                leadingIconTint = com.zuno.ai.ui.theme.ZunoColors.IconOnInverse,
                 enabled = ready,
                 loading = busy,
                 modifier = Modifier.weight(1f),
