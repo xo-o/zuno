@@ -11,12 +11,12 @@ import { describeAttachment, startAttachmentJobs } from "./lib/attachments.js";
 import { auth } from "./lib/auth.js";
 import { and, eq } from "drizzle-orm";
 import { conversation, roleplay, topic } from "./db/app-schema.js";
-import { db } from "./db/index.js";
+import { db, ensureRuntimeSchema } from "./db/index.js";
 import { findSeedRoleplay, findSeedTopic } from "./lib/community-seeds.js";
 import { contextFor, findConversation, listMessages } from "./lib/conversations.js";
 import { GeminiError } from "./lib/gemini.js";
 import { startJobRunner } from "./lib/jobs.js";
-import { languageList } from "./lib/languages.js";
+import { languageList, languageName } from "./lib/languages.js";
 import { applyUnsubscribe, verifyUnsubscribe } from "./lib/notifications.js";
 import "./lib/schedule-service.js";
 import { publicBaseUrl } from "./lib/serializers.js";
@@ -29,8 +29,8 @@ import {
 } from "./lib/share-page.js";
 import { completeFlow, consumeFlow, getFlow } from "./lib/magic-link-flows.js";
 import { renderVerifyLandingPage, renderVerifyResultPage } from "./lib/verify-page.js";
-import { getProfile } from "./lib/profile.js";
-import { voiceInstructions } from "./lib/tutor.js";
+import { getProfile, type LearnerProfile } from "./lib/profile.js";
+import { variety, voiceInstructions } from "./lib/tutor.js";
 import { cartesiaVoiceFor } from "./lib/voices.js";
 import { accountDeletionRoutes } from "./routes/account.js";
 import { attachmentRoutes } from "./routes/attachments.js";
@@ -40,7 +40,7 @@ import { conversationRoutes, messageRoutes, reminderRoutes, tutorRoutes } from "
 import { deviceRoutes } from "./routes/devices.js";
 import { lessonRoutes } from "./routes/lessons.js";
 import { profileRoutes } from "./routes/profile.js";
-import { roleplayRoutes } from "./routes/roleplays.js";
+import { ensureRoleplayGoals, roleplayRoutes } from "./routes/roleplays.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { topicRoutes } from "./routes/topics.js";
 import { ttsRoutes } from "./routes/tts.js";
@@ -329,6 +329,12 @@ app.post("/api/livekit/token", async (c) => {
   }
 
   const thread = body.conversationId ? await findConversation(user.id, body.conversationId) : undefined;
+  const targetLanguage = thread?.language || body.language || profile.targetLanguage;
+  const effectiveProfile =
+    targetLanguage !== profile.targetLanguage
+      ? { ...profile, targetLanguage: targetLanguage as LearnerProfile["targetLanguage"] }
+      : profile;
+
   const context = thread ? await contextFor(thread) : { kind: "freetalk" as const };
   const history = thread ? (await listMessages(thread.id)).slice(-VOICE_HISTORY_TURNS) : [];
   const transcript = history
@@ -337,13 +343,71 @@ app.post("/api/livekit/token", async (c) => {
       return `${m.role === "user" ? "Learner" : "You"}: ${[files, m.text].filter(Boolean).join("\n")}`;
     })
     .join("\n");
-  const instructions = transcript
-    ? `${voiceInstructions(context, profile)}\n\nConversation so far (continue naturally from here):\n${transcript}`
-    : voiceInstructions(context, profile);
   const lastTurn = history.at(-1);
   const opening = body.speakLastReply && lastTurn?.role !== "user" ? lastTurn?.text : undefined;
 
-  const targetLanguage = body.language ?? profile.targetLanguage;
+  if (thread?.kind === "roleplay" && thread.roleplayId) {
+    const rpRow = await db.query.roleplay.findFirst({
+      where: and(eq(roleplay.id, thread.roleplayId), eq(roleplay.userId, user.id)),
+    });
+    if (rpRow) {
+      const goals = await ensureRoleplayGoals(rpRow, effectiveProfile);
+      const rpToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+        identity: user.id,
+        name: user.name || user.email,
+        ttl: TOKEN_TTL,
+        metadata: JSON.stringify({
+          mode: "roleplay",
+          provider: "cartesia",
+          voice,
+          tutorVoice: profile.tutorVoice,
+          roleplayId: rpRow.id,
+          conversationId: thread.id,
+          language: targetLanguage,
+          targetLanguage,
+          targetLanguageName: languageName(targetLanguage),
+          varietyName: variety(effectiveProfile),
+          nativeLanguage: profile.nativeLanguage,
+          nativeLanguageName: languageName(profile.nativeLanguage),
+          accent: effectiveProfile.accent,
+          level: effectiveProfile.level,
+          teachInTarget: effectiveProfile.teachInTarget,
+          teachingStyle: effectiveProfile.teachingStyle,
+          strictMode: effectiveProfile.strictMode,
+          handsFree: effectiveProfile.handsFree,
+          resume: history.length > 0,
+          opening,
+          historyTranscript: transcript,
+          roleplay: {
+            id: rpRow.id,
+            title: rpRow.title,
+            scenario: rpRow.scenario,
+            userRole: rpRow.userRole,
+            aiRole: rpRow.aiRole,
+            setting: rpRow.setting,
+            goals,
+          },
+        }),
+      });
+      rpToken.addGrant({
+        room,
+        roomJoin: true,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+      });
+      return c.json({
+        token: await rpToken.toJwt(),
+        url: LIVEKIT_URL,
+        room,
+        identity: user.id,
+      });
+    }
+  }
+
+  const instructions = transcript
+    ? `${voiceInstructions(context, effectiveProfile)}\n\nConversation so far (continue naturally from here):\n${transcript}`
+    : voiceInstructions(context, effectiveProfile);
 
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
@@ -355,13 +419,16 @@ app.post("/api/livekit/token", async (c) => {
       voice,
       language: targetLanguage,
       targetLanguage,
+      targetLanguageName: languageName(targetLanguage),
+      varietyName: variety(effectiveProfile),
       nativeLanguage: profile.nativeLanguage,
-      accent: profile.accent,
-      // Preferences · Tutor voice ("warm" / "calm" / "energetic") and Hands-free (auto turn-taking).
+      nativeLanguageName: languageName(profile.nativeLanguage),
+      accent: effectiveProfile.accent,
+      level: effectiveProfile.level,
+      teachInTarget: effectiveProfile.teachInTarget,
       tutorVoice: profile.tutorVoice,
       handsFree: profile.handsFree,
       instructions,
-      // The agent stays quiet until the learner speaks when the conversation is already under way.
       resume: history.length > 0,
       opening,
     }),
@@ -507,6 +574,7 @@ serve({
   fetch: app.fetch,
   port,
 });
+void ensureRuntimeSchema();
 startAttachmentJobs();
 // The queue only runs in production (or with RUN_JOBS=1), so a local dev server pointed at the same
 // database doesn't claim jobs it can't deliver (e.g. without Firebase credentials).

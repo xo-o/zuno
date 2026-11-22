@@ -305,7 +305,7 @@ Extend `broadcast_event()` and `_on_client_data()` in `voice-agent/agent.py` and
   * **`03e` (Tutor Turn):** `Roleplay Pill` (`Bus driver · Goal 1 of 2 · Ask route`), full-size `Voice Orb · Speaking`, 2-line rolling captions (`Previous` dimmed `text/tertiary` → `Current` bold `text/primary`).
   * **`03f` (Learner Turn):** `Roleplay Pill` (`Bus driver · Goal 2 of 2 · Ask stops`), full-size `Voice Orb · Listening`, dimmed last tutor line → bold live user speech, `Listening · Take your time` indicator, rescue chips (`Hint`, `Translate`, `Slow`).
 * **Implementation Rules:**
-  1. **Switch STT to Target Language:** Ensure Deepgram STT is locked to `targetLanguage` + `accent` (e.g., `es-419` or `es-ES`).
+  1. **Multilingual STT + Regional `sonic-3.6` TTS:** Keep Deepgram Nova-3 in `language="multi"` (when both `nativeLanguage` and `targetLanguage` are supported) so learners can speak in `targetLanguage` or ask a quick clarification question in `nativeLanguage`, and stream all assistant clauses through `stream_bilingual_tts()` (`sonic-3.6` + regional `locale`, e.g. `es-MX` / `es-ES`). (Standalone practice roleplays follow the full specification in [`docs/ROLEPLAY_VOICE_FLOW_SPEC.md`](./ROLEPLAY_VOICE_FLOW_SPEC.md).)
   2. **Goal Tracking via LLM Tool Call:** Give Gemini 2.5 Flash a lightweight function tool `mark_roleplay_goal_complete(goal_id: str, recast_note?: { user_said: str, natural_form: str })`:
      * Whenever the learner satisfies Goal 1, the tool updates `Roleplay Pill` to `Goal 2 of 2 · Ask stops`.
   3. **Strict Non-Interruption (Implicit Recasting):**

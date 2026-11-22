@@ -1,19 +1,25 @@
 package com.zuno.ai.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.media.AudioManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.twilio.audioswitch.AudioDevice
 import com.zuno.ai.avatar.audio.AvatarSpeechSink
 import com.zuno.ai.avatar.audio.LiveKitAvatarAudioTap
 import com.zuno.ai.data.LessonEvaluation
+import com.zuno.ai.data.LessonPillUi
 import com.zuno.ai.data.LessonSessionTicket
+import com.zuno.ai.data.LessonStageKind
 import com.zuno.ai.data.LessonStageUi
 import com.zuno.ai.data.LessonTurnUi
 import com.zuno.ai.data.LivekitTicket
 import com.zuno.ai.data.OnboardingVoiceTurnEvent
 import com.zuno.ai.data.PronunciationEvalUi
 import com.zuno.ai.data.RescuePayloadUi
+import com.zuno.ai.data.RoleplaySessionTicket
 import com.zuno.ai.data.toLessonEvaluation
 import com.zuno.ai.data.toLessonStageUi
 import com.zuno.ai.data.toLessonTurnUi
@@ -255,6 +261,46 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun connectRoleplay(ticket: RoleplaySessionTicket) {
+        if (_agentState.value != AgentState.DISCONNECTED) {
+            disconnectInternal()
+        }
+        resetLessonState()
+        val firstGoal = ticket.goals.firstOrNull()
+        val goalLabel = if (firstGoal != null) {
+            "Goal 1 of ${ticket.goals.size} · ${firstGoal.label}".trim(' ', '·')
+        } else {
+            ticket.roleplay.title
+        }
+        _lessonStage.value = LessonStageUi(
+            stage = LessonStageKind.Roleplay,
+            pill = LessonPillUi(
+                icon = "users",
+                role = ticket.roleplay.aiRole,
+                goal = goalLabel,
+                contextNote = ticket.roleplay.title,
+            ),
+            card = null,
+            recallPrompt = null,
+            rescueChips = listOf("hint", "translate", "slow"),
+            roleplayGoals = ticket.goals,
+        )
+        _errorMessage.value = null
+        _agentState.value = AgentState.CONNECTING
+
+        connectJob = viewModelScope.launch {
+            try {
+                joinRoom(ticket.url, ticket.token, ticket.room)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Roleplay connection failed", e)
+                _errorMessage.value = e.message ?: "Connection failed. Please check network."
+                disconnectInternal()
+            }
+        }
+    }
+
     fun connectPeerCall(ticket: LivekitTicket, enableCamera: Boolean = false) {
         if (_agentState.value != AgentState.DISCONNECTED) {
             disconnectInternal()
@@ -301,16 +347,18 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
             runCatching { room.localParticipant.setCameraEnabled(true) }
                 .onSuccess {
                     _isCameraEnabled.value = true
-                    refreshVideoTracks(room)
                 }
         } else {
             _isCameraEnabled.value = false
         }
+        refreshVideoTracks(room)
         _isSpeakerOn.value = true
         room.setSpeakerMute(false)
         levelJob = viewModelScope.launch { pollAudioLevels(room) }
         _isMuted.value = false
-        _agentState.value = AgentState.IDLE
+        if (_agentState.value == AgentState.CONNECTING) {
+            _agentState.value = AgentState.IDLE
+        }
         if (isPeerRoom && room.remoteParticipants.values.any { !it.identity?.value.orEmpty().startsWith("agent-") }) {
             _partnerJoined.value = true
         }
@@ -395,7 +443,27 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         val room = currentRoom ?: return
         val next = !_isSpeakerOn.value
         _isSpeakerOn.value = next
-        runCatching { room.setSpeakerMute(!next) }
+        runCatching {
+            room.setSpeakerMute(false)
+            val audioHandler = room.audioSwitchHandler
+            if (audioHandler != null) {
+                val devices = audioHandler.availableAudioDevices
+                val target = if (next) {
+                    devices.firstOrNull { it is AudioDevice.Speakerphone }
+                } else {
+                    devices.firstOrNull { it is AudioDevice.BluetoothHeadset }
+                        ?: devices.firstOrNull { it is AudioDevice.WiredHeadset }
+                        ?: devices.firstOrNull { it is AudioDevice.Earpiece }
+                }
+                if (target != null) {
+                    audioHandler.selectDevice(target)
+                }
+            } else {
+                val am = getApplication<Application>().getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                @Suppress("DEPRECATION")
+                am?.isSpeakerphoneOn = next
+            }
+        }
     }
 
     fun sendPingPartner() {
@@ -414,9 +482,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         val local = room.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
         _localVideoTrack.value = if (_isCameraEnabled.value) local else null
         val remote = room.remoteParticipants.values
-            .firstOrNull()
-            ?.getTrackPublication(Track.Source.CAMERA)
-            ?.track as? VideoTrack
+            .firstNotNullOfOrNull { it.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack }
         _remoteVideoTrack.value = remote
         syncRemoteAudioSinks(room)
     }
@@ -484,7 +550,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
             is RoomEvent.TrackPublished,
             is RoomEvent.TrackUnpublished,
             is RoomEvent.TrackSubscribed,
-            is RoomEvent.TrackUnsubscribed -> {
+            is RoomEvent.TrackUnsubscribed,
+            is RoomEvent.TrackMuted,
+            is RoomEvent.TrackUnmuted -> {
                 if (room != null) refreshVideoTracks(room)
             }
             is RoomEvent.ActiveSpeakersChanged -> {
@@ -648,8 +716,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
 
         private fun stripVoiceTags(text: String): String {
             return text
-                .replace(Regex("<lang=\"?[a-zA-Z_-]+\"?>([\\s\\S]*?)</lang>"), "$1")
-                .replace(Regex("\\[[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\\]([\\s\\S]*?)\\[/[^\\]]+\\]"), "$1")
+                .replace(Regex("<lang(?:\\s+code)?\\s*=\\s*[\"']?[a-zA-Z_-]+[\"']?\\s*>([\\s\\S]*?)</lang>", RegexOption.IGNORE_CASE), "$1")
+                .replace(Regex("\\[[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\\]([\\s\\S]*?)\\[/[^\\]]+\\]", RegexOption.IGNORE_CASE), "$1")
+                .replace(Regex("</?lang[^>]*>", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("\\s{2,}"), " ")
                 .trim()
         }

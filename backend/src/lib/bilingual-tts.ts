@@ -6,13 +6,29 @@ export type SpeechSegment = {
   speed?: number;
 };
 
+const XML_LANG_TAG_RE = /<lang(?:\s+code)?\s*=\s*["']?([a-zA-Z_-]+)["']?\s*>([\s\S]*?)<\/lang>/gi;
+const BRACKET_LANG_TAG_RE = /\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\1\]/gi;
+const COMBINED_LANG_TAG_RE =
+  /(?:<lang(?:\s+code)?\s*=\s*["']?([a-zA-Z_-]+)["']?\s*>([\s\S]*?)<\/lang>|\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\3\])/gi;
+const STRAY_TAG_TOKEN_RE =
+  /(?:<\/?lang(?:\s+code\s*=\s*["']?[a-zA-Z_-]*["']?|\s*=\s*["']?[a-zA-Z_-]*["']?)?\s*>|\[\/?[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])/gi;
+
+const NON_LATIN_CHAR_RE =
+  /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/;
+
+const NON_LATIN_LANGS = new Set([
+  "ar", "bn", "el", "gu", "he", "hi", "ja", "ka", "kn", "ko", "ml",
+  "mr", "or", "pa", "ru", "ta", "te", "th", "uk", "ur", "fa", "zh",
+]);
+
 /**
- * Strips bracket tags like `[en]...[/en]` or `<lang="en">...</lang>` from text for UI display and subtitles.
+ * Strips `<lang code="en">...</lang>`, `<lang="en">...</lang>`, and `[en]...[/en]` tags for UI display.
  */
 export function stripLangTags(text: string): string {
   return text
-    .replace(/<lang="?([a-zA-Z_-]+)"?>([\s\S]*?)<\/lang>/g, "$2")
-    .replace(/\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\1\]/g, "$2")
+    .replace(XML_LANG_TAG_RE, "$2")
+    .replace(BRACKET_LANG_TAG_RE, "$2")
+    .replace(STRAY_TAG_TOKEN_RE, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -23,7 +39,10 @@ export function stripLangTags(text: string): string {
  */
 export function stripRomanization(text: string): string {
   return text
-    .replace(/([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF])\s*\([A-Za-z0-9\s,.'’\-–—]+\)/g, "$1")
+    .replace(
+      /([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF])\s*\([A-Za-z0-9\s,.'’\-–—]+\)/g,
+      "$1",
+    )
     .trim();
 }
 
@@ -43,7 +62,7 @@ export function ensureTerminalPunct(text: string, defaultPunct = "."): string {
   cleaned = cleaned.replace(/[:\-–—]+$/, "").trim();
   cleaned = cleaned.replace(/\.{3,}$|…$/, "").trim();
   if (!cleaned) return "";
-  if (!".?!;:¡¿".includes(cleaned[cleaned.length - 1])) {
+  if (!".?!;:¡¿。？！".includes(cleaned[cleaned.length - 1])) {
     cleaned += defaultPunct;
   }
   return cleaned;
@@ -74,28 +93,67 @@ export function resolveCartesiaLocale(
 
   if (lang === "fr") return acc === "canada" || acc === "canadian" ? "fr-CA" : "fr-FR";
   if (lang === "pt") return acc === "portugal" || acc === "european" ? "pt-PT" : "pt-BR";
-  if (lang === "de") return "de-DE";
+  if (lang === "de") return acc === "switzerland" || acc === "swiss" ? "de-CH" : "de-DE";
+  if (lang === "nl") return acc === "belgium" || acc === "flemish" ? "nl-BE" : "nl-NL";
   if (lang === "it") return "it-IT";
   if (lang === "ja") return "ja-JP";
   if (lang === "zh") return acc === "taiwan" || acc === "taiwanese" ? "zh-TW" : "zh-CN";
   if (lang === "ko") return "ko-KR";
   if (lang === "ru") return "ru-RU";
   if (lang === "hi") return "hi-IN";
+  if (lang === "pl") return "pl-PL";
+  if (lang === "tr") return "tr-TR";
+  if (lang === "sv") return "sv-SE";
+  if (lang === "ar") return "ar-SA";
+  if (lang === "id") return "id-ID";
+  if (lang === "vi") return "vi-VN";
 
   return lang;
 }
 
-// Regex for common pedagogical lead-ins in language learning apps (e.g. "Repeat after me: ", "Say: ")
-const LEAD_IN_REGEX = /^(repeat after me|say after me|listen and repeat|to say this|to say|you can say|say|listen|ask):?\s+/i;
+const LEAD_IN_REGEX =
+  /^(repeat after me|say after me|listen and repeat|to say this|to say|you can say|try saying|try asking|in english|that means|it means|say|listen|ask):?\s+/i;
 
-/** Common stop/function words for quick classification between two candidate languages */
 const FUNCTION_WORDS: Record<string, Set<string>> = {
-  en: new Set(["the", "a", "an", "to", "in", "for", "of", "and", "or", "is", "are", "say", "after", "repeat", "me", "listen", "this", "that", "you", "with", "now", "ask", "if", "please"]),
-  es: new Set(["el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "en", "por", "para", "con", "y", "o", "es", "son", "este", "esta", "estos", "estas", "va", "al", "cómo", "dónde", "qué", "disculpe", "gracias", "por favor"]),
-  fr: new Set(["le", "la", "les", "un", "une", "des", "du", "de", "en", "pour", "avec", "et", "ou", "est", "sont", "ce", "cette", "ces", "comment", "où", "s'il", "vous", "plaît", "merci"]),
-  de: new Set(["der", "die", "das", "ein", "eine", "einen", "einem", "einer", "eines", "und", "oder", "in", "mit", "für", "zu", "ist", "sind", "bitte", "danke", "wie", "wo", "was"]),
-  it: new Set(["il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "da", "in", "con", "su", "per", "tra", "fra", "e", "o", "è", "sono", "questo", "questa", "grazie", "per favore"]),
-  pt: new Set(["o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "do", "da", "em", "no", "na", "por", "para", "com", "e", "ou", "é", "são", "este", "esta", "obrigado", "por favor"]),
+  en: new Set([
+    "the", "a", "an", "to", "in", "for", "of", "and", "or", "is", "are", "was", "were",
+    "say", "after", "repeat", "me", "listen", "this", "that", "you", "your", "with",
+    "now", "ask", "if", "please", "means", "mean", "word", "phrase", "try", "can",
+    "how", "what", "when", "where", "why", "here", "sure",
+  ]),
+  es: new Set([
+    "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "en", "por", "para",
+    "con", "y", "o", "es", "son", "está", "están", "este", "esta", "estos", "estas", "va",
+    "al", "cómo", "dónde", "qué", "quién", "cuánto", "cuántos", "disculpe", "gracias",
+    "hola", "buenos", "buenas", "quiero", "puedo", "tiene", "tienes", "muy", "pero", "sí",
+  ]),
+  fr: new Set([
+    "le", "la", "les", "un", "une", "des", "du", "de", "en", "pour", "avec", "et", "ou",
+    "est", "sont", "ce", "cette", "ces", "comment", "où", "s'il", "vous", "plaît", "merci",
+    "bonjour", "salut", "je", "tu", "nous", "oui", "non", "très", "mais",
+  ]),
+  de: new Set([
+    "der", "die", "das", "den", "dem", "ein", "eine", "einen", "einem", "einer", "und", "oder",
+    "in", "mit", "für", "zu", "ist", "sind", "bitte", "danke", "wie", "wo", "was", "ich",
+    "du", "sie", "wir", "nicht", "auch", "auf", "haben", "möchte",
+  ]),
+  it: new Set([
+    "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "da", "in", "con", "su",
+    "per", "tra", "fra", "e", "o", "è", "sono", "questo", "questa", "grazie", "ciao",
+    "buongiorno", "vorrei", "dove", "come", "che", "non",
+  ]),
+  pt: new Set([
+    "o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "do", "da", "em", "no", "na",
+    "por", "para", "com", "e", "ou", "é", "são", "este", "esta", "obrigado", "obrigada",
+    "olá", "bom", "boa", "você", "eu", "não", "muito", "onde", "como", "quero",
+  ]),
+};
+
+const DISTINCT_LANG_MARKERS: Record<string, RegExp> = {
+  es: /[¿¡ñÑ]/,
+  de: /[ßäöüÄÖÜ]/,
+  fr: /[œæçÇ]|(?:\b(?:qu'|c'|j'|n'|s'|d'|l'))/i,
+  pt: /[ãõçÃÕÇ]/,
 };
 
 function scoreLanguageMatch(words: string[], lang: string): number {
@@ -110,94 +168,93 @@ function scoreLanguageMatch(words: string[], lang: string): number {
   return matches;
 }
 
-/**
- * Splits text into SpeechSegments, each with the proper language code.
- *
- * Handles:
- * 1. Explicit tags: `[en]Repeat after me:[/en] [es]Un elefante[/es]`
- * 2. Quotation marks containing target language phrases: `Repeat: "Un elefante"` (double quotes only)
- * 3. Lead-in phrases: `Repeat after me: Un elefante`
- * 4. Distinct scripts (e.g. English + Japanese/Russian/Arabic)
- */
-export function segmentBilingualText(
-  rawText: string,
-  options: {
-    nativeLanguage?: string;
-    targetLanguage?: string;
-    defaultLanguage?: string;
-    speed?: number;
-  } = {},
+function hasDistinctMarkers(text: string, lang: string): boolean {
+  const norm = lang.toLowerCase().split("-")[0];
+  const pat = DISTINCT_LANG_MARKERS[norm];
+  return pat ? pat.test(text) : false;
+}
+
+export function detectClauseLanguage(
+  clauseText: string,
+  nativeLanguage = "en",
+  targetLanguage = "es",
+  defaultLanguage?: string,
+): string {
+  const native = nativeLanguage.toLowerCase().split("-")[0];
+  const target = targetLanguage.toLowerCase().split("-")[0];
+  const def = (defaultLanguage ?? target).toLowerCase().split("-")[0];
+
+  if (native === target || !clauseText.trim()) return def;
+
+  const hasNonLatin = NON_LATIN_CHAR_RE.test(clauseText);
+  const targetNonLatin = NON_LATIN_LANGS.has(target);
+  const nativeNonLatin = NON_LATIN_LANGS.has(native);
+
+  if (targetNonLatin && !nativeNonLatin) return hasNonLatin ? target : native;
+  if (nativeNonLatin && !targetNonLatin) return hasNonLatin ? native : target;
+
+  if (hasDistinctMarkers(clauseText, target)) return target;
+  if (hasDistinctMarkers(clauseText, native) && !hasDistinctMarkers(clauseText, target)) return native;
+  if (LEAD_IN_REGEX.test(clauseText.trim())) return native;
+
+  const words = clauseText.split(/\s+/);
+  const nativeScore = scoreLanguageMatch(words, native);
+  const targetScore = scoreLanguageMatch(words, target);
+
+  if (nativeScore >= 2 && targetScore === 0) return native;
+  if (nativeScore >= 3 && nativeScore >= targetScore * 3) return native;
+  if (targetScore >= 1) return target;
+
+  return def;
+}
+
+function segmentSingleUntaggedSentence(
+  sentence: string,
+  native: string,
+  target: string,
+  defaultLang: string,
+  speed: number,
 ): SpeechSegment[] {
-  const text = stripRomanization(rawText).trim();
+  const text = sentence.trim();
   if (!text) return [];
 
-  const native = options.nativeLanguage?.toLowerCase().split("-")[0] || "en";
-  const target = options.targetLanguage?.toLowerCase().split("-")[0] || options.defaultLanguage?.toLowerCase().split("-")[0] || "es";
-  const speed = options.speed ?? 1.0;
-
-  // 1. Check for explicit bracket/xml tags first: [en]...[/en] or <lang="en">...</lang>
-  const tagPattern = /(?:<lang="?([a-zA-Z_-]+)"?>([\s\S]*?)<\/lang>|\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\3\])/g;
-  if (tagPattern.test(text)) {
-    tagPattern.lastIndex = 0;
-    const segments: SpeechSegment[] = [];
-    let lastIdx = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = tagPattern.exec(text)) !== null) {
-      if (match.index > lastIdx) {
-        const untagged = text.slice(lastIdx, match.index).trim();
-        if (untagged) {
-          segments.push({ text: untagged, language: target, speed });
-        }
-      }
-      const lang = (match[1] || match[3]).toLowerCase().split("-")[0];
-      const content = (match[2] || match[4]).trim();
-      if (content) {
-        segments.push({ text: content, language: lang, speed });
-      }
-      lastIdx = tagPattern.lastIndex;
-    }
-    if (lastIdx < text.length) {
-      const rest = text.slice(lastIdx).trim();
-      if (rest) {
-        segments.push({ text: rest, language: target, speed });
-      }
-    }
-    return mergeAdjacentSegments(segments);
-  }
-
-  // 2. Check for DOUBLE-QUOTES enclosing the target language: e.g. Repeat after me: "Un elefante"
-  // Note: Never split on single quotes to protect English contractions (don't, let's) and phonetic cues ('rr', 'j')
-  const doubleQuotePattern = /(["“][^"”]{3,}?["”])/g;
+  // 1. Double-quoted target phrase: e.g. Repeat after me: "Un elefante"
+  const doubleQuotePattern = /(["“][^"”]{2,}?["”])/g;
   if (doubleQuotePattern.test(text) && native !== target) {
-    doubleQuotePattern.lastIndex = 0;
-    const parts = text.split(/(["“][^"”]{3,}?["”])/).filter(Boolean);
+    const parts = text.split(/(["“][^"”]{2,}?["”])/).filter(Boolean);
     if (parts.length > 1) {
       const segments: SpeechSegment[] = [];
       for (const part of parts) {
         const trimmed = part.trim();
         if (!trimmed) continue;
-        const isDoubleQuoted = (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-                               (trimmed.startsWith('“') && trimmed.endsWith('”'));
+        const isDoubleQuoted =
+          (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+          (trimmed.startsWith("“") && trimmed.endsWith("”"));
         if (isDoubleQuoted) {
           const cleanText = trimmed.replace(/^[“"]|[”"]$/g, "").trim();
           if (cleanText) {
-            segments.push({ text: cleanText, language: target, speed });
+            segments.push({
+              text: cleanText,
+              language: detectClauseLanguage(cleanText, native, target, target),
+              speed,
+            });
           }
         } else {
           const cleanLeadIn = trimmed.replace(/:\s*$/, "").trim();
           if (cleanLeadIn) {
-            segments.push({ text: trimmed, language: native, speed });
+            segments.push({
+              text: trimmed,
+              language: detectClauseLanguage(cleanLeadIn, native, target, native),
+              speed,
+            });
           }
         }
       }
-      if (segments.length > 0) {
-        return mergeAdjacentSegments(segments);
-      }
+      if (segments.length > 0) return mergeAdjacentSegments(segments);
     }
   }
 
-  // 3. Check for lead-in colons: e.g. "Repeat after me: Un elefante"
+  // 2. Lead-in colons: e.g. "Repeat after me: Un elefante"
   const colonIdx = text.indexOf(":");
   if (colonIdx > 0 && colonIdx < text.length - 1 && native !== target) {
     const left = text.slice(0, colonIdx).trim();
@@ -217,31 +274,118 @@ export function segmentBilingualText(
     }
   }
 
-  // 4. Check for distinct non-Latin script blocks (e.g. Latin vs CJK / Cyrillic / Arabic)
-  const isNonLatinTarget = /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(text);
-  const isLatinNative = /^[a-z]/i.test(native);
-  if (isNonLatinTarget && isLatinNative) {
-    const nonLatinRegex = /([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+(?:[\s\u3000-\u303F\uFF00-\uFFEF\p{P}]*[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+)*)/gu;
+  // 3. Distinct non-Latin script blocks
+  const isNonLatin = NON_LATIN_CHAR_RE.test(text);
+  if (isNonLatin && NON_LATIN_LANGS.has(native) !== NON_LATIN_LANGS.has(target)) {
+    const nonLatinRegex =
+      /([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+(?:[\s\u3000-\u303F\uFF00-\uFFEF\p{P}]*[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+)*)/gu;
     const pieces = text.split(nonLatinRegex).filter(Boolean);
     if (pieces.length > 1) {
+      const nonLatinLang = NON_LATIN_LANGS.has(target) ? target : native;
+      const latinLang = nonLatinLang === target ? native : target;
       const segments: SpeechSegment[] = [];
       for (const piece of pieces) {
         const clean = piece.trim();
-        if (!clean) continue;
-        const hasNonLatin = /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(clean);
+        if (!clean || !/\p{L}|\p{N}/u.test(clean)) continue;
+        const hasNonLatin = NON_LATIN_CHAR_RE.test(clean);
         segments.push({
           text: clean,
-          language: hasNonLatin ? target : native,
+          language: hasNonLatin ? nonLatinLang : latinLang,
           speed,
         });
       }
-      return mergeAdjacentSegments(segments);
+      if (segments.length > 0) return mergeAdjacentSegments(segments);
     }
   }
 
-  // Default: single segment in default/target language
-  const chosenLang = options.defaultLanguage ?? options.targetLanguage ?? native;
-  return [{ text, language: chosenLang, speed }];
+  return [{ text, language: detectClauseLanguage(text, native, target, defaultLang), speed }];
+}
+
+/**
+ * Splits text into SpeechSegments, each with the proper language code.
+ */
+export function segmentBilingualText(
+  rawText: string,
+  options: {
+    nativeLanguage?: string;
+    targetLanguage?: string;
+    defaultLanguage?: string;
+    speed?: number;
+  } = {},
+): SpeechSegment[] {
+  const text = stripRomanization(rawText).trim();
+  if (!text) return [];
+
+  const native = options.nativeLanguage?.toLowerCase().split("-")[0] || "en";
+  const target =
+    options.targetLanguage?.toLowerCase().split("-")[0] ||
+    options.defaultLanguage?.toLowerCase().split("-")[0] ||
+    "es";
+  const defaultLang = options.defaultLanguage?.toLowerCase().split("-")[0] ?? target;
+  const speed = options.speed ?? 1.0;
+
+  // 1. Explicit `<lang code="xx">`, `<lang="xx">`, or `[xx]` tags
+  COMBINED_LANG_TAG_RE.lastIndex = 0;
+  if (COMBINED_LANG_TAG_RE.test(text)) {
+    COMBINED_LANG_TAG_RE.lastIndex = 0;
+    const segments: SpeechSegment[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = COMBINED_LANG_TAG_RE.exec(text)) !== null) {
+      if (match.index > lastIdx) {
+        const untagged = text.slice(lastIdx, match.index).replace(STRAY_TAG_TOKEN_RE, "").trim();
+        if (untagged) {
+          segments.push(
+            ...segmentBilingualText(untagged, {
+              nativeLanguage: native,
+              targetLanguage: target,
+              defaultLanguage: defaultLang,
+              speed,
+            }),
+          );
+        }
+      }
+      const lang = (match[1] || match[3]).toLowerCase().split("-")[0];
+      const content = (match[2] || match[4]).replace(STRAY_TAG_TOKEN_RE, "").trim();
+      if (content) {
+        segments.push({ text: content, language: lang, speed });
+      }
+      lastIdx = COMBINED_LANG_TAG_RE.lastIndex;
+    }
+    if (lastIdx < text.length) {
+      const rest = text.slice(lastIdx).replace(STRAY_TAG_TOKEN_RE, "").trim();
+      if (rest) {
+        segments.push(
+          ...segmentBilingualText(rest, {
+            nativeLanguage: native,
+            targetLanguage: target,
+            defaultLanguage: defaultLang,
+            speed,
+          }),
+        );
+      }
+    }
+    return mergeAdjacentSegments(segments);
+  }
+
+  const cleaned = text.replace(STRAY_TAG_TOKEN_RE, "").trim();
+  if (!cleaned) return [];
+
+  // 2. Multi-sentence split for untagged bilingual responses
+  const sentences = cleaned
+    .split(/(?<=[.?!。？！])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (sentences.length > 1) {
+    const all: SpeechSegment[] = [];
+    for (const s of sentences) {
+      all.push(...segmentSingleUntaggedSentence(s, native, target, defaultLang, speed));
+    }
+    return mergeAdjacentSegments(all);
+  }
+
+  return segmentSingleUntaggedSentence(cleaned, native, target, defaultLang, speed);
 }
 
 function mergeAdjacentSegments(segments: SpeechSegment[]): SpeechSegment[] {
@@ -258,47 +402,27 @@ function mergeAdjacentSegments(segments: SpeechSegment[]): SpeechSegment[] {
   return merged;
 }
 
-/**
- * Builds a standard 44-byte RIFF/WAVE header for 16-bit PCM mono audio.
- */
 function createWavHeader(dataLength: number, sampleRate: number): Uint8Array {
   const header = new Uint8Array(44);
   const view = new DataView(header.buffer);
 
-  // "RIFF"
   header[0] = 0x52; header[1] = 0x49; header[2] = 0x46; header[3] = 0x46;
-  // Total file size minus 8 bytes
   view.setUint32(4, 36 + dataLength, true);
-  // "WAVE"
   header[8] = 0x57; header[9] = 0x41; header[10] = 0x56; header[11] = 0x45;
-  // "fmt "
   header[12] = 0x66; header[13] = 0x6d; header[14] = 0x74; header[15] = 0x20;
-  // Subchunk1Size (16 for PCM)
   view.setUint32(16, 16, true);
-  // AudioFormat (1 for PCM)
   view.setUint16(20, 1, true);
-  // NumChannels (1 = mono)
   view.setUint16(22, 1, true);
-  // SampleRate
   view.setUint32(24, sampleRate, true);
-  // ByteRate = SampleRate * NumChannels * BitsPerSample / 8
   view.setUint32(28, sampleRate * 1 * 2, true);
-  // BlockAlign = NumChannels * BitsPerSample / 8
   view.setUint16(32, 2, true);
-  // BitsPerSample (16)
   view.setUint16(34, 16, true);
-  // "data"
   header[36] = 0x64; header[37] = 0x61; header[38] = 0x74; header[39] = 0x61;
-  // Subchunk2Size (dataLength)
   view.setUint32(40, dataLength, true);
 
   return header;
 }
 
-/**
- * Combines multiple PCM 16-bit mono audio buffers into a single playable WAV buffer,
- * applying a smooth 10ms linear crossfade and inserting a natural prosodic silence gap.
- */
 export function buildWavFromPcmSegments(
   pcmBuffers: Uint8Array[],
   sampleRate = 24000,
@@ -309,10 +433,9 @@ export function buildWavFromPcmSegments(
     return createWavHeader(0, sampleRate);
   }
 
-  // 16-bit (2 bytes per sample), mono
   const silenceSamples = Math.round((sampleRate * pauseMs) / 1000);
   const silenceBytes = silenceSamples * 2;
-  const silenceBuffer = new Uint8Array(silenceBytes); // zero-initialized
+  const silenceBuffer = new Uint8Array(silenceBytes);
 
   let totalDataLength = 0;
   nonNullBuffers.forEach((buf, idx) => {

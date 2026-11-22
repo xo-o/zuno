@@ -229,7 +229,8 @@ fun VoiceModeScreen(
             },
         )
 
-        if (isLessonMode) {
+        val useStructuredStageBody = isLessonMode || lessonStage != null
+        if (useStructuredStageBody) {
             LessonAvatarVoiceBody(
                 status = status,
                 level = level,
@@ -267,6 +268,7 @@ fun VoiceModeScreen(
                 tutorLine = tutorLine,
                 userLine = userLine,
                 turns = turns,
+                rescuePayload = rescuePayload,
                 captionsOn = captionsOn,
                 isMuted = isMuted,
                 isCameraOn = isCameraOn,
@@ -319,6 +321,7 @@ private fun PortraitVoiceCallBody(
     tutorLine: String?,
     userLine: String?,
     turns: List<ChatMessage>,
+    rescuePayload: RescuePayloadUi?,
     captionsOn: Boolean,
     isMuted: Boolean,
     isCameraOn: Boolean,
@@ -439,6 +442,12 @@ private fun PortraitVoiceCallBody(
                                 }
                             }
 
+                            if (rescuePayload != null && rescuePayload.text.isNotBlank()) {
+                                item(key = "free_talk_rescue_pill") {
+                                    ZunoFeedbackPill(text = rescuePayload.text)
+                                }
+                            }
+
                             if (showListeningPlaceholder) {
                                 item(key = "listening_placeholder") {
                                     ListeningTurnPlaceholderBubble()
@@ -522,6 +531,12 @@ private fun PortraitVoiceCallBody(
                                                     senderLabel = if (turn.isFinal) "You" else stringResource(R.string.voice_you_speaking),
                                                 )
                                             }
+                                        }
+                                    }
+
+                                    if (rescuePayload != null && rescuePayload.text.isNotBlank()) {
+                                        item(key = "free_talk_portrait_rescue_pill") {
+                                            ZunoFeedbackPill(text = rescuePayload.text)
                                         }
                                     }
 
@@ -1414,7 +1429,7 @@ private fun mapTurnAction(
     "translate" -> Triple(
         stringResource(R.string.voice_chip_translate),
         R.drawable.zuno_ic_languages,
-        { onLessonAction("translate", null) },
+        { onLessonAction("translate", turnText) },
     )
     else -> Triple("", R.drawable.zuno_ic_volume, null)
 }

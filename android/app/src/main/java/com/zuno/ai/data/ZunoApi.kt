@@ -343,6 +343,9 @@ class ZunoApi(
 
     suspend fun restartRoleplay(id: String): ConversationThread = send("POST", "/roleplays/$id/restart").toThread()
 
+    suspend fun startRoleplaySession(id: String, restart: Boolean = false): RoleplaySessionTicket =
+        send("POST", "/roleplays/$id/session", JSONObject().put("restart", restart)).toRoleplaySessionTicket()
+
     suspend fun deleteRoleplay(id: String) {
         send("DELETE", "/roleplays/$id")
     }

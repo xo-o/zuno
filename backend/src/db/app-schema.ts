@@ -153,6 +153,13 @@ export type PhraseResultItem = {
   status: "mastered" | "practice";
 };
 
+export type RoleplayGoalItem = {
+  id: string;
+  label: string;
+  description: string;
+  samplePhrase?: string;
+};
+
 export const topicLesson = pgTable(
   "topic_lesson",
   {
@@ -183,6 +190,7 @@ export const roleplay = pgTable(
     aiRole: text("ai_role").notNull(),
     setting: text("setting").notNull(),
     language: text("language").notNull(),
+    goals: jsonb("goals").$type<RoleplayGoalItem[]>(),
     category: text("category", {
       enum: ["travel", "food", "work", "housing", "health", "social"],
     })

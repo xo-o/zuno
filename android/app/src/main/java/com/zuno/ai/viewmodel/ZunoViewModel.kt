@@ -25,6 +25,7 @@ import com.zuno.ai.data.PeerConversationThread
 import com.zuno.ai.data.PeerMessage
 import com.zuno.ai.data.PreparedFile
 import com.zuno.ai.data.RoleplayDraft
+import com.zuno.ai.data.RoleplaySessionTicket
 import com.zuno.ai.data.RoleplayShareResult
 import com.zuno.ai.data.SavedDraftAttachment
 import com.zuno.ai.data.StartPeerCallResult
@@ -1140,6 +1141,26 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         cacheThread(thread)
         refreshRecent()
         onOpened(thread.conversation)
+    }
+
+    fun startRoleplayVoiceSession(
+        id: String,
+        restart: Boolean = false,
+        onReady: (RoleplaySessionTicket) -> Unit,
+    ) = runBusy {
+        val ticket = api.startRoleplaySession(id, restart = restart)
+        cacheRoleplay(ticket.roleplay)
+        _roleplays.update { state ->
+            val current = state.items
+            if (current == null) state
+            else {
+                val rest = current.filterNot { it.id == ticket.roleplay.id }
+                state.copy(items = listOf(ticket.roleplay) + rest)
+            }
+        }
+        loadConversation(ticket.conversationId)
+        refreshRecent()
+        onReady(ticket)
     }
 
     fun deleteRoleplay(id: String) = launchSafely {

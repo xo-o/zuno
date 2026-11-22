@@ -95,7 +95,7 @@ Both **Topics** and **Roleplays** keep the root library screens clean and focuse
 | **`Roleplays · 2 · List`** *(Updated)* | `2026:2322` | User's added/saved roleplays only | Clean list with no ownership filter pills; `Public` indicator in row metadata (`Tenant / Landlord · Public`). |
 | **`Roleplays · 3a · Chat Builder (Greeting)`** *(New)* | `3008:13872` | Sofía opens the conversation | Sofía greets first (`"Hey Noah! What kind of scene do you want to practice?"`), offers chips (`Startup interview`, `Renting a flat`, `Doctor’s visit`) + `+` attach `Composer`. |
 | **`Roleplays · 3b · Chat Builder (Draft Ready)`** *(Updated)* | `3005:13865` | Multi-turn + mid-chat JD → Draft | Text-first turns (`"Friendly product interview in Madrid"` → Sofía follow-up), followed by a **mid-conversation** `Startup_JD_Madrid.pdf` upload, and inline **`DRAFT ROLEPLAY`** card (`Refine` | `Create roleplay`). |
-| **`Roleplays · 3c · Roleplay Settings`** *(New)* | `3008:13950` | Post-creation configure screen | Shown immediately after **`Create roleplay`**: summary card, **`Only me`** vs **`Public to community`** choices, `Share` / `Copy link` (`heyzuno.app/r/startup-interview`), and **`Start live roleplay`** primary CTA. |
+| **`Roleplays · 3c · Roleplay Settings`** *(New)* | `3008:13950` | Post-creation configure screen | Shown immediately after **`Create roleplay`**: summary card, **`Only me`** vs **`Public to community`** choices, `Share` / `Copy link` (`heyzuno.app/r/startup-interview`), and **`Start live roleplay`** primary CTA (launches directly into Live Voice Roleplay; see [`docs/ROLEPLAY_VOICE_FLOW_SPEC.md`](./ROLEPLAY_VOICE_FLOW_SPEC.md)). |
 
 ### 2.3 `07 · Attachments` — Merged Builder Upload Flow (`2109:2823`, Row 2)
 
@@ -166,8 +166,8 @@ Both **Topics** and **Roleplays** keep the root library screens clean and focuse
 - **Acceptance Criteria:**
   - **Immutable after creation:** Neither Topics nor Roleplays expose `Edit` or `Duplicate & edit` in context menus.
   - **`Share` gated by visibility:** `Share` only appears when `visibility == "public"` (or on saved Community/Zuno items, which are public). Private (`Only me`) items hide `Share` and expose `Topic settings` / `Roleplay settings` to publish first.
-  - **Owner items (`13`, `Roleplays · 7`, `11`):** `Start next lesson` / `Start over`, `Schedule practice` (opens `08 · Scheduled`), `Pin` / `Unpin`, `Share` *(if Public)*, `Topic settings` / `Roleplay settings`, divider, `Delete`.
-  - **Saved Community items (`14`, `Roleplays · 10`):** `Start next lesson` / `Start over`, `Schedule practice`, `Pin` / `Unpin`, `Share`, `Report` (`Icon/flag`), divider, `Remove`.
+  - **Owner items (`13`, `Roleplays · 7`, `11`):** `Start next lesson` / `Start over` (launches live voice), `Chat` *(Roleplays: opens text transcript)*, `Schedule practice` (opens `08 · Scheduled`), `Pin` / `Unpin`, `Share` *(if Public)*, `Topic settings` / `Roleplay settings`, divider, `Delete`.
+  - **Saved Community items (`14`, `Roleplays · 10`):** `Start next lesson` / `Start over` (launches live voice), `Chat` *(Roleplays)*, `Schedule practice`, `Pin` / `Unpin`, `Share`, `Report` (`Icon/flag`), divider, `Remove`.
   - **Explore cards (`08`, `Roleplays · 5`):** Show a `>` chevron (opening Preview) instead of `⋮`.
 
 ---
@@ -192,6 +192,7 @@ publishedAt: timestamp("published_at"),
 // Index: (language, visibility, category, learnersCount desc)
 
 // Additions to `roleplay` table:
+goals: jsonb("goals").$type<RoleplayGoalItem[]>(), // 3 practice goals + target-language samplePhrase (lazily backfilled if null)
 category: text("category", { enum: ["travel", "food", "work", "housing", "health", "social"] }).default("social").notNull(),
 visibility: text("visibility", { enum: ["private", "public"] }).default("private").notNull(),
 sourceKind: text("source_kind", { enum: ["user", "system", "community"] }).default("user").notNull(),
@@ -216,9 +217,10 @@ publishedAt: timestamp("published_at"),
 - **Dedicated Community & System Explore**
   - `GET /api/topics/discover?category=all|travel|food|work|daily_life&q=...` — Returns `system` + `public` community topics matching `profile.targetLanguage`, `category`, and `q`, ordered by `learnersCount desc, publishedAt desc`.
   - `GET /api/roleplays/discover?category=all|travel|food|work|housing&q=...` — Returns `system` + `public` community roleplays matching `profile.targetLanguage`, `category`, and `q`, ordered by `practicedCount desc, publishedAt desc`.
-- **Save / Fork to Library**
+- **Save / Fork to Library & Live Voice Session**
   - `POST /api/topics/:id/save` — Clones a public/system topic + its 5 `topic_lesson` rows (`curriculum` included) into the current user's library (`sourceTopicId = id`), increments `learnersCount`, and returns the new `TopicDetail`. Idempotent if already saved.
   - `POST /api/roleplays/:id/save` — Clones a public/system roleplay into the user's library (`sourceRoleplayId = id`), increments `practicedCount`, and returns the saved `Roleplay`.
+  - `POST /api/roleplays/:id/session` — Ensures 3 practice `goals` exist, resolves/creates the `roleplay` `conversation`, and mints a LiveKit token (`mode = "roleplay"`) for direct entry into Live Voice Roleplay (`docs/ROLEPLAY_VOICE_FLOW_SPEC.md`).
 - **Pin, Visibility, Share & Report**
   - `PATCH /api/topics/:id` body `{ pinned: boolean }` — Pins/unpins topic to top of user's list (`pinnedAt`).
   - `PATCH /api/roleplays/:id` body `{ pinned: boolean }` — Pins/unpins roleplay to top of user's list (`pinnedAt`).

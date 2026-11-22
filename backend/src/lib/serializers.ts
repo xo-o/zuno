@@ -114,6 +114,7 @@ export function serializeRoleplay(row: typeof roleplay.$inferSelect) {
     aiRole: row.aiRole,
     setting: row.setting,
     language: row.language,
+    goals: row.goals ?? [],
     category: row.category ?? "social",
     visibility: row.visibility ?? "private",
     sourceKind: row.sourceKind ?? "user",

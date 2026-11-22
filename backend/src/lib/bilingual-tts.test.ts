@@ -13,6 +13,9 @@ test("bilingual-tts: stripLangTags removes bracket and xml tags", () => {
 
   const tagged2 = '<lang="en">Listen carefully:</lang> <lang="es">Buenos días</lang>';
   assert.equal(stripLangTags(tagged2), "Listen carefully: Buenos días");
+
+  const tagged3 = '<lang code="en">That means bill.</lang> <lang code="es">¿Me trae la cuenta?</lang>';
+  assert.equal(stripLangTags(tagged3), "That means bill. ¿Me trae la cuenta?");
 });
 
 test("bilingual-tts: stripRomanization strips parenthesized latin after non-latin script", () => {
@@ -37,6 +40,26 @@ test("bilingual-tts: segmentBilingualText handles explicit tags", () => {
   assert.equal(segments[0].text, "Repeat after me:");
   assert.equal(segments[1].language, "es");
   assert.equal(segments[1].text, "Un elefante");
+
+  const xmlCodeInput = '<lang code="en">Sure, that means oat milk. Try asking:</lang> <lang code="es">¿Tienen leche de avena?</lang>';
+  const xmlSegs = segmentBilingualText(xmlCodeInput, {
+    nativeLanguage: "en",
+    targetLanguage: "es",
+  });
+  assert.equal(xmlSegs.length, 2);
+  assert.equal(xmlSegs[0].language, "en");
+  assert.equal(xmlSegs[1].language, "es");
+});
+
+test("bilingual-tts: segmentBilingualText detects untagged multi-sentence clarification + target follow-up", () => {
+  const input = "Sure, that word means receipt in English. ¿Quieres el recibo ahora?";
+  const segments = segmentBilingualText(input, {
+    nativeLanguage: "en",
+    targetLanguage: "es",
+  });
+  assert.equal(segments.length, 2);
+  assert.equal(segments[0].language, "en");
+  assert.equal(segments[1].language, "es");
 });
 
 test("bilingual-tts: segmentBilingualText splits lead-in colon pattern", () => {

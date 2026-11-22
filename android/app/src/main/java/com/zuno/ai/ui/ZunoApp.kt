@@ -568,13 +568,17 @@ fun ZunoApp(
             val spoken = viewModel.messages.value.drop(voiceMessageStart)
                 .filter { it.isFinal && it.text.isNotBlank() }
                 .map { (it.speaker == Speaker.USER) to it.text }
-            val emptyHomeCall = spoken.isEmpty() && voiceFromHome == conversationId &&
-                chats[conversationId]?.messages.isNullOrEmpty()
+            val hasMessages = !chats[conversationId]?.messages.isNullOrEmpty()
+            val emptyHomeCall = spoken.isEmpty() && voiceFromHome == conversationId && !hasMessages
             if (emptyHomeCall) {
                 discardedVoice = conversationId
                 zunoViewModel.deleteConversation(conversationId) {}
+            } else if (spoken.isEmpty() && !hasMessages) {
+                discardedVoice = conversationId
             } else {
-                zunoViewModel.saveVoiceTurns(conversationId, spoken)
+                if (spoken.isNotEmpty()) {
+                    zunoViewModel.saveVoiceTurns(conversationId, spoken)
+                }
                 if (durationSec > 0) {
                     zunoViewModel.saveCallSummary(conversationId, durationSec, isVideo = wasVideo)
                 }
@@ -823,6 +827,41 @@ fun ZunoApp(
     }
 
     fun openChat(conversationId: String) = navigate(ZunoRoute.Chat(conversationId))
+
+    /**
+     * Starts a live dynamic Roleplay voice session (`POST /api/roleplays/:id/session`) directly in
+     * avatar voice mode with 3 practice goals + rescue actions, falling back to text chat if mic is declined.
+     */
+    fun startRoleplayVoice(
+        roleplayId: String,
+        restart: Boolean = false,
+        replaceCurrent: Boolean = false,
+    ) {
+        withMicrophoneOrFallback(
+            onDeclined = {
+                zunoViewModel.openRoleplay(roleplayId, restart = restart) { conv ->
+                    if (replaceCurrent) replace(ZunoRoute.Chat(conv.id)) else openChat(conv.id)
+                }
+            },
+        ) {
+            runWithVoicePermissions {
+                tts.stop()
+                if (voiceConversationId != null) {
+                    viewModel.disconnect()
+                    voiceConversationId = null
+                }
+                zunoViewModel.startRoleplayVoiceSession(roleplayId, restart = restart) { ticket ->
+                    voiceMessageStart = viewModel.messages.value.size
+                    voiceConversationId = ticket.conversationId
+                    callStartedAt = null
+                    callUsedVideo = false
+                    val dest = ZunoRoute.Voice(ticket.conversationId)
+                    if (replaceCurrent) replace(dest) else navigate(dest)
+                    viewModel.connectRoleplay(ticket)
+                }
+            }
+        }
+    }
 
     fun startFreeTalk(text: String?) {
         if (voiceConversationId != null) endVoice()
@@ -1212,7 +1251,12 @@ fun ZunoApp(
     fun roleplayMenu(rp: com.zuno.ai.data.Roleplay): List<ZunoMenuAction> = buildList {
         add(
             ZunoMenuAction(stringResource(R.string.roleplays_menu_start_over), icon = R.drawable.zuno_ic_t_rotate_ccw) {
-                zunoViewModel.openRoleplay(rp.id, restart = true) { openChat(it.id) }
+                startRoleplayVoice(rp.id, restart = true)
+            },
+        )
+        add(
+            ZunoMenuAction(stringResource(R.string.chats_action_chat), icon = R.drawable.zuno_ic_t_message_circle) {
+                zunoViewModel.openRoleplay(rp.id) { openChat(it.id) }
             },
         )
         add(
@@ -1276,10 +1320,13 @@ fun ZunoApp(
     fun startScheduled(schedule: Schedule) {
         if (voiceConversationId != null) endVoice()
         zunoViewModel.startSchedule(schedule.id) { conversation ->
-            if (conversation.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null) {
-                startLessonVoice(conversation.topicId, conversation.lessonId)
-            } else {
-                openChat(conversation.id)
+            when {
+                conversation.kind == ConversationKind.Lesson && conversation.topicId != null && conversation.lessonId != null ->
+                    startLessonVoice(conversation.topicId, conversation.lessonId)
+                conversation.kind == ConversationKind.Roleplay && conversation.roleplayId != null ->
+                    startRoleplayVoice(conversation.roleplayId)
+                else ->
+                    openChat(conversation.id)
             }
         }
     }
@@ -1395,8 +1442,12 @@ fun ZunoApp(
             }
             if (conversation?.kind == ConversationKind.Roleplay && conversation.roleplayId != null) {
                 add(ZunoMenuAction(stringResource(R.string.chat_menu_start_over), icon = R.drawable.zuno_ic_t_rotate_ccw) {
-                    if (inVoice) endVoice()
-                    zunoViewModel.openRoleplay(conversation.roleplayId, restart = true) { replace(ZunoRoute.Chat(it.id)) }
+                    if (inVoice) {
+                        endVoice()
+                        startRoleplayVoice(conversation.roleplayId, restart = true, replaceCurrent = true)
+                    } else {
+                        zunoViewModel.openRoleplay(conversation.roleplayId, restart = true) { replace(ZunoRoute.Chat(it.id)) }
+                    }
                 })
             }
             add(
@@ -1598,10 +1649,7 @@ fun ZunoApp(
                         onOpenRecentSession = { session ->
                             when (session.kind) {
                                 RecentKind.Topic -> navigate(ZunoRoute.Topic(session.id))
-                                RecentKind.Roleplay -> {
-                                    val convId = session.conversationId
-                                    if (convId != null) openChat(convId) else openSection(ZunoRoute.Roleplays)
-                                }
+                                RecentKind.Roleplay -> startRoleplayVoice(session.id)
                                 RecentKind.FreeTalk -> openChat(session.conversationId ?: session.id)
                             }
                         },
@@ -2067,7 +2115,7 @@ fun ZunoApp(
                             zunoViewModel.loadRoleplays()
                             zunoViewModel.loadDiscoverRoleplays()
                         },
-                        onOpen = { id -> zunoViewModel.openRoleplay(id) { openChat(it.id) } },
+                        onOpen = { id -> startRoleplayVoice(id) },
                         onCreate = { openNewRoleplay("") },
                         onExplore = { q -> navigate(ZunoRoute.ExploreRoleplays(q)) },
                         onOpenPreview = { id -> navigate(ZunoRoute.CommunityRoleplayPreview(id)) },
@@ -2099,11 +2147,7 @@ fun ZunoApp(
                         onBack = ::pop,
                         onRetry = { zunoViewModel.loadDiscoverRoleplay(screen.idOrToken) },
                         onStartLive = { item ->
-                            if (item.alreadySaved && item.savedRoleplayId != null) {
-                                zunoViewModel.openRoleplay(item.savedRoleplayId) { replace(ZunoRoute.Chat(it.id)) }
-                            } else {
-                                zunoViewModel.startDiscoverRoleplay(item.id) { replace(ZunoRoute.Chat(it.id)) }
-                            }
+                            startRoleplayVoice(item.savedRoleplayId ?: item.id, replaceCurrent = true)
                         },
                         onSave = { item ->
                             zunoViewModel.saveDiscoverRoleplay(item.id) {
@@ -2152,9 +2196,7 @@ fun ZunoApp(
                         onShare = ::shareLink,
                         onCopyLink = ::copyLink,
                         onStartLive = { current ->
-                            zunoViewModel.openRoleplay(current.id) { conv ->
-                                replace(ZunoRoute.Chat(conv.id))
-                            }
+                            startRoleplayVoice(current.id, replaceCurrent = true)
                         },
                         modifier = screenModifier,
                     )
@@ -2244,6 +2286,11 @@ fun ZunoApp(
                         turns = recentTurns,
                         isMuted = isMuted,
                         menu = conversationMenu(screen.conversationId),
+                        lessonStage = lessonStage,
+                        lessonTurns = lessonTurns,
+                        pronunciationEval = pronunciationEval,
+                        rescuePayload = rescuePayload,
+                        onLessonAction = { action, payload -> viewModel.sendLessonAction(action, payload) },
                         sessionKindLabel = sessionKindLabel,
                         languageLevelLabel = langLevelLabel,
                         learnerLevel = profile?.level ?: "B1",
@@ -2273,7 +2320,7 @@ fun ZunoApp(
                                 voiceKey = preferences?.tutorVoice ?: "warm",
                             )
                         },
-                        onTranslate = { comingSoon(str(R.string.voice_chip_translate)) },
+                        onTranslate = { line -> viewModel.sendLessonAction("translate", line) },
                         onSlowReplay = { line ->
                             tts.speak(
                                 text = line,

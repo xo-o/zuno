@@ -1,12 +1,21 @@
 import asyncio
+import logging
 import os
+from typing import Any, AsyncIterable, AsyncIterator, Optional
+
 import aiohttp
-from typing import AsyncIterator, Optional
 import livekit.plugins.cartesia as cartesia
 from livekit import rtc
 import numpy as np
 
-from bilingual import SpeechClause, SpeechSegment, ensure_terminal_punct
+from bilingual import (
+    SpeechClause,
+    SpeechSegment,
+    ensure_terminal_punct,
+    iter_streaming_clauses,
+)
+
+logger = logging.getLogger("voice-agent.voices")
 
 # Curated Cartesia Sonic-3.6 multilingual voices.
 # Ariana (en-US native, speaks es-MX/es-ES natively), Mariana (es-CO native, speaks en natively), Carson (en-US native).
@@ -51,7 +60,7 @@ def resolve_cartesia_locale(
     accent: str | None = None,
     tutor_voice: str | None = None,
 ) -> str:
-    """Resolves language and accent into an explicit Cartesia regional locale code."""
+    """Resolves language and accent into an explicit Cartesia regional locale code for sonic-3.6."""
     lang = cartesia_language(language) or "es"
     acc = (accent or "").lower().strip()
 
@@ -76,7 +85,9 @@ def resolve_cartesia_locale(
         return "pt-PT" if acc in ("portugal", "european") else "pt-BR"
 
     if lang == "de":
-        return "de-DE"
+        return "de-CH" if acc in ("switzerland", "swiss") else "de-DE"
+    if lang == "nl":
+        return "nl-BE" if acc in ("belgium", "flemish") else "nl-NL"
     if lang == "it":
         return "it-IT"
     if lang == "ja":
@@ -89,6 +100,18 @@ def resolve_cartesia_locale(
         return "ru-RU"
     if lang == "hi":
         return "hi-IN"
+    if lang == "pl":
+        return "pl-PL"
+    if lang == "tr":
+        return "tr-TR"
+    if lang == "sv":
+        return "sv-SE"
+    if lang == "ar":
+        return "ar-SA"
+    if lang == "id":
+        return "id-ID"
+    if lang == "vi":
+        return "vi-VN"
 
     return lang
 
@@ -127,10 +150,10 @@ def update_cartesia_tts(
 
 
 class BilingualCartesiaSynthesizer:
-    """Caches language-specific Cartesia TTS engines for the same voice identity so
+    """Synthesizes speech with Cartesia `sonic-3.6` regional locale conditioning for a unified voice identity.
 
-    multi-clause bilingual speech (e.g. English lead-in -> Spanish target phrase)
-    synthesizes cleanly with authentic accents and zero race conditions.
+    Supports both pre-segmented parallel batching (for structured lesson prompts) and incremental
+    lookahead clause streaming (for live Roleplay & Free Talk LLM streams).
     """
 
     def __init__(
@@ -172,13 +195,14 @@ class BilingualCartesiaSynthesizer:
         language: str,
         speed: float = 1.0,
     ) -> bytes:
-        """Fetches raw PCM s16le 24kHz audio from Cartesia's HTTP endpoint with clean terminal punctuation."""
+        """Fetches raw PCM s16le 24kHz audio from Cartesia `sonic-3.6` with explicit regional `locale`."""
         punct_text = ensure_terminal_punct(text)
         if not punct_text or not self.api_key:
             return b""
 
+        speed_clamped = round(max(0.6, min(2.0, float(speed))), 2)
         locale = resolve_cartesia_locale(language, self.accent, self.tutor_voice)
-        payload = {
+        payload: dict = {
             "model_id": "sonic-3.6",
             "transcript": punct_text,
             "voice": {"mode": "id", "id": self.voice_id},
@@ -188,7 +212,7 @@ class BilingualCartesiaSynthesizer:
                 "encoding": "pcm_s16le",
                 "sample_rate": 24000,
             },
-            "generation_config": {"speed": speed},
+            "generation_config": {"speed": speed_clamped},
         }
 
         session = await self._get_session()
@@ -208,11 +232,13 @@ class BilingualCartesiaSynthesizer:
                     if resp.status == 429 and attempt == 0:
                         await asyncio.sleep(0.3)
                         continue
-                    # Fallback to sonic-3 with base language if 3.6 locale rejected
-                    fallback_lang = cartesia_language(language) or "es"
-                    payload["model_id"] = "sonic-3"
-                    payload.pop("locale", None)
-                    payload["language"] = fallback_lang
+                    # Fallback to sonic-3 with base language if 3.6 locale is unsupported for a rare language
+                    fallback_lang = cartesia_language(language)
+                    fallback_payload = dict(payload)
+                    fallback_payload["model_id"] = "sonic-3"
+                    fallback_payload.pop("locale", None)
+                    if fallback_lang:
+                        fallback_payload["language"] = fallback_lang
                     async with session.post(
                         "https://api.cartesia.ai/tts/bytes",
                         headers={
@@ -220,15 +246,18 @@ class BilingualCartesiaSynthesizer:
                             "Cartesia-Version": "2025-04-16",
                             "Content-Type": "application/json",
                         },
-                        json=payload,
+                        json=fallback_payload,
                     ) as resp2:
                         if resp2.status == 200:
                             return await resp2.read()
                         return b""
-            except Exception:
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
                 if attempt == 0:
                     await asyncio.sleep(0.2)
                 else:
+                    logger.warning("Cartesia TTS fetch failed for locale=%s: %s", locale, e)
                     return b""
         return b""
 
@@ -244,72 +273,153 @@ class BilingualCartesiaSynthesizer:
         self._engines.clear()
 
 
+def _pcm_to_audio_frames(pcm_bytes: bytes, pause_after_ms: int = 0) -> list[rtc.AudioFrame]:
+    """Converts 24kHz s16le PCM bytes into 20ms LiveKit AudioFrames with 10ms anti-pop linear ramps."""
+    if not pcm_bytes:
+        return []
+    sample_rate = 24000
+    chunk_samples = 480  # 20ms at 24kHz
+    frame_bytes = chunk_samples * 2
+
+    even_len = (len(pcm_bytes) // 2) * 2
+    if even_len == 0:
+        return []
+    int16_samples = np.frombuffer(pcm_bytes[:even_len], dtype=np.int16).copy()
+    total_samples = len(int16_samples)
+
+    ramp_len = min(240, total_samples // 4)  # 10ms ramp
+    if ramp_len > 0:
+        fade_in = np.linspace(0.0, 1.0, ramp_len, dtype=np.float32)
+        fade_out = np.linspace(1.0, 0.0, ramp_len, dtype=np.float32)
+        int16_samples[:ramp_len] = (int16_samples[:ramp_len].astype(np.float32) * fade_in).astype(np.int16)
+        int16_samples[-ramp_len:] = (int16_samples[-ramp_len:].astype(np.float32) * fade_out).astype(np.int16)
+
+    frames: list[rtc.AudioFrame] = []
+    ramped_bytes = int16_samples.tobytes()
+    for off in range(0, len(ramped_bytes), frame_bytes):
+        chunk = ramped_bytes[off : off + frame_bytes]
+        n_samples = len(chunk) // 2
+        if n_samples > 0:
+            frames.append(
+                rtc.AudioFrame(
+                    data=chunk,
+                    sample_rate=sample_rate,
+                    num_channels=1,
+                    samples_per_channel=n_samples,
+                )
+            )
+
+    if pause_after_ms > 0:
+        pause_samples = int(sample_rate * pause_after_ms / 1000)
+        silence_bytes = np.zeros(pause_samples, dtype=np.int16).tobytes()
+        for off in range(0, len(silence_bytes), frame_bytes):
+            chunk = silence_bytes[off : off + frame_bytes]
+            n_samples = len(chunk) // 2
+            if n_samples > 0:
+                frames.append(
+                    rtc.AudioFrame(
+                        data=chunk,
+                        sample_rate=sample_rate,
+                        num_channels=1,
+                        samples_per_channel=n_samples,
+                    )
+                )
+    return frames
+
+
 async def synthesize_bilingual_segments(
     synthesizer: BilingualCartesiaSynthesizer,
     segments: list[SpeechSegment],
     default_pause_ms: int = 180,
 ) -> AsyncIterator[rtc.AudioFrame]:
-    """Synthesizes all bilingual SpeechSegments in parallel, then streams out audio frames
-
-    in correct sequence with smooth prosodic pauses. Zero network gap between language clauses!
-    """
+    """Synthesizes all SpeechSegments in parallel and streams 20ms AudioFrames with smooth pauses."""
     valid_segments = [s for s in segments if s.text.strip()]
     if not valid_segments:
         return
 
-    # 1. Pre-fetch all clauses in parallel!
     tasks = [
         synthesizer.fetch_pcm_bytes(seg.text, seg.language, seg.speed)
         for seg in valid_segments
     ]
     raw_pcm_list = await asyncio.gather(*tasks, return_exceptions=True)
 
-    sample_rate = 24000
-    chunk_samples = 480  # 20ms frames at 24kHz
-
     for idx, (seg, pcm_res) in enumerate(zip(valid_segments, raw_pcm_list)):
         if isinstance(pcm_res, Exception) or not pcm_res:
             continue
+        is_last = idx >= len(valid_segments) - 1
+        pause_ms = 0 if is_last else (seg.pause_after_ms or default_pause_ms)
+        for frame in _pcm_to_audio_frames(pcm_res, pause_after_ms=pause_ms):
+            yield frame
 
-        pcm_bytes: bytes = pcm_res
-        total_samples = len(pcm_bytes) // 2
-        int16_samples = np.frombuffer(pcm_bytes, dtype=np.int16).copy()
 
-        # Smooth linear ramp at clause start and end to avoid audio pops
-        ramp_len = min(240, total_samples // 4)  # 10ms ramp
-        if ramp_len > 0:
-            fade_in = np.linspace(0.0, 1.0, ramp_len, dtype=np.float32)
-            fade_out = np.linspace(1.0, 0.0, ramp_len, dtype=np.float32)
-            int16_samples[:ramp_len] = (int16_samples[:ramp_len].astype(np.float32) * fade_in).astype(np.int16)
-            int16_samples[-ramp_len:] = (int16_samples[-ramp_len:].astype(np.float32) * fade_out).astype(np.int16)
+_QUEUE_UNSET = object()
 
-        # Yield in 20ms AudioFrames
-        ramped_bytes = int16_samples.tobytes()
-        frame_bytes = chunk_samples * 2
-        for off in range(0, len(ramped_bytes), frame_bytes):
-            chunk = ramped_bytes[off : off + frame_bytes]
-            n_samples = len(chunk) // 2
-            if n_samples > 0:
-                yield rtc.AudioFrame(
-                    data=chunk,
-                    sample_rate=sample_rate,
-                    num_channels=1,
-                    samples_per_channel=n_samples,
+
+async def stream_bilingual_tts(
+    synthesizer: BilingualCartesiaSynthesizer,
+    text_stream: AsyncIterable[str],
+    *,
+    native_lang: str = "en",
+    target_lang: str = "es",
+    default_lang: Optional[str] = None,
+    speed: float = 1.0,
+) -> AsyncIterator[rtc.AudioFrame]:
+    """Streams live LLM tokens clause-by-clause through Cartesia `sonic-3.6` with regional `locale`.
+
+    Starts playing the first sentence/clause immediately while prefetching subsequent clauses in the
+    background so multi-sentence or bilingual turns play with zero inter-clause network stalls.
+    """
+    queue: asyncio.Queue[tuple[SpeechSegment, asyncio.Task[bytes]] | None] = asyncio.Queue()
+    inflight_tasks: list[asyncio.Task[bytes]] = []
+
+    async def _producer() -> None:
+        try:
+            async for seg in iter_streaming_clauses(
+                text_stream,
+                native_lang=native_lang,
+                target_lang=target_lang,
+                default_lang=default_lang or target_lang,
+                speed=speed,
+            ):
+                if not seg.text.strip():
+                    continue
+                task = asyncio.create_task(
+                    synthesizer.fetch_pcm_bytes(seg.text, seg.language, seg.speed)
                 )
+                inflight_tasks.append(task)
+                await queue.put((seg, task))
+        finally:
+            await queue.put(None)
 
-        # Natural silence pause between language clauses
-        pause_ms = seg.pause_after_ms or (default_pause_ms if idx < len(valid_segments) - 1 else 0)
-        if pause_ms > 0 and idx < len(valid_segments) - 1:
-            pause_samples = int(sample_rate * pause_ms / 1000)
-            silence_data = np.zeros(pause_samples, dtype=np.int16)
-            silence_bytes = silence_data.tobytes()
-            for off in range(0, len(silence_bytes), frame_bytes):
-                chunk = silence_bytes[off : off + frame_bytes]
-                n_samples = len(chunk) // 2
-                if n_samples > 0:
-                    yield rtc.AudioFrame(
-                        data=chunk,
-                        sample_rate=sample_rate,
-                        num_channels=1,
-                        samples_per_channel=n_samples,
-                    )
+    producer_task = asyncio.create_task(_producer())
+    try:
+        current = await queue.get()
+        while current is not None:
+            seg, pcm_task = current
+            next_item: Any = _QUEUE_UNSET
+            if not queue.empty():
+                next_item = queue.get_nowait()
+
+            pcm_bytes = await pcm_task
+            if next_item is _QUEUE_UNSET and not queue.empty():
+                next_item = queue.get_nowait()
+
+            if pcm_bytes:
+                if next_item is not _QUEUE_UNSET and next_item is not None:
+                    next_seg = next_item[0]
+                    pause_ms = 180 if next_seg.language != seg.language else 80
+                else:
+                    pause_ms = 0
+                for frame in _pcm_to_audio_frames(pcm_bytes, pause_after_ms=pause_ms):
+                    yield frame
+
+            if next_item is _QUEUE_UNSET:
+                current = await queue.get()
+            else:
+                current = next_item
+    finally:
+        if not producer_task.done():
+            producer_task.cancel()
+        for t in inflight_tasks:
+            if not t.done():
+                t.cancel()

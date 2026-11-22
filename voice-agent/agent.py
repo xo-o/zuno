@@ -6,6 +6,7 @@ import time
 
 import certifi
 from dotenv import load_dotenv
+from google import genai
 from google.genai import types
 
 # Python builds on macOS often ship without a CA bundle, which breaks TLS to LiveKit Cloud.
@@ -25,14 +26,19 @@ import livekit.plugins.google as gg
 import livekit.plugins.silero as silero
 
 from avatar_session import MuseTalkAvatarSession
-from bilingual import segment_bilingual_text, strip_lang_tags
+from bilingual import (
+    segment_bilingual_text,
+    strip_lang_tags,
+    strip_lang_tags_stream,
+)
 from lesson_flow import LessonAgent, LessonOrchestrator
 from onboarding_flow import OnboardingAgent, OnboardingOrchestrator
+from roleplay_flow import RoleplayAgent, RoleplayOrchestrator
 from voices import (
     BilingualCartesiaSynthesizer,
-    DEFAULT_CARTESIA_VOICE,
     create_cartesia_tts,
     resolve_cartesia_voice,
+    stream_bilingual_tts,
     synthesize_bilingual_segments,
     update_cartesia_tts,
 )
@@ -44,13 +50,15 @@ logger = logging.getLogger("voice-agent")
 server = AgentServer()
 
 INSTRUCTIONS = (
-    "You are Zuno, an ultra-responsive, warm, and natural conversational language tutor. "
-    "You are speaking live with the learner over a real-time voice call. "
-    "CRITICAL FORMATTING RULES: "
-    "- Generate ONLY plain conversational speech in the target language unless asked otherwise. "
-    "- Keep responses short, concise, and natural: 1 to 2 sentences typically (under 120 characters). "
-    "- NEVER use markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists. "
-    "- NEVER use brackets, parentheticals, or stage directions like [pause], [laughs], or (sighs). "
+    "You are Zuno, an ultra-responsive, warm, and natural conversational language tutor "
+    "speaking live with the learner over a real-time voice call.\n"
+    "CRITICAL FORMATTING RULES:\n"
+    "- Speak primarily in the target language unless the learner asks for clarification or translation.\n"
+    "- When switching between the learner's native language and target language in the same reply, "
+    'wrap each language span in <lang code="xx">...</lang> so each clause is voiced with authentic native phonetics.\n'
+    "- Keep responses short, concise, and natural: 1 to 2 sentences typically (under 140 characters).\n"
+    "- NEVER use markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists.\n"
+    "- NEVER output stage directions like (laughs), (sighs), or romanization in parentheses.\n"
     "- Respond directly, warmly, and immediately."
 )
 
@@ -67,7 +75,6 @@ STT_ACCENT_CODES = {
     ("zh", "taiwan"): "zh-TW",
 }
 
-
 NOVA3_MULTI_LANGS = {"en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"}
 
 
@@ -79,7 +86,13 @@ def create_stt(
 ):
     base_target = (language or "en").lower().split("-")[0]
     base_native = (native_language or "").lower().split("-")[0]
-    if multilingual and base_native and base_native != base_target and base_target in NOVA3_MULTI_LANGS and base_native in NOVA3_MULTI_LANGS:
+    if (
+        multilingual
+        and base_native
+        and base_native != base_target
+        and base_target in NOVA3_MULTI_LANGS
+        and base_native in NOVA3_MULTI_LANGS
+    ):
         return dg.STT(
             model="nova-3",
             language="multi",
@@ -109,8 +122,12 @@ class ConversationalAgent(Agent):
         self,
         tts=None,
         stt=None,
+        synthesizer: BilingualCartesiaSynthesizer | None = None,
+        broadcast=None,
         language: str = "en",
         native_language: str = "en",
+        native_language_name: str = "English",
+        level: str = "B1",
         tutor_instructions: str | None = None,
         resume: bool = False,
         opening: str | None = None,
@@ -118,67 +135,125 @@ class ConversationalAgent(Agent):
     ) -> None:
         self.language = language
         self.native_language = native_language
+        self.native_language_name = native_language_name
+        self.level = level
+        self.synthesizer = synthesizer or BilingualCartesiaSynthesizer()
+        self.broadcast = broadcast
         self.tutor_instructions = tutor_instructions
         self.resume = resume
         self.opening = opening
         self.silent_enter = silent_enter
+        self.last_tutor_line: str = ""
+        self._genai_client: genai.Client | None = None
         instructions = f"{tutor_instructions}\n\n{INSTRUCTIONS}" if tutor_instructions else INSTRUCTIONS
         super().__init__(instructions=instructions, tts=tts, stt=stt)
 
+    @property
+    def base_speed(self) -> float:
+        return 0.94 if self.level in ("A1", "A2") else 1.0
+
     async def transcription_node(self, text, model_settings):
-        async for delta in text:
-            if isinstance(delta, str):
-                yield strip_lang_tags(delta)
-            else:
-                yield delta
+        async for chunk in strip_lang_tags_stream(text):
+            yield chunk
 
     async def tts_node(self, text, model_settings):
-        chunks: list[str] = []
-        async for delta in text:
-            chunks.append(delta)
-        full_text = "".join(chunks)
-
-        if "[" in full_text and (f"[{self.native_language}]" in full_text or f"[{self.language}]" in full_text or "<lang=" in full_text):
-            segments = segment_bilingual_text(
-                full_text,
-                native_lang=self.native_language,
-                target_lang=self.language,
-                default_lang=self.language,
-            )
-            voice_id = getattr(self.tts, "_opts", None) and self.tts._opts.voice
-            synthesizer = BilingualCartesiaSynthesizer(voice_id=voice_id)
-            async for frame in synthesize_bilingual_segments(synthesizer, segments):
-                yield frame
-        else:
-            async def _forward():
-                for c in chunks:
-                    yield c
-            async for frame in Agent.default.tts_node(self, _forward(), model_settings):
-                yield frame
+        async for frame in stream_bilingual_tts(
+            self.synthesizer,
+            text,
+            native_lang=self.native_language,
+            target_lang=self.language,
+            default_lang=self.language,
+            speed=self.base_speed,
+        ):
+            yield frame
 
     async def on_enter(self) -> None:
         if self.silent_enter:
             return
         if self.opening:
-            self.session.say(self.opening, add_to_chat_ctx=False)
+            clean_opening = strip_lang_tags(self.opening)
+            self.last_tutor_line = clean_opening
+            clauses = segment_bilingual_text(
+                self.opening,
+                native_lang=self.native_language,
+                target_lang=self.language,
+                default_lang=self.language,
+                speed=self.base_speed,
+            )
+            audio = synthesize_bilingual_segments(self.synthesizer, clauses)
+            self.session.say(clean_opening, audio=audio, add_to_chat_ctx=False)
             return
         if self.resume:
             self.session.generate_reply(
                 instructions=(
                     "The learner just switched to a live voice call in the middle of this conversation. "
                     "If their last message has not been answered yet, answer it. Otherwise, continue "
-                    "naturally from where the conversation left off. One short sentence, in your role."
+                    f'naturally from where the conversation left off in <lang code="{self.language}">...</lang> '
+                    "(one short sentence, in your role)."
                 )
             )
             return
         if self.tutor_instructions:
             self.session.generate_reply(
-                instructions="Greet the learner in one short sentence and invite them to start, following your role."
+                instructions=(
+                    f'Greet the learner in one short sentence wrapped in <lang code="{self.language}">...</lang> '
+                    "and invite them to start, following your role."
+                )
             )
         else:
             self.session.generate_reply(
-                instructions="Say a warm, brief one-sentence hello to the user and ask what they would like to talk about today."
+                instructions=(
+                    f'Say a warm, brief one-sentence hello to the learner in <lang code="{self.language}">...</lang> '
+                    "and ask what they would like to talk about today."
+                )
             )
+
+    async def handle_client_action(self, action: str, payload: str | None = None) -> None:
+        if action in ("listen_slow", "slow"):
+            phrase = strip_lang_tags(payload or self.last_tutor_line).strip()
+            if phrase and self.session:
+                try:
+                    self.session.interrupt()
+                except Exception:
+                    pass
+                clauses = segment_bilingual_text(
+                    phrase,
+                    native_lang=self.native_language,
+                    target_lang=self.language,
+                    default_lang=self.language,
+                    speed=0.76,
+                )
+                audio = synthesize_bilingual_segments(self.synthesizer, clauses)
+                self.session.say(phrase, audio=audio, add_to_chat_ctx=False)
+            return
+
+        if action == "translate" and self.broadcast:
+            line = strip_lang_tags(payload or self.last_tutor_line).strip()
+            if not line:
+                return
+            try:
+                if self._genai_client is None:
+                    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+                    self._genai_client = genai.Client(api_key=api_key)
+                client = self._genai_client
+
+                def _translate() -> str:
+                    resp = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=f"Translate naturally into {self.native_language_name}: '{line}'. Return JSON: {{\"translation\": string}}",
+                        config=types.GenerateContentConfig(temperature=0.1, response_mime_type="application/json"),
+                    )
+                    return str(json.loads(resp.text or "{}").get("translation") or "").strip()
+
+                translation = await asyncio.to_thread(_translate)
+                if translation:
+                    await self.broadcast({
+                        "type": "rescue_payload",
+                        "action": "translate",
+                        "text": translation,
+                    })
+            except Exception as e:
+                logger.warning("Conversational translate fallback error: %s", e)
 
 
 @server.rtc_session()
@@ -197,7 +272,16 @@ async def entrypoint(ctx: JobContext) -> None:
         except Exception as e:
             logger.warning(f"Error parsing metadata: {e}")
 
-    mode = str(meta.get("mode") or ("lesson" if meta.get("curriculum") else "conversation"))
+    raw_mode = str(meta.get("mode") or "")
+    if raw_mode:
+        mode = raw_mode
+    elif meta.get("curriculum"):
+        mode = "lesson"
+    elif meta.get("roleplay"):
+        mode = "roleplay"
+    else:
+        mode = "conversation"
+
     if mode == "peer_human_only":
         logger.info(f"Peer human-only room {ctx.room.name}; agent stepping out.")
         return
@@ -210,9 +294,13 @@ async def entrypoint(ctx: JobContext) -> None:
     tutor_instructions = meta.get("instructions") or None
     resume = bool(meta.get("resume", False))
     opening = meta.get("opening") or None
+    learner_level = str(meta.get("level") or "B1")
+    native_language = str(meta.get("nativeLanguage") or "en")
+    native_language_name = str(meta.get("nativeLanguageName") or "English")
 
     logger.info(
-        f"Initialized session: mode={mode}, provider=cartesia, voice={current_voice}, lang={current_language}"
+        f"Initialized session: mode={mode}, provider=cartesia-sonic-3.6, voice={current_voice}, "
+        f"target_lang={current_language}, native_lang={native_language}, accent={current_accent}"
     )
 
     if mode == "peer_partner":
@@ -224,9 +312,8 @@ async def entrypoint(ctx: JobContext) -> None:
             f"at CEFR level {partner_level}. Your interests include {partner_interests}. "
             f"You just joined a 1:1 peer practice voice call with another learner. "
             f"Talk naturally like a friendly practice partner (NOT as a teacher or AI assistant). "
-            f"Greet them warmly in {current_language} and ask how their day is going or what they want to practice."
+            f'Greet them warmly in <lang code="{current_language}">...</lang> and ask how their day is going or what they want to practice.'
         )
-        # Simulate realistic 2.5s call-ring wait before partner joins, or join immediately if user taps Ping
         ping_event = asyncio.Event()
 
         @ctx.room.on("data_received")
@@ -251,7 +338,6 @@ async def entrypoint(ctx: JobContext) -> None:
         except Exception as e:
             logger.debug(f"Failed to broadcast partner_joined: {e}")
 
-    native_language = str(meta.get("nativeLanguage") or "en")
     stt_lang = native_language if mode == "onboarding" else current_language
     stt_accent = None if mode == "onboarding" else current_accent
     vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
@@ -259,7 +345,7 @@ async def entrypoint(ctx: JobContext) -> None:
         stt_lang,
         stt_accent,
         native_language=native_language,
-        multilingual=(mode == "lesson"),
+        multilingual=(mode in ("lesson", "roleplay", "conversation")),
     )
     llm = gg.LLM(
         model="gemini-2.5-flash",
@@ -271,6 +357,11 @@ async def entrypoint(ctx: JobContext) -> None:
         tutor_voice=tutor_voice,
         language=stt_lang if mode == "onboarding" else current_language,
     )
+    session_synthesizer = BilingualCartesiaSynthesizer(
+        voice_id=current_voice,
+        tutor_voice=tutor_voice,
+        accent=current_accent,
+    )
 
     async def broadcast_event(data: dict) -> None:
         try:
@@ -280,7 +371,10 @@ async def entrypoint(ctx: JobContext) -> None:
             logger.debug(f"Failed to publish data event: {e}")
 
     lesson_orchestrator: LessonOrchestrator | None = None
+    roleplay_orchestrator: RoleplayOrchestrator | None = None
     onboarding_orchestrator: OnboardingOrchestrator | None = None
+    conversational_agent: ConversationalAgent | None = None
+
     if mode == "lesson":
         lesson_orchestrator = LessonOrchestrator(
             meta=meta,
@@ -293,6 +387,19 @@ async def entrypoint(ctx: JobContext) -> None:
             stt=stt,
         )
         initial_endpointing = 0.6
+    elif mode == "roleplay":
+        roleplay_orchestrator = RoleplayOrchestrator(
+            meta=meta,
+            tts=tts,
+            synthesizer=session_synthesizer,
+            broadcast=broadcast_event,
+        )
+        agent = RoleplayAgent(
+            orchestrator=roleplay_orchestrator,
+            tts=tts,
+            stt=stt,
+        )
+        initial_endpointing = 0.75 if hands_free else 1.6
     elif mode == "onboarding":
         onboarding_orchestrator = OnboardingOrchestrator(
             meta=meta,
@@ -306,15 +413,20 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         initial_endpointing = 0.65
     else:
-        agent = ConversationalAgent(
+        conversational_agent = ConversationalAgent(
             tts=tts,
             stt=stt,
+            synthesizer=session_synthesizer,
+            broadcast=broadcast_event,
             language=current_language,
-            native_language=str(meta.get("nativeLanguage") or "en"),
+            native_language=native_language,
+            native_language_name=native_language_name,
+            level=learner_level,
             tutor_instructions=tutor_instructions,
             resume=resume,
             opening=opening,
         )
+        agent = conversational_agent
         initial_endpointing = 0.5 if hands_free else 1.6
 
     avatar_id_meta = meta.get("avatarId") or ("elena" if meta.get("videoAvatar") else None)
@@ -342,8 +454,21 @@ async def entrypoint(ctx: JobContext) -> None:
 
     if lesson_orchestrator is not None:
         lesson_orchestrator.session = session
+    if roleplay_orchestrator is not None:
+        roleplay_orchestrator.session = session
     if onboarding_orchestrator is not None:
         onboarding_orchestrator.session = session
+
+    async def _cleanup_resources() -> None:
+        await session_synthesizer.aclose()
+        if lesson_orchestrator is not None:
+            await lesson_orchestrator.synthesizer.aclose()
+        if onboarding_orchestrator is not None and hasattr(onboarding_orchestrator, "synthesizer"):
+            await onboarding_orchestrator.synthesizer.aclose()
+        if avatar_session is not None:
+            await avatar_session.aclose()
+
+    ctx.add_shutdown_callback(_cleanup_resources)
 
     last_user_speech_end = 0.0
 
@@ -399,7 +524,10 @@ async def entrypoint(ctx: JobContext) -> None:
             if not text:
                 return
             clean_text = strip_lang_tags(text)
+            if not clean_text:
+                return
             logger.info(f"Agent reply: {clean_text}")
+
             if lesson_orchestrator is not None and lesson_orchestrator.stage == "roleplay":
                 lesson_orchestrator.last_tutor_line = clean_text
                 ai_role = lesson_orchestrator.roleplay_cfg.get("aiRole") or "Sofía"
@@ -416,6 +544,18 @@ async def entrypoint(ctx: JobContext) -> None:
                         "actions": ["translate", "listen_slow"],
                     })
                 )
+            elif roleplay_orchestrator is not None and clean_text != roleplay_orchestrator.last_tutor_line:
+                asyncio.create_task(
+                    roleplay_orchestrator.emit_turn(
+                        speaker="agent",
+                        sender_label=roleplay_orchestrator.sender_role_label,
+                        text=clean_text,
+                        actions=["translate", "listen_slow"],
+                    )
+                )
+            elif conversational_agent is not None:
+                conversational_agent.last_tutor_line = clean_text
+
             asyncio.create_task(
                 broadcast_event({
                     "type": "transcript",
@@ -440,15 +580,22 @@ async def entrypoint(ctx: JobContext) -> None:
                     pass
                 return
 
-            if msg_type == "lesson_action" and lesson_orchestrator is not None:
+            if msg_type in ("lesson_action", "roleplay_action"):
                 action = str(data.get("action") or "")
                 payload = data.get("payload")
-                asyncio.create_task(
-                    lesson_orchestrator.handle_client_action(
-                        action=action,
-                        payload=str(payload) if payload is not None else None,
+                payload_str = str(payload) if payload is not None else None
+                if lesson_orchestrator is not None:
+                    asyncio.create_task(
+                        lesson_orchestrator.handle_client_action(action=action, payload=payload_str)
                     )
-                )
+                elif roleplay_orchestrator is not None:
+                    asyncio.create_task(
+                        roleplay_orchestrator.handle_client_action(action=action, payload=payload_str)
+                    )
+                elif conversational_agent is not None:
+                    asyncio.create_task(
+                        conversational_agent.handle_client_action(action=action, payload=payload_str)
+                    )
                 return
 
             if msg_type == "onboarding_action" and onboarding_orchestrator is not None:
@@ -465,6 +612,8 @@ async def entrypoint(ctx: JobContext) -> None:
                 lang = str(data.get("language") or current_language)
                 current_language = lang
                 update_cartesia_tts(tts, language=current_language, speed=1.0)
+                if conversational_agent is not None:
+                    conversational_agent.language = current_language
         except Exception as e:
             logger.warning(f"Error handling client data packet: {e}", exc_info=True)
 

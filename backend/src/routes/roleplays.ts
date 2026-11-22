@@ -2,11 +2,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { AccessToken } from "livekit-server-sdk";
 import { z } from "zod";
-import { communityReport, conversation, roleplay } from "../db/app-schema.js";
+import { communityReport, conversation, roleplay, type RoleplayGoalItem } from "../db/app-schema.js";
 import { db } from "../db/index.js";
 import {
   collectConversationFiles,
+  describeAttachment,
   materialForTopic,
   materialNotes,
   MAX_TOPIC_MATERIAL,
@@ -15,7 +17,8 @@ import { findSeedRoleplay, seedRoleplaysForLanguage } from "../lib/community-see
 import { conversationIdsWhere, createConversation, listMessages } from "../lib/conversations.js";
 import { sendEmail } from "../lib/email.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
-import { getProfile } from "../lib/profile.js";
+import { languageName } from "../lib/languages.js";
+import { getProfile, type LearnerProfile } from "../lib/profile.js";
 import {
   publicBaseUrl,
   roleplayShareUrlOf,
@@ -23,8 +26,18 @@ import {
   serializeMessages,
   serializeRoleplay,
 } from "../lib/serializers.js";
-import { generateRoleplay, generateRoleplayBuilderTurn, type GeneratedRoleplay } from "../lib/tutor.js";
+import {
+  generateRoleplay,
+  generateRoleplayBuilderTurn,
+  generateRoleplayGoals,
+  variety,
+  type GeneratedRoleplay,
+} from "../lib/tutor.js";
+import { cartesiaVoiceFor } from "../lib/voices.js";
 import { authorHandleFor } from "./topics.js";
+
+const TOKEN_TTL = "6h";
+const VOICE_HISTORY_TURNS = 12;
 
 const attachmentIds = z.array(z.string().min(1).max(64)).max(MAX_TOPIC_MATERIAL);
 
@@ -75,6 +88,45 @@ const reportSchema = z.object({
   reason: z.enum(["wrong_correction", "wrong_language_level", "offensive", "unsafe", "other"]),
   details: z.string().trim().max(1000).optional(),
 });
+
+const sessionSchema = z.object({
+  restart: z.boolean().default(false),
+});
+
+export async function ensureRoleplayGoals(
+  row: typeof roleplay.$inferSelect,
+  profile: LearnerProfile,
+): Promise<RoleplayGoalItem[]> {
+  if (Array.isArray(row.goals) && row.goals.length > 0) {
+    return row.goals;
+  }
+  const effectiveProfile =
+    row.language && row.language !== profile.targetLanguage
+      ? { ...profile, targetLanguage: row.language as LearnerProfile["targetLanguage"] }
+      : profile;
+  try {
+    const generated = await generateRoleplayGoals(
+      {
+        title: row.title,
+        scenario: row.scenario,
+        userRole: row.userRole,
+        aiRole: row.aiRole,
+        setting: row.setting,
+      },
+      effectiveProfile,
+    );
+    await db.update(roleplay).set({ goals: generated }).where(eq(roleplay.id, row.id));
+    row.goals = generated;
+    return generated;
+  } catch (err) {
+    console.warn("Lazy roleplay goals generation fallback:", err);
+    return [
+      { id: "goal_1", label: "Open scene", description: `Greet ${row.aiRole} and start the conversation`, samplePhrase: "" },
+      { id: "goal_2", label: "Handle details", description: row.scenario, samplePhrase: "" },
+      { id: "goal_3", label: "Wrap up", description: "Confirm next steps and close naturally", samplePhrase: "" },
+    ];
+  }
+}
 
 function normalizeSearch(s: string) {
   return s
@@ -374,6 +426,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
           aiRole: source.aiRole,
           setting: source.setting,
           language: source.language,
+          goals: source.goals ?? null,
           category: source.category,
           visibility: "private",
           sourceKind: source.sourceKind === "system" ? "system" : "community",
@@ -484,4 +537,181 @@ export const roleplayRoutes = new Hono<AuthEnv>()
   .post("/:id/restart", aiLimit, async (c) => {
     const row = await loadRoleplay(c.get("user").id, c.req.param("id"));
     return c.json(await startRun(row), 201);
+  })
+  /** Starts a live dynamic voice Roleplay session (`mode = "roleplay"`) with Cartesia `sonic-3.6` locale conditioning. */
+  .post("/:id/session", aiLimit, async (c) => {
+    const { LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
+    if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+      throw new HTTPException(500, { message: "LiveKit is not configured" });
+    }
+
+    const user = c.get("user");
+    const requestedId = c.req.param("id");
+    const body = await parseBody(c, sessionSchema);
+    const profile = await getProfile(user.id);
+
+    // Resolve user's owned roleplay, or auto-save a Zuno Official / public community roleplay on first launch
+    let row = await db.query.roleplay.findFirst({
+      where: and(eq(roleplay.id, requestedId), eq(roleplay.userId, user.id)),
+    });
+    if (!row) {
+      row = await db.query.roleplay.findFirst({
+        where: and(eq(roleplay.userId, user.id), eq(roleplay.sourceRoleplayId, requestedId)),
+      });
+    }
+    if (!row) {
+      const seed = findSeedRoleplay(requestedId);
+      if (seed) {
+        const [created] = await db
+          .insert(roleplay)
+          .values({
+            id: randomUUID(),
+            userId: user.id,
+            title: seed.generated.title,
+            scenario: seed.generated.scenario,
+            userRole: seed.generated.userRole,
+            aiRole: seed.generated.aiRole,
+            setting: seed.generated.setting,
+            language: seed.language,
+            goals: seed.generated.goals ?? null,
+            category: seed.category,
+            visibility: "private",
+            sourceKind: seed.sourceKind,
+            sourceRoleplayId: seed.id,
+            authorHandle: seed.authorHandle,
+          })
+          .returning();
+        row = created;
+      } else {
+        const publicSource = await db.query.roleplay.findFirst({
+          where: and(eq(roleplay.id, requestedId), eq(roleplay.visibility, "public")),
+        });
+        if (!publicSource) throw new HTTPException(404, { message: "Roleplay not found" });
+        const [created] = await db
+          .insert(roleplay)
+          .values({
+            id: randomUUID(),
+            userId: user.id,
+            title: publicSource.title,
+            scenario: publicSource.scenario,
+            userRole: publicSource.userRole,
+            aiRole: publicSource.aiRole,
+            setting: publicSource.setting,
+            language: publicSource.language,
+            goals: publicSource.goals ?? null,
+            category: publicSource.category,
+            visibility: "private",
+            sourceKind: publicSource.sourceKind === "system" ? "system" : "community",
+            sourceRoleplayId: publicSource.id,
+            authorHandle: publicSource.authorHandle ?? "@learner",
+          })
+          .returning();
+        await db
+          .update(roleplay)
+          .set({ practicedCount: sql`${roleplay.practicedCount} + 1` })
+          .where(eq(roleplay.id, publicSource.id));
+        row = created;
+      }
+    }
+
+    const targetLanguage = row.language || profile.targetLanguage;
+    const effectiveProfile =
+      targetLanguage !== profile.targetLanguage
+        ? { ...profile, targetLanguage: targetLanguage as LearnerProfile["targetLanguage"] }
+        : profile;
+    const goals = await ensureRoleplayGoals(row, effectiveProfile);
+
+    let thread = body.restart
+      ? undefined
+      : await db.query.conversation.findFirst({
+          where: and(eq(conversation.roleplayId, row.id), eq(conversation.userId, user.id)),
+          orderBy: [desc(conversation.updatedAt)],
+        });
+
+    if (!thread) {
+      thread = await createConversation(
+        {
+          userId: user.id,
+          kind: "roleplay",
+          title: row.title,
+          language: targetLanguage,
+          roleplayId: row.id,
+        },
+        effectiveProfile,
+        { withOpening: false },
+      );
+      if (row.sourceRoleplayId) {
+        await db
+          .update(roleplay)
+          .set({ practicedCount: sql`${roleplay.practicedCount} + 1` })
+          .where(eq(roleplay.id, row.sourceRoleplayId));
+      }
+    }
+
+    const history = (await listMessages(thread.id)).slice(-VOICE_HISTORY_TURNS);
+    const historyTranscript = history
+      .map((m) => {
+        const files = m.attachments.map(describeAttachment).join("\n");
+        return `${m.role === "user" ? "Learner" : row.aiRole}: ${[files, m.text].filter(Boolean).join("\n")}`;
+      })
+      .join("\n");
+
+    const room = `zuno-rp-${randomUUID().slice(0, 8)}`;
+    const voice = cartesiaVoiceFor(profile.tutorVoice);
+
+    const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity: user.id,
+      name: user.name || user.email,
+      ttl: TOKEN_TTL,
+      metadata: JSON.stringify({
+        mode: "roleplay",
+        provider: "cartesia",
+        voice,
+        tutorVoice: profile.tutorVoice,
+        roleplayId: row.id,
+        conversationId: thread.id,
+        language: targetLanguage,
+        targetLanguage,
+        targetLanguageName: languageName(targetLanguage),
+        varietyName: variety(effectiveProfile),
+        nativeLanguage: profile.nativeLanguage,
+        nativeLanguageName: languageName(profile.nativeLanguage),
+        accent: effectiveProfile.accent,
+        level: effectiveProfile.level,
+        teachInTarget: effectiveProfile.teachInTarget,
+        teachingStyle: effectiveProfile.teachingStyle,
+        strictMode: effectiveProfile.strictMode,
+        handsFree: effectiveProfile.handsFree,
+        resume: history.length > 0,
+        historyTranscript,
+        roleplay: {
+          id: row.id,
+          title: row.title,
+          scenario: row.scenario,
+          userRole: row.userRole,
+          aiRole: row.aiRole,
+          setting: row.setting,
+          goals,
+        },
+      }),
+    });
+
+    token.addGrant({
+      room,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    return c.json({
+      token: await token.toJwt(),
+      url: LIVEKIT_URL,
+      room,
+      identity: user.id,
+      conversationId: thread.id,
+      roleplayId: row.id,
+      roleplay: serializeRoleplay(row),
+      goals,
+    });
   });

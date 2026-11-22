@@ -18,10 +18,12 @@ from bilingual import (
     ensure_terminal_punct,
     segment_bilingual_text,
     strip_lang_tags,
+    strip_lang_tags_stream,
     strip_parenthetical_notes,
 )
 from voices import (
     BilingualCartesiaSynthesizer,
+    stream_bilingual_tts,
     synthesize_bilingual_segments,
     update_cartesia_tts,
 )
@@ -1303,10 +1305,13 @@ class LessonOrchestrator:
                 await self._speak_mono(target, language=self.target_lang, speed=0.88)
             return
 
-        if action == "translate" and self.last_tutor_line:
+        if action == "translate":
+            line_to_translate = strip_lang_tags(payload or self.last_tutor_line).strip()
+            if not line_to_translate:
+                return
             res = await self._quick_llm_json(
                 f"Translate this {self.target_lang_name} line naturally into {self.native_lang_name}: "
-                f"'{self.last_tutor_line}'. "
+                f"'{line_to_translate}'. "
                 'Return JSON: {"translation": string}'
             )
             translation = str(res.get("translation") or "")
@@ -1366,9 +1371,9 @@ class LessonAgent(Agent):
             f"Scene & setting: {setting}\n"
             f"Learner goals to complete:\n{goals_desc}\n\n"
             "STRICT RULES:\n"
-            f"1. Speak 100% in {orch.target_lang_name} in 1–2 short, natural conversational sentences (under 140 chars).\n"
-            f"2. If the learner explicitly asks a question in {orch.native_lang_name} (e.g. 'what does X mean?' or 'how do I say…?'), "
-            f"briefly answer in [{orch.native_lang}]...[/{orch.native_lang}] and model the [{orch.target_lang}]...[/{orch.target_lang}] phrase, then stay in character.\n"
+            f'1. Speak 100% in {orch.target_lang_name} wrapped in <lang code="{orch.target_lang}">...</lang> in 1–2 short, natural conversational sentences (under 140 chars).\n'
+            f"2. If the learner explicitly asks a question or asks for clarification in {orch.native_lang_name} (e.g. 'what does X mean?' or 'how do I say…?'), "
+            f'briefly answer in <lang code="{orch.native_lang}">...</lang> and model the <lang code="{orch.target_lang}">...</lang> phrase, then stay in character.\n'
             "3. Otherwise stay 100% in character. NEVER break character to lecture about grammar.\n"
             "4. Implicit recasting: if the learner says something slightly unnatural or ungrammatical, naturally echo the idiomatic phrasing in your reply and record it via `mark_roleplay_goal_complete`.\n"
             "5. Include one realistic detail or mild curveball (e.g., bus number, platform, price, or stop count) so the learner listens actively.\n"
@@ -1377,39 +1382,20 @@ class LessonAgent(Agent):
         )
 
     async def transcription_node(self, text, model_settings):
-        async for delta in text:
-            if isinstance(delta, str):
-                yield strip_lang_tags(delta)
-            else:
-                yield delta
+        async for chunk in strip_lang_tags_stream(text):
+            yield chunk
 
     async def tts_node(self, text, model_settings):
         orch = self.orchestrator
-        chunks: list[str] = []
-        async for delta in text:
-            chunks.append(delta)
-        full_text = "".join(chunks)
-
-        if "[" in full_text and (
-            f"[{orch.native_lang}]" in full_text
-            or f"[{orch.target_lang}]" in full_text
-            or "<lang=" in full_text
+        async for frame in stream_bilingual_tts(
+            orch.synthesizer,
+            text,
+            native_lang=orch.native_lang,
+            target_lang=orch.target_lang,
+            default_lang=orch.target_lang,
+            speed=orch.model_speed,
         ):
-            segments = segment_bilingual_text(
-                full_text,
-                native_lang=orch.native_lang,
-                target_lang=orch.target_lang,
-                default_lang=orch.target_lang,
-            )
-            async for frame in synthesize_bilingual_segments(orch.synthesizer, segments):
-                yield frame
-        else:
-            async def _forward():
-                for c in chunks:
-                    yield c
-
-            async for frame in Agent.default.tts_node(self, _forward(), model_settings):
-                yield frame
+            yield frame
 
     async def activate_roleplay_instructions(self) -> None:
         await self.update_instructions(self._build_roleplay_instructions())

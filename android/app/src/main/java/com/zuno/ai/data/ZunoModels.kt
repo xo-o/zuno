@@ -281,6 +281,16 @@ data class LessonSessionTicket(
     val lessonTranslation: String,
 )
 
+data class RoleplaySessionTicket(
+    val token: String,
+    val url: String,
+    val room: String,
+    val conversationId: String,
+    val roleplayId: String,
+    val roleplay: Roleplay,
+    val goals: List<RoleplayGoalUi> = emptyList(),
+)
+
 data class CoachNote(
     val category: String,
     val correction: String,
@@ -1031,6 +1041,30 @@ internal fun JSONObject.toLessonSessionTicket() = LessonSessionTicket(
     lessonTitle = optString("lessonTitle"),
     lessonTranslation = optString("lessonTranslation"),
 )
+
+internal fun JSONObject.toRoleplaySessionTicket(): RoleplaySessionTicket {
+    val rp = getJSONObject("roleplay").toRoleplay()
+    val goals = optJSONArray("goals")?.objects()?.mapIndexed { idx, g ->
+        RoleplayGoalUi(
+            id = g.optString("id", "goal_${idx + 1}"),
+            index = g.optInt("index", idx + 1),
+            label = g.optString("label"),
+            description = g.optString("description"),
+            samplePhrase = g.optString("samplePhrase"),
+            completed = false,
+            current = idx == 0,
+        )
+    }.orEmpty()
+    return RoleplaySessionTicket(
+        token = getString("token"),
+        url = getString("url"),
+        room = getString("room"),
+        conversationId = getString("conversationId"),
+        roleplayId = optString("roleplayId").ifBlank { rp.id },
+        roleplay = rp,
+        goals = goals,
+    )
+}
 
 internal fun JSONObject.toLessonStageUi(): LessonStageUi {
     val pillObj = optJSONObject("pill") ?: JSONObject()
