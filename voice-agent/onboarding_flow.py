@@ -126,7 +126,11 @@ class OnboardingOrchestrator:
 
         voice_id = getattr(tts, "_opts", None) and tts._opts.voice
         self.synthesizer = BilingualCartesiaSynthesizer(voice_id=voice_id)
-        self._genai = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        self._genai = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(api_version="v1beta"),
+        )
 
     def _prompt_for_step(self, step: str) -> str:
         table = PROMPTS_BY_APP_LANG.get(self.native_lang, PROMPTS_BY_APP_LANG["en"])

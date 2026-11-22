@@ -234,7 +234,10 @@ class ConversationalAgent(Agent):
             try:
                 if self._genai_client is None:
                     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-                    self._genai_client = genai.Client(api_key=api_key)
+                    self._genai_client = genai.Client(
+                        api_key=api_key,
+                        http_options=types.HttpOptions(api_version="v1beta"),
+                    )
                 client = self._genai_client
 
                 def _translate() -> str:

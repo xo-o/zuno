@@ -146,7 +146,10 @@ class RoleplayOrchestrator:
     def _genai(self) -> genai.Client:
         if self._genai_client is None:
             api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            self._genai_client = genai.Client(api_key=api_key)
+            self._genai_client = genai.Client(
+                api_key=api_key,
+                http_options=types.HttpOptions(api_version="v1beta"),
+            )
         return self._genai_client
 
     async def _quick_llm_json(self, prompt: str) -> dict[str, Any]:
