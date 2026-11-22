@@ -54,6 +54,8 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.Loadable
 
 /**
@@ -77,7 +79,7 @@ fun TopicScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding(),
     ) {
         Box {
@@ -102,7 +104,7 @@ fun TopicScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
         ) {
             TopicHero(
@@ -115,11 +117,11 @@ fun TopicScreen(
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                Box(Modifier.padding(start = ZunoSpace.s16, end = ZunoSpace.s4, bottom = ZunoSpace.s4)) {
+                Box(Modifier.padding(bottom = ZunoSpace.s4)) {
                     ZunoSectionHeader(title = "Lessons")
                 }
                 ZunoListGroup {
-                    topic.lessons.forEach { lesson ->
+                    topic.lessons.forEachIndexed { index, lesson ->
                         ZunoLessonRow(
                             number = lesson.position,
                             title = lesson.title,
@@ -134,6 +136,7 @@ fun TopicScreen(
                                     if (topic.summary.status == TopicStatus.NotStarted) "Start here" else "Up next"
                                 LessonState.Upcoming -> null
                             },
+                            showDivider = index > 0,
                             onClick = {
                                 if (!busy) {
                                     when (lesson.state) {
@@ -189,7 +192,7 @@ private fun TopicHero(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(ZunoSpace.s8),
+            .padding(vertical = ZunoSpace.s8),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
         Text(
@@ -236,7 +239,7 @@ fun CommunityTopicPreviewScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -290,11 +293,11 @@ fun CommunityTopicPreviewScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(ZunoSpace.s8),
+                modifier = Modifier.fillMaxWidth().padding(vertical = ZunoSpace.s8),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             ) {
                 Text(item.title, style = ZunoType.Display, color = ZunoColors.TextPrimary)
@@ -325,17 +328,18 @@ fun CommunityTopicPreviewScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                Box(Modifier.padding(start = ZunoSpace.s16, end = ZunoSpace.s4, bottom = ZunoSpace.s4)) {
+                Box(Modifier.padding(bottom = ZunoSpace.s4)) {
                     ZunoSectionHeader(title = stringResource(R.string.topics_preview_syllabus, item.lessons.size))
                 }
                 ZunoListGroup {
                     val previewBadge = stringResource(R.string.topics_preview_row_badge)
-                    item.lessons.forEach { lesson ->
+                    item.lessons.forEachIndexed { index, lesson ->
                         ZunoLessonRow(
                             number = lesson.position,
                             title = lesson.title,
                             status = LessonStatus.Upcoming,
                             meta = previewBadge,
+                            showDivider = index > 0,
                             onClick = { if (!busy) onAddOrOpen(item) },
                         )
                     }
@@ -364,7 +368,7 @@ fun CommunityRoleplayPreviewScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -437,9 +441,7 @@ fun CommunityRoleplayPreviewScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderSubtle, cardShape)
+                    .zunoGlassSubtle(cardShape)
                     .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
             ) {
@@ -458,9 +460,7 @@ fun CommunityRoleplayPreviewScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(ZunoColors.SurfaceSubtle)
-                    .border(1.dp, ZunoColors.BorderSubtle, cardShape)
+                    .zunoGlassSubtle(cardShape)
                     .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {

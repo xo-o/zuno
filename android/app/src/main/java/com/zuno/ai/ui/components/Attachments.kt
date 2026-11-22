@@ -66,6 +66,8 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.DraftAttachment
 import com.zuno.ai.viewmodel.DraftUploadState
 import kotlin.math.roundToInt
@@ -118,9 +120,7 @@ private fun AttachTile(label: String, @DrawableRes icon: Int, onClick: () -> Uni
     val shape = RoundedCornerShape(ZunoRadius.xl)
     Column(
         modifier = modifier
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassElevated(shape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(start = ZunoSpace.s8, end = ZunoSpace.s8, top = ZunoSpace.s20, bottom = ZunoSpace.s16),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -365,16 +365,17 @@ private fun FileCard(
     Row(
         modifier = modifier
             .height(64.dp)
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, if (failed) ZunoColors.BorderFocus else ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(
+                shape = shape,
+                borderBrush = if (failed) androidx.compose.ui.graphics.SolidColor(ZunoColors.BorderFocus) else com.zuno.ai.ui.theme.ZunoGlassBorderSubtleBrush,
+            )
             .clickable(enabled = onClick != null, role = Role.Button) { onClick?.invoke() }
             .padding(ZunoSpace.s12),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(ZunoRadius.sm)).background(ZunoColors.SurfaceStrong),
+            Modifier.size(40.dp).zunoGlassSubtle(RoundedCornerShape(ZunoRadius.sm)),
             contentAlignment = Alignment.Center,
         ) {
             when {

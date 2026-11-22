@@ -10,22 +10,28 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,10 +46,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.DiscoverRoleplay
@@ -62,7 +71,6 @@ import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoCollectionCard
 import com.zuno.ai.ui.components.ZunoEmptyState
-import com.zuno.ai.ui.components.ZunoFloatingBottomNav
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
@@ -71,11 +79,16 @@ import com.zuno.ai.ui.components.ZunoListGroup
 import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoSectionHeader
+import com.zuno.ai.ui.components.ZunoSectionTopBar
 import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassBorderSubtleBrush
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.Loadable
 import kotlinx.coroutines.delay
 
@@ -122,54 +135,7 @@ fun roleplayCategoryLabel(category: String): String = when (category.lowercase()
     else -> stringResource(R.string.roleplays_cat_social)
 }
 
-/** Top Bar · Section (`2653:3340`): 64dp header with TitleLarge + Search & Add buttons. */
-@Composable
-private fun SectionTopBar(
-    title: String,
-    addDescription: String,
-    searchActive: Boolean,
-    onSearchToggle: () -> Unit,
-    onAdd: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .padding(horizontal = ZunoSpace.s24),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            style = ZunoType.TitleLarge,
-            color = ZunoColors.TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ZunoIconButton(
-                icon = if (searchActive) R.drawable.zuno_ic_t_x else R.drawable.zuno_ic_t_search,
-                onClick = onSearchToggle,
-                style = ZunoIconButtonStyle.Ghost,
-                size = ZunoIconButtonSize.Medium,
-                tint = ZunoColors.IconPrimary,
-                contentDescription = stringResource(R.string.chats_search),
-            )
-            ZunoIconButton(
-                icon = R.drawable.zuno_ic_plus,
-                onClick = onAdd,
-                style = ZunoIconButtonStyle.Strong,
-                size = ZunoIconButtonSize.Medium,
-                contentDescription = addDescription,
-            )
-        }
-    }
-}
-
-/** Search Field (`2998:13121`): 42dp rounded input with leading search icon and clear button. */
+/** Search Field (`2998:13121`): 42dp glass input with leading search icon and clear button. */
 @Composable
 internal fun ExploreSearchField(
     query: String,
@@ -189,9 +155,10 @@ internal fun ExploreSearchField(
         modifier = modifier
             .fillMaxWidth()
             .height(42.dp)
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, if (focused) ZunoColors.BorderFocus else ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(
+                shape = shape,
+                borderBrush = if (focused) SolidColor(ZunoColors.BorderFocus) else ZunoGlassBorderSubtleBrush,
+            )
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -242,42 +209,44 @@ internal fun ExplorePreviewCard(
     subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = false,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(ZunoColors.SurfaceDefault)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s16, end = ZunoSpace.s12, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showDivider) ZunoGlassHairline()
+        Row(
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(ZunoRadius.md))
-                .background(ZunoColors.SurfaceStrong),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(start = ZunoSpace.s16, end = ZunoSpace.s12, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ZunoIcon(icon, 18.dp, tint = ZunoColors.IconPrimary)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.md)),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(icon, 18.dp, tint = ZunoColors.IconPrimary)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                Text(
+                    text = title,
+                    style = ZunoType.BodyMediumStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = ZunoType.FootnoteRegular,
+                    color = ZunoColors.TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 16.dp, tint = ZunoColors.IconTertiary)
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-            Text(
-                text = title,
-                style = ZunoType.BodyMediumStrong,
-                color = ZunoColors.TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = subtitle,
-                style = ZunoType.FootnoteRegular,
-                color = ZunoColors.TextTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 16.dp, tint = ZunoColors.IconTertiary)
     }
 }
 
@@ -348,6 +317,65 @@ private fun AddChoiceRow(
     }
 }
 
+// ── Empty State Viewport (Centers Hero above optional anchored discovery) ───
+
+@Composable
+private fun EmptyStateViewport(
+    modifier: Modifier = Modifier,
+    hero: @Composable () -> Unit,
+    footer: (@Composable () -> Unit)? = null,
+) {
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = 92.dp + navBottom
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val density = LocalDensity.current
+        val topPadPx = with(density) { ZunoSpace.s12.roundToPx() }
+        val bottomPadPx = with(density) { bottomPadding.roundToPx() }
+        val gapPx = with(density) { ZunoSpace.s20.roundToPx() }
+        val minInnerHeightPx = (with(density) { maxHeight.roundToPx() } - topPadPx - bottomPadPx).coerceAtLeast(0)
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = bottomPadding),
+        ) {
+            Layout(
+                content = {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { hero() }
+                    if (footer != null) {
+                        Box(modifier = Modifier.fillMaxWidth()) { footer() }
+                    }
+                },
+            ) { measurables, constraints ->
+                val loose = constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)
+                val heroPlaceable = measurables[0].measure(loose)
+                val footerPlaceable = measurables.getOrNull(1)?.measure(loose)
+
+                val neededHeight = if (footerPlaceable != null) {
+                    heroPlaceable.height + gapPx + footerPlaceable.height
+                } else {
+                    heroPlaceable.height
+                }
+                val totalHeight = maxOf(minInnerHeightPx, neededHeight)
+
+                val heroY = if (footerPlaceable != null) {
+                    val stageHeight = (totalHeight - gapPx - footerPlaceable.height).coerceAtLeast(heroPlaceable.height)
+                    (stageHeight - heroPlaceable.height) / 2
+                } else {
+                    (totalHeight - heroPlaceable.height) / 2
+                }
+                val footerY = totalHeight - (footerPlaceable?.height ?: 0)
+
+                layout(constraints.maxWidth, totalHeight) {
+                    heroPlaceable.placeRelative(0, heroY)
+                    footerPlaceable?.placeRelative(0, footerY)
+                }
+            }
+        }
+    }
+}
+
 // ── 01 · Topics — List & 06 · Topics — Empty ────────────────────────────────
 
 @Composable
@@ -362,7 +390,8 @@ fun TopicsScreen(
     onCreate: () -> Unit,
     onExplore: (String) -> Unit,
     onOpenPreview: (String) -> Unit,
-    onNavTabSelected: (HomeNavTab) -> Unit,
+    onNavTabSelected: (HomeNavTab) -> Unit = {},
+    onBack: () -> Unit = { onNavTabSelected(HomeNavTab.Home) },
     recommendedTopics: List<RecommendedTopic> = emptyList(),
     busy: Boolean = false,
     onSelectRecommended: (RecommendedTopic) -> Unit = {},
@@ -382,16 +411,20 @@ fun TopicsScreen(
             it.translation.contains(query.trim(), ignoreCase = true)
     }
 
-    Box(modifier.fillMaxSize().background(ZunoColors.BgCanvas)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            SectionTopBar(
+    Box(modifier.fillMaxSize().zunoCanvasBackground()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            ZunoSectionTopBar(
                 title = stringResource(R.string.topics_title),
+                onBack = onBack,
                 addDescription = stringResource(R.string.topics_add_sheet_title),
+                showSearch = !topics.isNullOrEmpty(),
                 searchActive = searching,
                 onSearchToggle = {
                     searching = !searching
                     if (!searching) query = ""
                 },
+                searchDescription = stringResource(R.string.chats_search),
+                showAdd = true,
                 onAdd = { showAddSheet = true },
             )
 
@@ -400,85 +433,38 @@ fun TopicsScreen(
                     if (loading || error != null) ZunoLoadState(error, onRetry, Modifier.padding(ZunoSpace.s24))
                 }
                 topics.isEmpty() && !searching -> {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = 120.dp),
-                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
-                    ) {
-                        item(key = "empty-hero") {
+                    EmptyStateViewport(
+                        modifier = Modifier.weight(1f),
+                        hero = {
                             Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s12),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = ZunoSpace.s32),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
                             ) {
                                 ZunoEmptyState(
                                     icon = R.drawable.zuno_ic_book_open,
                                     title = stringResource(R.string.topics_empty_title),
                                     description = stringResource(R.string.topics_empty_body),
                                 )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    ZunoButton(
-                                        label = stringResource(R.string.topics_create_cta),
-                                        onClick = onCreate,
-                                        size = ZunoButtonSize.Medium,
-                                        leadingIcon = R.drawable.zuno_ic_plus_inverse,
-                                        leadingIconTint = ZunoColors.IconOnInverse,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    ZunoButton(
-                                        label = stringResource(R.string.topics_explore_cta),
-                                        onClick = { onExplore("") },
-                                        variant = ZunoButtonVariant.Secondary,
-                                        size = ZunoButtonSize.Medium,
-                                        leadingIcon = R.drawable.zuno_ic_t_globe,
-                                        leadingIconTint = ZunoColors.IconPrimary,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                }
-                            }
-                        }
-
-                        if (recommendedTopics.isNotEmpty()) {
-                            item(key = "recommended") {
-                                RecommendedTopicsBlock(
-                                    recommendedTopics = recommendedTopics,
-                                    busy = busy,
-                                    onSelectRecommended = onSelectRecommended,
+                                ZunoButton(
+                                    label = stringResource(R.string.topics_explore_cta),
+                                    onClick = { onExplore("") },
+                                    variant = ZunoButtonVariant.Secondary,
+                                    size = ZunoButtonSize.Medium,
+                                    leadingIcon = R.drawable.zuno_ic_t_search,
+                                    leadingIconTint = ZunoColors.IconPrimary,
+                                    modifier = Modifier.widthIn(min = 168.dp),
                                 )
                             }
-                        }
-
-                        if (discoverPreview.isNotEmpty()) {
-                            item(key = "explore-preview") {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ZunoSectionHeader(title = stringResource(R.string.topics_explore_section))
-                                    ZunoListGroup {
-                                        discoverPreview.take(4).forEach { item ->
-                                            val sub = if (item.isOfficial) {
-                                                "${stringResource(R.string.topics_official_badge)} · ${stringResource(R.string.onboarding_lessons_count, item.totalLessons)} · ${item.level}"
-                                            } else {
-                                                "${item.authorHandle ?: "@learner"} · ${stringResource(R.string.topics_learners_count, item.learnersCount)} · ${stringResource(R.string.onboarding_lessons_count, item.totalLessons)}"
-                                            }
-                                            ExplorePreviewCard(
-                                                icon = if (item.isOfficial) R.drawable.zuno_ic_t_sparkles else R.drawable.zuno_ic_t_globe,
-                                                title = item.title,
-                                                subtitle = sub,
-                                                onClick = { onOpenPreview(item.id) },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                        },
+                    )
                 }
                 else -> {
                     LazyColumn(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 120.dp),
+                        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = 120.dp),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                     ) {
                         if (searching) {
@@ -488,7 +474,6 @@ fun TopicsScreen(
                                     onQueryChange = { query = it },
                                     placeholder = stringResource(R.string.topics_search_placeholder),
                                     autoFocus = true,
-                                    modifier = Modifier.padding(horizontal = ZunoSpace.s8),
                                 )
                             }
                         }
@@ -497,7 +482,7 @@ fun TopicsScreen(
                                 Column(
                                     modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s24),
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
                                 ) {
                                     val trimmed = query.trim()
                                     ZunoEmptyState(
@@ -522,13 +507,14 @@ fun TopicsScreen(
                         } else {
                             item(key = "topics-list") {
                                 ZunoListGroup {
-                                    filtered.forEach { topic ->
+                                    filtered.forEachIndexed { index, topic ->
                                         ZunoCollectionCard(
                                             icon = R.drawable.zuno_ic_book_open,
                                             title = topic.title,
                                             subtitle = topic.localizedSubtitle(),
                                             onClick = { onOpen(topic.id) },
                                             menu = menuForTopic(topic),
+                                            showDivider = index > 0,
                                         )
                                     }
                                 }
@@ -548,15 +534,6 @@ fun TopicsScreen(
                 }
             }
         }
-
-        ZunoFloatingBottomNav(
-            activeTab = HomeNavTab.Learn,
-            onTabSelected = onNavTabSelected,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = ZunoSpace.s8),
-        )
     }
 
     if (showAddSheet) {
@@ -593,9 +570,7 @@ private fun RecommendedTopicsBlock(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ZunoColors.SurfaceSubtle)
-                .border(1.dp, ZunoColors.BorderSubtle, shape),
+                .zunoGlassSubtle(shape),
         ) {
             val lessonsLabel = stringResource(R.string.onboarding_lessons_count, 5)
             recommendedTopics.forEachIndexed { index, rec ->
@@ -608,7 +583,7 @@ private fun RecommendedTopicsBlock(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 18.dp, end = ZunoSpace.s16, top = ZunoSpace.s14, bottom = ZunoSpace.s14),
+                            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
                         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -622,7 +597,7 @@ private fun RecommendedTopicsBlock(
                         ZunoIcon(R.drawable.zuno_ic_chevron_right_muted, 16.dp)
                     }
                     if (index < recommendedTopics.lastIndex) {
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                        ZunoGlassHairline()
                     }
                 }
             }
@@ -644,7 +619,8 @@ fun RoleplaysScreen(
     onCreate: () -> Unit,
     onExplore: (String) -> Unit,
     onOpenPreview: (String) -> Unit,
-    onNavTabSelected: (HomeNavTab) -> Unit,
+    onNavTabSelected: (HomeNavTab) -> Unit = {},
+    onBack: () -> Unit = { onNavTabSelected(HomeNavTab.Home) },
     modifier: Modifier = Modifier,
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -663,16 +639,20 @@ fun RoleplaysScreen(
             it.aiRole.contains(query.trim(), ignoreCase = true)
     }
 
-    Box(modifier.fillMaxSize().background(ZunoColors.BgCanvas)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            SectionTopBar(
+    Box(modifier.fillMaxSize().zunoCanvasBackground()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            ZunoSectionTopBar(
                 title = stringResource(R.string.roleplays_title),
+                onBack = onBack,
                 addDescription = stringResource(R.string.roleplays_add_sheet_title),
+                showSearch = !roleplays.isNullOrEmpty(),
                 searchActive = searching,
                 onSearchToggle = {
                     searching = !searching
                     if (!searching) query = ""
                 },
+                searchDescription = stringResource(R.string.chats_search),
+                showAdd = true,
                 onAdd = { showAddSheet = true },
             )
 
@@ -681,75 +661,38 @@ fun RoleplaysScreen(
                     if (loading || error != null) ZunoLoadState(error, onRetry, Modifier.padding(ZunoSpace.s24))
                 }
                 roleplays.isEmpty() && !searching -> {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = 120.dp),
-                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
-                    ) {
-                        item(key = "empty-hero") {
+                    EmptyStateViewport(
+                        modifier = Modifier.weight(1f),
+                        hero = {
                             Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s12),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = ZunoSpace.s32),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
                             ) {
                                 ZunoEmptyState(
                                     icon = R.drawable.zuno_ic_users,
                                     title = stringResource(R.string.roleplays_empty_title),
                                     description = stringResource(R.string.roleplays_empty_body),
                                 )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    ZunoButton(
-                                        label = stringResource(R.string.roleplays_new_cta),
-                                        onClick = onCreate,
-                                        size = ZunoButtonSize.Medium,
-                                        leadingIcon = R.drawable.zuno_ic_plus_inverse,
-                                        leadingIconTint = ZunoColors.IconOnInverse,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    ZunoButton(
-                                        label = stringResource(R.string.topics_explore_cta),
-                                        onClick = { onExplore("") },
-                                        variant = ZunoButtonVariant.Secondary,
-                                        size = ZunoButtonSize.Medium,
-                                        leadingIcon = R.drawable.zuno_ic_t_globe,
-                                        leadingIconTint = ZunoColors.IconPrimary,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                }
+                                ZunoButton(
+                                    label = stringResource(R.string.topics_explore_cta),
+                                    onClick = { onExplore("") },
+                                    variant = ZunoButtonVariant.Secondary,
+                                    size = ZunoButtonSize.Medium,
+                                    leadingIcon = R.drawable.zuno_ic_t_search,
+                                    leadingIconTint = ZunoColors.IconPrimary,
+                                    modifier = Modifier.widthIn(min = 168.dp),
+                                )
                             }
-                        }
-
-                        if (discoverPreview.isNotEmpty()) {
-                            item(key = "explore-preview") {
-                                Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                                    ZunoSectionHeader(title = stringResource(R.string.roleplays_explore_section))
-                                    ZunoListGroup {
-                                        discoverPreview.take(4).forEach { item ->
-                                            val sub = if (item.isOfficial) {
-                                                "Zuno · ${item.userRole} / ${item.aiRole}"
-                                            } else {
-                                                "${item.authorHandle ?: "@learner"} · ${stringResource(R.string.roleplays_practiced_count, item.practicedCount)}"
-                                            }
-                                            ExplorePreviewCard(
-                                                icon = R.drawable.zuno_ic_users,
-                                                title = item.title,
-                                                subtitle = sub,
-                                                onClick = { onOpenPreview(item.id) },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                        },
+                    )
                 }
                 else -> {
                     LazyColumn(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 120.dp),
+                        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = 120.dp),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                     ) {
                         if (searching) {
@@ -759,7 +702,6 @@ fun RoleplaysScreen(
                                     onQueryChange = { query = it },
                                     placeholder = stringResource(R.string.roleplays_search_placeholder),
                                     autoFocus = true,
-                                    modifier = Modifier.padding(horizontal = ZunoSpace.s8),
                                 )
                             }
                         }
@@ -768,7 +710,7 @@ fun RoleplaysScreen(
                                 Column(
                                     modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s24),
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
                                 ) {
                                     val trimmed = query.trim()
                                     ZunoEmptyState(
@@ -793,13 +735,14 @@ fun RoleplaysScreen(
                         } else {
                             item(key = "roleplays-list") {
                                 ZunoListGroup {
-                                    filtered.forEach { roleplay ->
+                                    filtered.forEachIndexed { index, roleplay ->
                                         ZunoCollectionCard(
                                             icon = R.drawable.zuno_ic_users,
                                             title = roleplay.title,
                                             subtitle = roleplay.localizedSubtitle(),
                                             onClick = { onOpen(roleplay.id) },
                                             menu = menuForRoleplay(roleplay),
+                                            showDivider = index > 0,
                                         )
                                     }
                                 }
@@ -809,15 +752,6 @@ fun RoleplaysScreen(
                 }
             }
         }
-
-        ZunoFloatingBottomNav(
-            activeTab = HomeNavTab.More,
-            onTabSelected = onNavTabSelected,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = ZunoSpace.s8),
-        )
     }
 
     if (showAddSheet) {
@@ -860,7 +794,7 @@ fun ExploreTopicsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -938,12 +872,13 @@ fun ExploreTopicsScreen(
                         }
                         item(key = "official-list") {
                             ZunoListGroup {
-                                data.official.forEach { item ->
+                                data.official.forEachIndexed { index, item ->
                                     ExplorePreviewCard(
                                         icon = R.drawable.zuno_ic_t_sparkles,
                                         title = item.title,
                                         subtitle = "${stringResource(R.string.topics_official_badge)} · ${stringResource(R.string.onboarding_lessons_count, item.totalLessons)} · $languageName ${item.level}",
                                         onClick = { onOpenPreview(item) },
+                                        showDivider = index > 0,
                                     )
                                 }
                             }
@@ -960,12 +895,13 @@ fun ExploreTopicsScreen(
                         }
                         item(key = "community-list") {
                             ZunoListGroup {
-                                data.community.forEach { item ->
+                                data.community.forEachIndexed { index, item ->
                                     ExplorePreviewCard(
                                         icon = R.drawable.zuno_ic_t_globe,
                                         title = item.title,
                                         subtitle = "${item.authorHandle ?: "@learner"} · ${stringResource(R.string.topics_learners_count, item.learnersCount)} · ${stringResource(R.string.onboarding_lessons_count, item.totalLessons)}",
                                         onClick = { onOpenPreview(item) },
+                                        showDivider = index > 0,
                                     )
                                 }
                             }
@@ -1002,7 +938,7 @@ fun ExploreRoleplaysScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -1080,12 +1016,13 @@ fun ExploreRoleplaysScreen(
                         }
                         item(key = "official-list") {
                             ZunoListGroup {
-                                data.official.forEach { item ->
+                                data.official.forEachIndexed { index, item ->
                                     ExplorePreviewCard(
                                         icon = R.drawable.zuno_ic_t_sparkles,
                                         title = item.title,
                                         subtitle = "${stringResource(R.string.topics_official_badge)} · ${item.userRole} / ${item.aiRole}",
                                         onClick = { onOpenPreview(item) },
+                                        showDivider = index > 0,
                                     )
                                 }
                             }
@@ -1102,12 +1039,13 @@ fun ExploreRoleplaysScreen(
                         }
                         item(key = "community-list") {
                             ZunoListGroup {
-                                data.community.forEach { item ->
+                                data.community.forEachIndexed { index, item ->
                                     ExplorePreviewCard(
                                         icon = R.drawable.zuno_ic_users,
                                         title = item.title,
                                         subtitle = "${item.authorHandle ?: "@learner"} · ${stringResource(R.string.roleplays_practiced_count, item.practicedCount)}",
                                         onClick = { onOpenPreview(item) },
+                                        showDivider = index > 0,
                                     )
                                 }
                             }

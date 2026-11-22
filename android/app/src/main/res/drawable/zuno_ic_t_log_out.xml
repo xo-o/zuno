@@ -1,26 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable (white) Lucide glyph; color it with ZunoIcon(tint = …). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20.6246 15.2703V8.74976C20.6246 6.60144 20.1893 5.3242 19.4274 4.56226C18.6654 3.80041 17.3881 3.36499 15.2399 3.36499H15.11C13.1653 3.365 11.9323 3.72274 11.1539 4.35425C10.3997 4.96624 9.91585 5.96612 9.77209 7.6355C9.73043 8.11676 9.30616 8.47284 8.82483 8.4314C8.34351 8.38986 7.98662 7.96644 8.02795 7.48511C8.1942 5.55451 8.79065 4.01885 10.0514 2.99585C11.288 1.99245 13.0049 1.61499 15.11 1.61499H15.2399C17.5613 1.61499 19.4141 2.07457 20.6647 3.32495C21.9152 4.57544 22.3746 6.42833 22.3746 8.74976V15.2703C22.3746 17.5917 21.9151 19.4446 20.6647 20.6951C19.4141 21.9454 17.5613 22.405 15.2399 22.405H15.11C13.0201 22.405 11.3137 22.0328 10.0797 21.0457C8.82048 20.0383 8.21614 18.5244 8.0387 16.6208C7.99406 16.1399 8.34773 15.7136 8.82873 15.6687C9.30987 15.6238 9.73599 15.9776 9.78088 16.4587C9.93343 18.0951 10.4193 19.0768 11.1725 19.6794C11.951 20.3023 13.1799 20.655 15.11 20.655H15.2399C17.3881 20.655 18.6654 20.2196 19.4274 19.4578C20.1893 18.6958 20.6246 17.4186 20.6246 15.2703Z" />
     <path
-        android:pathData="M16 17l5-5-5-5"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14.9999 11.125C15.4831 11.125 15.8749 11.5168 15.8749 12C15.8749 12.4832 15.4831 12.875 14.9999 12.875H3.62C3.13675 12.875 2.745 12.4832 2.745 12C2.745 11.5168 3.13675 11.125 3.62 11.125H14.9999Z" />
     <path
-        android:pathData="M21 12H9"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5.23144 8.03088C5.57311 7.68953 6.12712 7.68946 6.46875 8.03088C6.81046 8.37259 6.81046 8.92745 6.46875 9.26916L3.7373 11.9996L6.46875 14.7311C6.81039 15.0727 6.81026 15.6267 6.46875 15.9684C6.12704 16.3101 5.57315 16.3101 5.23144 15.9684L1.88086 12.6188C1.53944 12.2771 1.53951 11.7231 1.88086 11.3815L5.23144 8.03088Z" />
 </vector>

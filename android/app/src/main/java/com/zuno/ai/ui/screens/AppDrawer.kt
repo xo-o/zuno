@@ -2,18 +2,22 @@ package com.zuno.ai.ui.screens
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -21,40 +25,47 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.RecentSession
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
-import com.zuno.ai.ui.components.ZunoIconButton
+import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoMenuItem
 import com.zuno.ai.ui.components.ZunoProfileCard
-import com.zuno.ai.ui.components.ZunoSectionHeader
 import com.zuno.ai.ui.components.ZunoSessionRow
 import com.zuno.ai.ui.components.ZunoUpgradeBanner
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassOverlay
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 
 enum class DrawerDestination(@param:StringRes val labelRes: Int, val label: String, val icon: Int) {
-    FreeTalk(R.string.drawer_free_talk, "Free Talk", R.drawable.zuno_ic_composer_voice),
-    Scheduled(R.string.drawer_scheduled, "Scheduled", R.drawable.zuno_ic_calendar),
-    Topics(R.string.drawer_topics, "Topics", R.drawable.zuno_ic_book_open),
-    Roleplays(R.string.drawer_roleplays, "Roleplays", R.drawable.zuno_ic_users),
-    Progress(R.string.drawer_progress, "Progress", R.drawable.zuno_ic_trending_up),
+    FreeTalk(R.string.drawer_free_talk, "Free Talk", R.drawable.zuno_ic_t_audio_lines),
+    Topics(R.string.drawer_topics, "Topics", R.drawable.zuno_ic_t_book_open),
+    Roleplays(R.string.drawer_roleplays, "Roleplays", R.drawable.zuno_ic_t_sparkles),
     Vocabulary(R.string.drawer_vocabulary, "Vocabulary", R.drawable.zuno_ic_bookmark),
+    Scheduled(R.string.drawer_scheduled, "Scheduled", R.drawable.zuno_ic_t_calendar),
+    LiveRooms(R.string.home_explore_live_rooms, "Live rooms", R.drawable.zuno_ic_radio),
+    Community(R.string.home_explore_community, "Community & Partners", R.drawable.zuno_ic_t_users),
+    Progress(R.string.drawer_progress, "Progress", R.drawable.zuno_ic_trending_up),
 }
 
-private val DrawerShape = RoundedCornerShape(topEnd = ZunoRadius.xxl, bottomEnd = ZunoRadius.xxl)
+private val DrawerShape = RoundedCornerShape(topEnd = ZunoRadius.xxxxxl, bottomEnd = ZunoRadius.xxxxxl)
 
-/** 5b · Drawer — profile, navigation, recent sessions, upsell and footer actions. */
+/**
+ * `Home · 5 · Sidebar Drawer` (`3077:14447`):
+ * Glass overlay panel with Profile + Bell header, Practice / Live & social / Recent sessions groups,
+ * Pro upgrade banner, and Settings / + New chat footer.
+ */
 @Composable
 fun AppDrawer(
     userName: String,
@@ -73,124 +84,219 @@ fun AppDrawer(
     onSettings: () -> Unit,
     onNewChat: () -> Unit,
     modifier: Modifier = Modifier,
+    vocabDueCount: Int = 14,
+    scheduledTimeLabel: String? = "7:00 PM",
+    activeLiveRoomsCount: Int = 2,
+    partnersOnlineCount: Int = 12,
+    leagueRank: Int = 5,
 ) {
     Column(
         modifier = modifier
             .fillMaxHeight()
             .width(340.dp)
-            .clip(DrawerShape)
-            .background(ZunoColors.BgElevated)
-            .drawWithContent {
-                drawContent()
-                // Right-edge hairline (border-r) following the rounded corners.
-                val inset = ZunoRadius.xxl.toPx() + 1.dp.toPx()
-                clipRect(left = size.width - inset) {
-                    drawOutline(
-                        outline = DrawerShape.createOutline(size, layoutDirection, this),
-                        color = ZunoColors.BorderSubtle,
-                        style = Stroke(width = 1.dp.toPx() * 2),
-                    )
-                }
-            }
+            .zunoGlassOverlay(DrawerShape, shadowElevation = 14.dp)
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ZunoProfileCard(
-                name = userName,
-                detail = userDetail,
-                imageUrl = userImage,
-                onClick = onProfile,
-                modifier = Modifier.weight(1f),
-            )
-            ZunoIconButton(R.drawable.zuno_ic_bell, onNotifications, contentDescription = stringResource(R.string.settings_notifications))
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s8),
-        ) {
-            DrawerDestination.entries.forEach { destination ->
-                ZunoMenuItem(
-                    label = stringResource(destination.labelRes),
-                    icon = destination.icon,
-                    active = destination == activeDestination,
-                    onClick = { onDestination(destination) },
-                )
-            }
-        }
-
+        // Scrollable header + navigation sections + recent sessions
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8),
+                .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s4),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
         ) {
-            val pinned = sessions.filter { it.pinned }
-            val recent = sessions.filterNot { it.pinned }
-            if (pinned.isNotEmpty()) {
-                Box(Modifier.padding(start = ZunoSpace.s12)) {
-                    ZunoSectionHeader(title = stringResource(R.string.drawer_pinned))
-                }
-                pinned.forEach { session ->
-                    ZunoSessionRow(
-                        title = session.title,
-                        meta = session.meta,
-                        selected = session.id == selectedSessionId,
-                        pinned = true,
-                        onClick = { onSession(session) },
-                    )
-                }
-                Box(Modifier.height(ZunoSpace.s8))
-            }
-            Box(Modifier.padding(start = ZunoSpace.s12)) {
-                ZunoSectionHeader(
-                    title = stringResource(R.string.drawer_recent_sessions),
-                    actionIcon = if (recent.isNotEmpty()) R.drawable.zuno_ic_search else null,
-                    onAction = onSearchSessions,
-                    actionDescription = stringResource(R.string.drawer_search_sessions),
+            // Header: Profile pill + Bell circle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = ZunoSpace.s2, top = ZunoSpace.s4, bottom = ZunoSpace.s10),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ZunoProfileCard(
+                    name = userName.ifBlank { "Zuno Learner" },
+                    detail = userDetail,
+                    imageUrl = userImage,
+                    onClick = onProfile,
+                    modifier = Modifier.weight(1f),
                 )
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .zunoGlassSubtle(CircleShape, borderBrush = null)
+                        .clickable(role = Role.Button, onClick = onNotifications)
+                        .semantics { contentDescription = "Notifications" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ZunoIcon(R.drawable.zuno_ic_bell, 18.dp, tint = ZunoColors.IconPrimary)
+                }
             }
-            if (recent.isEmpty()) {
+
+            DrawerSectionEyebrow("Practice")
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.FreeTalk.labelRes),
+                icon = DrawerDestination.FreeTalk.icon,
+                active = activeDestination == DrawerDestination.FreeTalk,
+                onClick = { onDestination(DrawerDestination.FreeTalk) },
+            )
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.Topics.labelRes),
+                icon = DrawerDestination.Topics.icon,
+                active = activeDestination == DrawerDestination.Topics,
+                onClick = { onDestination(DrawerDestination.Topics) },
+            )
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.Roleplays.labelRes),
+                icon = DrawerDestination.Roleplays.icon,
+                active = activeDestination == DrawerDestination.Roleplays,
+                onClick = { onDestination(DrawerDestination.Roleplays) },
+            )
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.Vocabulary.labelRes),
+                icon = DrawerDestination.Vocabulary.icon,
+                active = activeDestination == DrawerDestination.Vocabulary,
+                trailing = {
+                    Text(
+                        text = "$vocabDueCount due",
+                        style = ZunoType.Micro,
+                        color = ZunoColors.TextTertiary,
+                        maxLines = 1,
+                    )
+                },
+                onClick = { onDestination(DrawerDestination.Vocabulary) },
+            )
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.Scheduled.labelRes),
+                icon = DrawerDestination.Scheduled.icon,
+                active = activeDestination == DrawerDestination.Scheduled,
+                trailing = scheduledTimeLabel?.let { time ->
+                    {
+                        Text(
+                            text = time,
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            maxLines = 1,
+                        )
+                    }
+                },
+                onClick = { onDestination(DrawerDestination.Scheduled) },
+            )
+
+            DrawerSectionEyebrow("Live & social")
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.LiveRooms.labelRes),
+                icon = DrawerDestination.LiveRooms.icon,
+                active = activeDestination == DrawerDestination.LiveRooms,
+                trailing = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.StatusSpeaking),
+                        )
+                        Text(
+                            text = "$activeLiveRoomsCount active",
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            maxLines = 1,
+                        )
+                    }
+                },
+                onClick = { onDestination(DrawerDestination.LiveRooms) },
+            )
+            ZunoMenuItem(
+                label = "Community & Partners",
+                icon = DrawerDestination.Community.icon,
+                active = activeDestination == DrawerDestination.Community,
+                trailing = {
+                    Text(
+                        text = "$partnersOnlineCount online",
+                        style = ZunoType.Micro,
+                        color = ZunoColors.TextTertiary,
+                        maxLines = 1,
+                    )
+                },
+                onClick = { onDestination(DrawerDestination.Community) },
+            )
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.Progress.labelRes),
+                icon = DrawerDestination.Progress.icon,
+                active = activeDestination == DrawerDestination.Progress,
+                trailing = {
+                    Text(
+                        text = "#$leagueRank",
+                        style = ZunoType.Micro,
+                        color = ZunoColors.TextTertiary,
+                        maxLines = 1,
+                    )
+                },
+                onClick = { onDestination(DrawerDestination.Progress) },
+            )
+
+            DrawerSectionEyebrow(
+                title = stringResource(R.string.drawer_recent_sessions),
+                trailingAction = {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button, onClick = onSearchSessions)
+                            .semantics { contentDescription = "Search chats and sessions" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ZunoIcon(R.drawable.zuno_ic_t_search, 15.dp, tint = ZunoColors.IconTertiary)
+                    }
+                },
+            )
+
+            if (sessions.isEmpty()) {
                 Text(
                     stringResource(R.string.drawer_recent_empty),
                     style = ZunoType.FootnoteRegular,
                     color = ZunoColors.TextTertiary,
                     modifier = Modifier.padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
                 )
+            } else {
+                val sorted = sessions.sortedByDescending { it.pinned }
+                sorted.take(8).forEachIndexed { index, session ->
+                    val isSelected = session.id == selectedSessionId || (selectedSessionId == null && index == 0 && session.pinned)
+                    ZunoSessionRow(
+                        title = session.title,
+                        meta = session.meta,
+                        selected = isSelected,
+                        pinned = session.pinned,
+                        unread = session.pinned && index == 0,
+                        onClick = { onSession(session) },
+                    )
+                }
             }
-            recent.forEach { session ->
-                ZunoSessionRow(
-                    title = session.title,
-                    meta = session.meta,
-                    selected = session.id == selectedSessionId,
-                    onClick = { onSession(session) },
+            Spacer(Modifier.height(ZunoSpace.s8))
+        }
+
+        // Upgrade banner
+        if (showUpgrade) {
+            Box(Modifier.padding(start = ZunoSpace.s14, end = ZunoSpace.s14, bottom = ZunoSpace.s10)) {
+                ZunoUpgradeBanner(
+                    onClick = onUpgrade,
+                    text = stringResource(R.string.drawer_upgrade_banner),
+                    action = stringResource(R.string.drawer_upgrade_action),
                 )
             }
         }
 
-        if (showUpgrade) Box(Modifier.padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12)) {
-            ZunoUpgradeBanner(
-                onClick = onUpgrade,
-                text = stringResource(R.string.drawer_upgrade_banner),
-                action = stringResource(R.string.drawer_upgrade_action),
-            )
-        }
+        ZunoGlassHairline()
 
-        Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+        // Footer: Settings + New chat
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s8, end = ZunoSpace.s16, top = ZunoSpace.s12, bottom = ZunoSpace.s4),
+                .padding(start = ZunoSpace.s14, end = ZunoSpace.s14, top = ZunoSpace.s10, bottom = ZunoSpace.s8),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -208,5 +314,26 @@ fun AppDrawer(
                 leadingIcon = R.drawable.zuno_ic_plus_inverse,
             )
         }
+    }
+}
+
+@Composable
+private fun DrawerSectionEyebrow(
+    title: String,
+    trailingAction: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = ZunoSpace.s12, end = ZunoSpace.s4, top = ZunoSpace.s10, bottom = ZunoSpace.s4),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = ZunoType.FootnoteStrong,
+            color = ZunoColors.TextTertiary,
+        )
+        trailingAction?.invoke()
     }
 }

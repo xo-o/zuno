@@ -1,20 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable (white) Lucide glyph; color it with ZunoIcon(tint = …). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21.125 8.5C21.125 6.91681 20.6767 5.9303 20.0293 5.3291C19.3701 4.717 18.3659 4.375 17 4.375H7C5.63413 4.375 4.62989 4.717 3.9707 5.3291C3.32328 5.9303 2.875 6.91681 2.875 8.5V15.5C2.875 17.0832 3.32328 18.0697 3.9707 18.6709C4.62989 19.283 5.63413 19.625 7 19.625H17C18.3659 19.625 19.3701 19.283 20.0293 18.6709C20.6767 18.0697 21.125 17.0832 21.125 15.5V8.5ZM22.875 15.5C22.875 17.4168 22.3233 18.9303 21.2207 19.9541C20.1299 20.967 18.6341 21.375 17 21.375H7C5.36589 21.375 3.87011 20.967 2.7793 19.9541C1.67674 18.9303 1.125 17.4168 1.125 15.5V8.5C1.125 6.58323 1.67674 5.0697 2.7793 4.0459C3.87011 3.03302 5.36589 2.625 7 2.625H17C18.6341 2.625 20.1299 3.03302 21.2207 4.0459C22.3233 5.0697 22.875 6.58323 22.875 8.5V15.5Z" />
     <path
-        android:pathData="M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M16.4541 8.31641C16.8317 8.01487 17.382 8.07653 17.6836 8.4541C17.9851 8.83169 17.9235 9.38202 17.5459 9.68359L14.416 12.1836L14.4151 12.1846C13.0661 13.2585 10.9242 13.2584 9.57521 12.1846L9.57325 12.1826L6.45314 9.68262C6.07604 9.38045 6.01527 8.83024 6.31739 8.45312C6.61956 8.07603 7.16977 8.01526 7.54689 8.31738L10.6651 10.8154L10.8047 10.915C11.5292 11.3791 12.6587 11.346 13.3252 10.8154L16.4541 8.31641Z" />
 </vector>

@@ -35,6 +35,7 @@ import com.zuno.ai.ui.components.ZunoLogoMark
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
 import kotlinx.coroutines.delay
 
 /** 1 · Splash — centered 64dp mark. */
@@ -48,7 +49,7 @@ fun SplashScreen(onFinished: () -> Unit, modifier: Modifier = Modifier) {
         currentOnFinished()
     }
     Box(
-        modifier = modifier.fillMaxSize().background(ZunoColors.BgCanvas),
+        modifier = modifier.fillMaxSize().zunoCanvasBackground(),
         contentAlignment = Alignment.Center,
     ) {
         ZunoLogoMark(64.dp, Modifier.graphicsLayer { this.alpha = alpha.value })
@@ -66,7 +67,7 @@ fun OnboardingScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {

@@ -65,6 +65,9 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.DraftAttachment
 import com.zuno.ai.viewmodel.DraftUploadState
 import com.zuno.ai.viewmodel.RoleplayBuilderState
@@ -125,7 +128,7 @@ fun NewTopicScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
@@ -261,9 +264,7 @@ private fun DraftTopicCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(shape)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
@@ -336,7 +337,7 @@ fun TopicSettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -364,15 +365,13 @@ fun TopicSettingsScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s12),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             val cardShape = RoundedCornerShape(ZunoRadius.xxl)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderSubtle, cardShape)
+                    .zunoGlassSubtle(cardShape)
                     .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
             ) {
@@ -537,7 +536,7 @@ fun NewRoleplayScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
@@ -669,9 +668,7 @@ private fun DraftRoleplayCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(shape)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
@@ -744,7 +741,7 @@ fun RoleplaySettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -771,15 +768,13 @@ fun RoleplaySettingsScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s12),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             val cardShape = RoundedCornerShape(ZunoRadius.xxl)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderSubtle, cardShape)
+                    .zunoGlassSubtle(cardShape)
                     .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
             ) {
@@ -896,9 +891,7 @@ private fun BuilderSentAttachmentPill(fileName: String) {
     Row(
         modifier = Modifier
             .widthIn(max = 260.dp)
-            .clip(shape)
-            .background(ZunoColors.SurfaceStrong)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassElevated(shape)
             .padding(horizontal = ZunoSpace.s12, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,

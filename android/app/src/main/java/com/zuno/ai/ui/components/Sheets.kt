@@ -32,15 +32,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassOverlay
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 
-private val SheetShape = RoundedCornerShape(topStart = ZunoRadius.xxl, topEnd = ZunoRadius.xxl)
+private val SheetShape = RoundedCornerShape(topStart = ZunoRadius.xxxxxl, topEnd = ZunoRadius.xxxxxl)
 
 /**
- * Bottom Sheet — elevated surface with a drag handle, Headline title and optional description.
- * Content is laid out in a 12dp-inset column; rows add their own 12dp padding like the design.
+ * Bottom Sheet — `Glass/Surface/Overlay` with specular rim, drag handle, Headline title and optional description.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,27 +56,28 @@ fun ZunoSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = ZunoColors.BgElevated,
+        containerColor = Color.Transparent,
         scrimColor = ZunoColors.BgScrim,
         shape = SheetShape,
-        dragHandle = {
-            Box(
-                Modifier
-                    .padding(top = ZunoSpace.s8, bottom = ZunoSpace.s4)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.BorderStrong),
-            )
-        },
+        dragHandle = null,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .zunoGlassOverlay(SheetShape, shadowElevation = 14.dp)
                 .navigationBarsPadding()
                 .imePadding()
-                .padding(start = ZunoSpace.s12, end = ZunoSpace.s12, bottom = ZunoSpace.s40),
+                .padding(start = ZunoSpace.s12, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s40),
             verticalArrangement = Arrangement.spacedBy(spacing),
         ) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = ZunoSpace.s4)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(ZunoColors.BorderStrong),
+            )
             if (title.isNotBlank()) {
                 Text(
                     title,
@@ -127,16 +130,14 @@ fun ZunoSheetAction(
     }
 }
 
-/** Rounded group of [ZunoChoiceRow]s separated by hairlines (Share · visibility). */
+/** Rounded glass group of [ZunoChoiceRow]s separated by hairlines (Share · visibility). */
 @Composable
 fun ZunoChoiceGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(ZunoRadius.xl)
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderSubtle, shape),
+            .zunoGlassSubtle(shape),
         content = content,
     )
 }
@@ -153,7 +154,7 @@ fun ZunoChoiceRow(
     showDivider: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth()) {
-        if (showDivider) Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+        if (showDivider) ZunoGlassHairline()
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -164,7 +165,7 @@ fun ZunoChoiceRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.size(36.dp).clip(CircleShape).background(ZunoColors.SurfaceDefault),
+                Modifier.size(36.dp).zunoGlassSubtle(CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 ZunoIcon(icon, 18.dp, tint = ZunoColors.IconSecondary)

@@ -654,11 +654,10 @@ class TopicsAndRoleplaysUiTest {
 
             // 1. 06 · Topics — Empty
             waitForText("No topics yet")
-            waitForText("Create topic")
             waitForText("Explore")
-            waitForText("Pedir café de especialidad")
-            // Assert NO ownership filter clutter on root Topics
+            // Assert NO ownership filter clutter or discovery preview cards on root empty state
             assertFalse(visibleTexts().contains("Mine"))
+            assertFalse(visibleTexts().contains("Pedir café de especialidad"))
             saveScreenshot("01_topics_empty")
 
             // 2. 01 · Topics — List + 07 · Add Topic Sheet
@@ -725,9 +724,8 @@ class TopicsAndRoleplaysUiTest {
             // 10. Roleplays · 1 · Empty
             step = "10_roleplays_empty"
             waitForText("No roleplays yet")
-            waitForText("New roleplay")
             waitForText("Explore")
-            waitForText("Ordering at a café")
+            assertFalse(visibleTexts().contains("Ordering at a café"))
             saveScreenshot("11_roleplays_empty")
 
             // 11. Roleplays · 2 · List + 4 · Add Roleplay Sheet

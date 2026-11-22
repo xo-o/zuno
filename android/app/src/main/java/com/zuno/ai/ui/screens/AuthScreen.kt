@@ -53,6 +53,8 @@ import kotlinx.coroutines.delay
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
 
 enum class AuthMode(
     val title: String,
@@ -112,7 +114,7 @@ fun AuthScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
@@ -217,7 +219,7 @@ private fun MagicLinkSent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -233,9 +235,7 @@ private fun MagicLinkSent(
             Box(
                 modifier = Modifier
                     .size(72.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderDefault, CircleShape),
+                    .zunoGlassElevated(CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 ZunoIcon(R.drawable.ic_mail, 32.dp)

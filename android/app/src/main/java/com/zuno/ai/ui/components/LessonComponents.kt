@@ -42,21 +42,16 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 
 internal val LessonSentenceStyle: TextStyle
-    get() = ZunoType.TitleLarge.copy(
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = (-0.4).sp,
-    )
+    get() = ZunoType.TitleMedium
 
 internal val LessonQuoteStyle: TextStyle
-    get() = ZunoType.Headline.copy(
+    get() = ZunoType.TitleMedium.copy(
         fontWeight = FontWeight.Medium,
-        fontSize = 20.sp,
         lineHeight = 28.sp,
-        letterSpacing = (-0.5).sp,
     )
 
 @DrawableRes
@@ -79,9 +74,7 @@ fun ZunoRoleplayPill(
 ) {
     Row(
         modifier = modifier
-            .clip(CircleShape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, CircleShape)
+            .zunoGlassSubtle(CircleShape)
             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s6),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
@@ -127,9 +120,7 @@ fun ZunoTeachCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .padding(ZunoSpace.s20),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
     ) {
@@ -237,9 +228,7 @@ fun ZunoPronunciationFeedback(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(pillShape)
-                .background(ZunoColors.SurfaceSubtle)
-                .border(1.dp, ZunoColors.BorderSubtle, pillShape)
+                .zunoGlassSubtle(pillShape)
                 .padding(start = ZunoSpace.s10, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
             verticalAlignment = Alignment.CenterVertically,
@@ -288,9 +277,7 @@ fun ZunoScaffoldCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .padding(ZunoSpace.s20),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
     ) {
@@ -314,9 +301,7 @@ fun ZunoScaffoldCard(
         ) {
             Row(
                 modifier = Modifier
-                    .clip(vocabShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderSubtle, vocabShape)
+                    .zunoGlassElevated(vocabShape)
                     .padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s6),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                 verticalAlignment = Alignment.CenterVertically,

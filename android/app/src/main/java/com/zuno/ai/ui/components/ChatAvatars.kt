@@ -51,13 +51,15 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import livekit.org.webrtc.RendererCommon
 
 /**
- * Member avatar with optional green/mint Open-to-speak halo ring and circular mic badge.
+ * Member avatar with optional Open-to-speak halo ring.
  */
 @Composable
 fun ZunoOpenToSpeakAvatar(
@@ -74,15 +76,6 @@ fun ZunoOpenToSpeakAvatar(
     },
 ) {
     val ringInset = if (openToSpeak) 3.dp else 0.dp
-    val badgeSize = when {
-        size >= 64.dp -> 20.dp
-        size >= 44.dp -> 16.dp
-        else -> 14.dp
-    }
-    val badgeIconSize = when {
-        size >= 64.dp -> 11.dp
-        else -> 9.dp
-    }
     Box(modifier = modifier.size(size)) {
         if (openToSpeak) {
             Box(
@@ -117,31 +110,17 @@ fun ZunoOpenToSpeakAvatar(
                 )
             }
         }
-        if (openToSpeak) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(badgeSize)
-                    .clip(CircleShape)
-                    .background(ZunoColors.SurfaceInverse)
-                    .border(1.5.dp, ZunoColors.BgCanvas, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                ZunoIcon(R.drawable.zuno_ic_t_mic, badgeIconSize, tint = ZunoColors.IconOnInverse)
-            }
-        }
     }
 }
 
 /**
- * Sofía AI Tutor circular avatar with the inverse sparkles badge at bottom-right.
+ * Sofía AI Tutor circular avatar.
  */
 @Composable
 fun ZunoAiTutorAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
 ) {
-    val badgeSize = if (size >= 44.dp) 16.dp else 14.dp
     Box(modifier = modifier.size(size)) {
         Image(
             painter = painterResource(R.drawable.sofia_tutor_avatar),
@@ -153,17 +132,6 @@ fun ZunoAiTutorAvatar(
                 .clip(CircleShape)
                 .border(1.dp, ZunoColors.BorderDefault, CircleShape),
         )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(badgeSize)
-                .clip(CircleShape)
-                .background(ZunoColors.SurfaceInverse)
-                .border(1.5.dp, ZunoColors.BgCanvas, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            ZunoIcon(R.drawable.zuno_ic_t_sparkles, 9.dp, tint = ZunoColors.IconOnInverse)
-        }
     }
 }
 
@@ -228,9 +196,7 @@ fun ZunoTabbedCoachCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(cardShape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, cardShape)
+            .zunoGlassSubtle(cardShape)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
     ) {
@@ -268,9 +234,7 @@ fun ZunoTabbedCoachCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(rowShape)
-                        .background(ZunoColors.SurfaceDefault)
-                        .border(1.dp, ZunoColors.BorderDefault, rowShape)
+                        .zunoGlassElevated(rowShape)
                         .clickable(role = Role.Button, onClick = { onSpeakPhrase(item.phrase) })
                         .padding(horizontal = ZunoSpace.s12, vertical = 9.dp),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
@@ -376,18 +340,16 @@ private fun RoundCallControlButton(
     contentDescription: String,
     activeSubtle: Boolean = false,
 ) {
-    val bg = when {
-        active && activeSubtle -> ZunoColors.SurfaceStronger
-        active -> ZunoColors.SurfaceInverse
-        else -> ZunoColors.SurfaceDefault
+    val surfaceModifier = when {
+        active && activeSubtle -> Modifier.zunoGlassElevated(CircleShape)
+        active -> Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
+        else -> Modifier.zunoGlassSubtle(CircleShape)
     }
     val tint = if (active && !activeSubtle) ZunoColors.IconOnInverse else ZunoColors.IconPrimary
     Box(
         modifier = Modifier
             .size(44.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .then(if (active && activeSubtle) Modifier.border(1.dp, ZunoColors.BorderDefault, CircleShape) else Modifier)
+            .then(surfaceModifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,

@@ -43,9 +43,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoRecessedTrack
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -150,83 +153,162 @@ fun ZunoExploreTopBar(
     }
 }
 
-/** Daily Target Row (`2826:13992`): compact icon badge, "Daily target · X / Y min", 56dp progress bar + %. */
+/**
+ * Top Bar · Home (`7130:11697` in `3077:14335`):
+ * 36dp circular menu button on left, Streak pill + Language·Level pill on right.
+ */
 @Composable
-fun ZunoDailyTargetRow(
-    minutesDone: Int,
-    goalMinutes: Int,
-    onClick: () -> Unit,
+fun ZunoSidebarHomeTopBar(
+    streakDays: Int,
+    languageLabel: String,
+    onMenuClick: () -> Unit,
+    onStreakClick: () -> Unit,
+    onLanguageClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val safeGoal = goalMinutes.coerceAtLeast(1)
-    val progress = (minutesDone.toFloat() / safeGoal).coerceIn(0f, 1f)
-    val percent = (progress * 100f).roundToInt().coerceIn(0, 100)
-    val shape = RoundedCornerShape(ZunoRadius.xxl)
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
+            .height(52.dp)
+            .padding(horizontal = ZunoSpace.s24),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .zunoGlassSubtle(CircleShape)
+                .clickable(role = Role.Button, onClick = onMenuClick)
+                .semantics { contentDescription = "Open navigation menu" },
+            contentAlignment = Alignment.Center,
+        ) {
+            ZunoIcon(R.drawable.zuno_ic_menu, 18.dp, tint = ZunoColors.IconPrimary)
+        }
         Row(
-            modifier = Modifier.weight(1f).padding(end = ZunoSpace.s12),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Row(
+                modifier = Modifier
+                    .height(32.dp)
+                    .zunoGlassSubtle(CircleShape, borderBrush = null)
+                    .clickable(role = Role.Button, onClick = onStreakClick)
+                    .padding(start = 11.dp, end = ZunoSpace.s12),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ZunoIcon(R.drawable.zuno_ic_flame, 14.dp, tint = ZunoColors.IconSecondary)
+                Text(
+                    text = streakDays.toString(),
+                    style = ZunoType.FootnoteStrong.copy(fontSize = androidx.compose.ui.unit.TextUnit(12.5f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                )
+            }
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(ZunoRadius.md))
-                    .background(ZunoColors.SurfaceStrong),
+                    .height(32.dp)
+                    .zunoGlassSubtle(CircleShape, borderBrush = null)
+                    .clickable(role = Role.Button, onClick = onLanguageClick)
+                    .padding(start = 11.dp, end = ZunoSpace.s12),
                 contentAlignment = Alignment.Center,
             ) {
-                ZunoIcon(R.drawable.zuno_ic_zap, 16.dp, tint = ZunoColors.IconPrimary)
+                Text(
+                    text = languageLabel,
+                    style = ZunoType.FootnoteStrong.copy(fontSize = androidx.compose.ui.unit.TextUnit(12.5f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                )
             }
+        }
+    }
+}
+
+/**
+ * Greeting + Goal + Progress section (`7130:11707` in `3077:14335`).
+ */
+@Composable
+fun ZunoHomeGreetingSection(
+    greeting: String,
+    minutesDone: Int,
+    goalMinutes: Int,
+    onProgressClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val safeGoal = goalMinutes.coerceAtLeast(1)
+    val remaining = (safeGoal - minutesDone).coerceAtLeast(0)
+    val progress = (minutesDone.toFloat() / safeGoal).coerceIn(0f, 1f)
+    val percent = (progress * 100f).roundToInt().coerceIn(0, 100)
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(
-                text = stringResource(R.string.home_daily_target_summary, minutesDone, safeGoal),
-                style = ZunoType.LabelSmall,
+                text = greeting,
+                style = ZunoType.TitleLarge,
                 color = ZunoColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (remaining > 0) {
+                    stringResource(R.string.home_goal_left, remaining, safeGoal)
+                } else {
+                    stringResource(R.string.home_goal_reached, safeGoal)
+                },
+                style = ZunoType.BodySmall,
+                color = ZunoColors.TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(ZunoRadius.sm))
+                .clickable(role = Role.Button, onClick = onProgressClick),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.home_today_progress, minutesDone, safeGoal),
+                    style = ZunoType.FootnoteStrong,
+                    color = ZunoColors.TextSecondary,
+                    maxLines = 1,
+                )
+                Text(
+                    text = stringResource(R.string.home_percent, percent),
+                    style = ZunoType.FootnoteStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                )
+            }
             Box(
                 modifier = Modifier
-                    .width(56.dp)
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.SurfaceStrong),
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .zunoRecessedTrack(CircleShape),
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(progress)
                         .clip(CircleShape)
-                        .background(ZunoColors.SurfaceInverse),
+                        .background(ZunoColors.TextPrimary),
                 )
             }
-            Text(
-                text = stringResource(R.string.home_percent, percent),
-                style = ZunoType.Micro,
-                color = ZunoColors.TextSecondary,
-                maxLines = 1,
-            )
         }
     }
 }
 
-/** Pick up where you left off (`2826:14001`): header + Continue card (`2826:14004`) with Resume pill CTA. */
+/** Pick up where you left off (`7130:11717`): header + Continue card (`surface/default`, 14dp radius) with Resume pill CTA. */
 @Composable
 fun ZunoPickUpSection(
     session: ContinueSessionUi?,
@@ -235,7 +317,7 @@ fun ZunoPickUpSection(
     onStartNew: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val cardShape = RoundedCornerShape(ZunoRadius.xxxl)
+    val cardShape = RoundedCornerShape(ZunoRadius.xl)
     val title = session?.title ?: stringResource(R.string.home_free_talk_title)
     val subtitle = session?.subtitle ?: stringResource(R.string.home_free_talk_sub, languageName)
     val ctaLabel = stringResource(if (session != null) R.string.home_resume else R.string.home_start)
@@ -256,9 +338,7 @@ fun ZunoPickUpSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(cardShape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderSubtle, cardShape)
+                .zunoGlassSubtle(cardShape, fillColor = ZunoColors.SurfaceDefault)
                 .clickable(role = Role.Button, onClick = action)
                 .padding(ZunoSpace.s16),
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -301,22 +381,27 @@ fun ZunoPickUpSection(
     }
 }
 
-/** Live now (`2826:14012`): header + grouped 2-row card (`2826:14014`) for live rooms and practice partners. */
+/**
+ * Next tasks (`7130:11727` in `3077:14335`): header + grouped 3-row card (`surface/subtle`, 14dp radius)
+ * for Practice vocabulary, Roleplay, and Free talk with Zuno.
+ */
 @Composable
-fun ZunoLiveNowSection(
-    onLiveRoomClick: () -> Unit,
-    onPracticePartnerClick: () -> Unit,
+fun ZunoNextTasksSection(
+    vocabDueCount: Int,
+    roleplayTitle: String,
+    onPracticeVocabulary: () -> Unit,
+    onOpenRoleplay: () -> Unit,
+    onFreeTalk: () -> Unit,
     modifier: Modifier = Modifier,
-    partnersOnlineCount: Int = 12,
 ) {
-    val cardShape = RoundedCornerShape(ZunoRadius.xxxl)
+    val cardShape = RoundedCornerShape(ZunoRadius.xl)
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
     ) {
         Text(
-            text = stringResource(R.string.home_live_now),
+            text = stringResource(R.string.home_next_tasks),
             style = ZunoType.LabelSmall,
             color = ZunoColors.TextSecondary,
             maxLines = 1,
@@ -325,77 +410,74 @@ fun ZunoLiveNowSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(cardShape)
-                .background(ZunoColors.SurfaceSubtle)
-                .border(1.dp, ZunoColors.BorderSubtle, cardShape)
-                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s4),
+                .zunoGlassSubtle(cardShape)
+                .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s4),
         ) {
-            LiveNowRow(
-                icon = R.drawable.zuno_ic_radio,
-                title = stringResource(R.string.home_live_room_sample_title),
-                subtitle = stringResource(R.string.home_live_room_sample_sub),
-                onClick = onLiveRoomClick,
+            NextTaskRow(
+                icon = R.drawable.zuno_ic_t_book_open,
+                title = stringResource(R.string.home_next_vocab_title),
+                trailingValue = stringResource(R.string.home_next_vocab_due, vocabDueCount),
+                onClick = onPracticeVocabulary,
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(ZunoColors.Divider),
+            ZunoGlassHairline()
+            NextTaskRow(
+                icon = R.drawable.zuno_ic_messages_square,
+                title = stringResource(R.string.home_next_roleplay_title, roleplayTitle),
+                trailingValue = stringResource(R.string.home_next_roleplay_duration),
+                onClick = onOpenRoleplay,
             )
-            LiveNowRow(
-                icon = R.drawable.zuno_ic_t_users,
-                title = stringResource(R.string.home_partner_row_title),
-                subtitle = stringResource(R.string.home_partner_row_sub, partnersOnlineCount),
-                onClick = onPracticePartnerClick,
+            ZunoGlassHairline()
+            NextTaskRow(
+                icon = R.drawable.zuno_ic_t_mic,
+                title = stringResource(R.string.home_next_free_talk_title),
+                trailingValue = stringResource(R.string.home_next_free_talk_open),
+                onClick = onFreeTalk,
             )
         }
     }
 }
 
 @Composable
-private fun LiveNowRow(
+private fun NextTaskRow(
     @DrawableRes icon: Int,
     title: String,
-    subtitle: String,
+    trailingValue: String,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = ZunoSpace.s14),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .height(42.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(ZunoRadius.md))
-                .background(ZunoColors.SurfaceStrong),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier = Modifier.weight(1f).padding(end = ZunoSpace.s8),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ZunoIcon(icon, 16.dp, tint = ZunoColors.IconPrimary)
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
-        ) {
+            ZunoIcon(icon, 16.dp, tint = ZunoColors.IconSecondary)
             Text(
                 text = title,
-                style = ZunoType.BodyMediumStrong,
+                style = ZunoType.LabelMedium,
                 color = ZunoColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = subtitle,
-                style = ZunoType.FootnoteRegular,
-                color = ZunoColors.TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
-        ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 18.dp, tint = ZunoColors.IconTertiary)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = trailingValue,
+                style = ZunoType.FootnoteRegular,
+                color = ZunoColors.TextTertiary,
+                maxLines = 1,
+            )
+            ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 15.dp, tint = ZunoColors.IconTertiary)
+        }
     }
 }
 

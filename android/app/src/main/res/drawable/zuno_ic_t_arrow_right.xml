@@ -1,20 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable (white) Lucide glyph; color it with ZunoIcon(tint = …). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M5 12h14"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M13.8109 5.31091C14.1526 4.9692 14.7075 4.9692 15.0492 5.31091L21.1185 11.3812C21.2826 11.5453 21.3754 11.7683 21.3754 12.0004C21.3753 12.2323 21.2825 12.4545 21.1185 12.6185L15.0492 18.6888C14.7075 19.0305 14.1526 19.0305 13.8109 18.6888C13.4695 18.3472 13.4696 17.7932 13.8109 17.4515L19.2621 11.9994L13.8109 6.54919C13.4692 6.20748 13.4692 5.65262 13.8109 5.31091Z" />
     <path
-        android:pathData="M12 5l7 7-7 7"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20.3301 11.125C20.8133 11.125 21.2051 11.5168 21.2051 12C21.2051 12.4832 20.8133 12.875 20.3301 12.875H3.5C3.01675 12.875 2.625 12.4832 2.625 12C2.625 11.5168 3.01675 11.125 3.5 11.125H20.3301Z" />
 </vector>

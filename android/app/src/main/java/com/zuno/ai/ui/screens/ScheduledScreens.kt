@@ -59,16 +59,22 @@ import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoCheckBadge
 import com.zuno.ai.ui.components.ZunoDropdownMenu
 import com.zuno.ai.ui.components.ZunoEmptyState
-import com.zuno.ai.ui.components.ZunoFab
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoMenuAction
+import com.zuno.ai.ui.components.ZunoSectionTopBar
+import com.zuno.ai.ui.components.ZunoSegmentedTabs
 import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.components.ZunoSheetAction
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
+import com.zuno.ai.ui.theme.ZunoGlassVerticalHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.Loadable
 import java.time.DayOfWeek
 import java.time.Instant
@@ -198,12 +204,19 @@ fun ScheduledScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
         Column(Modifier.fillMaxSize()) {
-            ZunoBackTitleTopBar(title = stringResource(R.string.schedule_title), onBack = onBack)
+            ZunoSectionTopBar(
+                title = stringResource(R.string.schedule_title),
+                onBack = onBack,
+                showSearch = false,
+                showAdd = true,
+                onAdd = onCreate,
+                addDescription = stringResource(R.string.schedule_fab),
+            )
             when {
                 items == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ZunoLoadState(error = schedules.error, onRetry = onRetry)
@@ -224,23 +237,25 @@ fun ScheduledScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 120.dp),
-                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                            .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
                     ) {
                         ScheduleGroup.entries.forEach { group ->
                             val rows = grouped[group] ?: return@forEach
                             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
                                 Text(
                                     stringResource(group.label),
-                                    style = ZunoType.LabelMedium,
+                                    style = ZunoType.LabelSmall,
                                     color = ZunoColors.TextTertiary,
                                     modifier = Modifier.padding(top = ZunoSpace.s4),
                                 )
                                 Column(
-                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xl)),
-                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
                                 ) {
-                                    rows.forEach { schedule ->
+                                    rows.forEachIndexed { idx, schedule ->
+                                        if (idx > 0) ZunoGlassHairline()
                                         ScheduleRow(
                                             schedule = schedule,
                                             group = group,
@@ -257,11 +272,6 @@ fun ScheduledScreen(
                 }
             }
         }
-        ZunoFab(
-            label = stringResource(R.string.schedule_fab),
-            onClick = onCreate,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = ZunoSpace.s16, bottom = ZunoSpace.s16),
-        )
     }
 }
 
@@ -283,7 +293,7 @@ private fun ScheduleRow(
         }
     }
     val background by animateColorAsState(
-        targetValue = if (flash || startable) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault,
+        targetValue = if (flash || startable) ZunoColors.SurfaceStrong else Color.Transparent,
         animationSpec = tween(600),
         label = "scheduleRow",
     )
@@ -311,7 +321,7 @@ private fun ScheduleRow(
             Text(primary, style = ZunoType.LabelMedium, color = ZunoColors.TextPrimary, maxLines = 1)
             Text(secondary, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary, maxLines = 1)
         }
-        Box(Modifier.width(1.dp).height(36.dp).background(ZunoColors.BorderDefault))
+        ZunoGlassVerticalHairline(36.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4)) {
             Text(
                 schedule.title,
@@ -459,7 +469,7 @@ fun NewScheduleScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -472,7 +482,7 @@ fun NewScheduleScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             if (step == 1) {
@@ -520,10 +530,10 @@ fun NewScheduleScreen(
                         )
                     } else {
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xl)),
-                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                            Modifier.fillMaxWidth().zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
                         ) {
-                            rows.forEach { row ->
+                            rows.forEachIndexed { idx, row ->
+                                if (idx > 0) ZunoGlassHairline()
                                 val selected = row.id == targetId && row.isRoleplay == targetIsRoleplay
                                 TargetRow(row, selected) {
                                     targetId = row.id
@@ -555,8 +565,7 @@ fun NewScheduleScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(ZunoRadius.xxl))
-                        .background(ZunoColors.SurfaceDefault)
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
                         .padding(ZunoSpace.s16),
                     horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                     verticalAlignment = Alignment.CenterVertically,
@@ -728,7 +737,7 @@ fun NewScheduleScreen(
             },
             enabled = if (step == 1) canContinue else canSave,
             loading = busy,
-            modifier = Modifier.fillMaxWidth().padding(start = ZunoSpace.s16, end = ZunoSpace.s16, bottom = ZunoSpace.s16),
+            modifier = Modifier.fillMaxWidth().padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
         )
     }
 }
@@ -740,7 +749,7 @@ private fun TargetRow(row: TargetRowData, selected: Boolean, onClick: () -> Unit
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault)
+            .background(if (selected) ZunoColors.SurfaceStrong else Color.Transparent)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(ZunoSpace.s16),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
@@ -758,7 +767,7 @@ private fun TargetRow(row: TargetRowData, selected: Boolean, onClick: () -> Unit
 @Composable
 private fun TargetBadge(@DrawableRes icon: Int) {
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(ZunoRadius.md)).background(ZunoColors.SurfaceStrong),
+        Modifier.size(40.dp).zunoGlassSubtle(RoundedCornerShape(ZunoRadius.md)),
         contentAlignment = Alignment.Center,
     ) {
         ZunoIcon(icon, 20.dp, tint = ZunoColors.IconPrimary)
@@ -768,34 +777,7 @@ private fun TargetBadge(@DrawableRes icon: Int) {
 /** Two-segment control (Topics / Roleplays). */
 @Composable
 private fun SegmentedTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    val shape = CircleShape
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
-            .padding(ZunoSpace.s4),
-    ) {
-        labels.forEachIndexed { index, label ->
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(shape)
-                    .background(if (index == selected) ZunoColors.SurfaceStrong else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(index) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = ZunoType.LabelMedium,
-                    color = if (index == selected) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
-                )
-            }
-        }
-    }
+    ZunoSegmentedTabs(labels = labels, selectedIndex = selected, onSelect = onSelect)
 }
 
 @Composable
@@ -805,7 +787,7 @@ private fun FormSection(label: String, content: @Composable ColumnScope.() -> Un
 
 @Composable
 private fun FormDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+    ZunoGlassHairline()
 }
 
 @Composable
@@ -829,8 +811,7 @@ private fun SelectPill(label: String, chevron: Boolean = false, onClick: () -> U
     Row(
         modifier = Modifier
             .height(40.dp)
-            .clip(RoundedCornerShape(ZunoRadius.md))
-            .background(ZunoColors.SurfaceStrong)
+            .zunoGlassElevated(RoundedCornerShape(ZunoRadius.md))
             .clickable(role = Role.Button, onClick = onClick)
             .padding(start = ZunoSpace.s14, end = if (chevron) ZunoSpace.s10 else ZunoSpace.s14),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
@@ -846,9 +827,10 @@ private fun DayChip(label: String, selected: Boolean, modifier: Modifier = Modif
     Box(
         modifier = modifier
             .size(44.dp)
-            .clip(CircleShape)
-            .background(if (selected) ZunoColors.SurfaceInverse else ZunoColors.SurfaceDefault)
-            .then(if (selected) Modifier else Modifier.border(1.dp, ZunoColors.BorderDefault, CircleShape))
+            .then(
+                if (selected) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
+                else Modifier.zunoGlassSubtle(CircleShape),
+            )
             .clickable(role = Role.Checkbox, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

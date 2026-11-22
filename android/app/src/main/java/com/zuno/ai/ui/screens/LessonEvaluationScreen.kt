@@ -42,9 +42,12 @@ import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOverflowMenu
 import com.zuno.ai.ui.components.ZunoSectionHeader
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -75,7 +78,7 @@ fun LessonEvaluationScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -172,7 +175,8 @@ fun LessonEvaluationScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
                     ZunoSectionHeader(title = "Practiced phrases")
                     ZunoListGroup {
-                        evaluation.phraseResults.forEach { item ->
+                        evaluation.phraseResults.forEachIndexed { index, item ->
+                            if (index > 0) ZunoGlassHairline()
                             PhraseRow(
                                 item = item,
                                 onListen = { onPlaySample(item.phrase) },
@@ -230,9 +234,7 @@ private fun EvalStatCard(
     val shape = RoundedCornerShape(ZunoRadius.xl)
     Column(
         modifier = modifier
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
     ) {
@@ -261,9 +263,7 @@ private fun CoachNoteCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
@@ -305,7 +305,6 @@ private fun PhraseRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ZunoColors.SurfaceDefault)
             .clickable(role = Role.Button, onClick = onListen)
             .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),

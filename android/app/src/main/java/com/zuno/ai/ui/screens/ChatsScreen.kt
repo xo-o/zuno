@@ -64,18 +64,24 @@ import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoEmptyState
-import com.zuno.ai.ui.components.ZunoFloatingBottomNav
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
 import com.zuno.ai.ui.components.ZunoIconButtonStyle
 import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoOpenToSpeakAvatar
+import com.zuno.ai.ui.components.ZunoSectionTopBar
+import com.zuno.ai.ui.components.ZunoSegmentedTabs
 import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassBorderSubtleBrush
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.Loadable
 
 @Composable
@@ -93,7 +99,8 @@ fun ChatsScreen(
     onOpenPeerChat: (PeerLearner) -> Unit,
     onInvitePeerToTalk: (PeerLearner) -> Unit,
     onTogglePartner: (PeerLearner, Boolean) -> Unit,
-    onNavigateTab: (HomeNavTab) -> Unit,
+    onNavigateTab: (HomeNavTab) -> Unit = {},
+    onBack: () -> Unit = { onNavigateTab(HomeNavTab.Home) },
     modifier: Modifier = Modifier,
 ) {
     var selectedFilter by rememberSaveable(initialFilter) { mutableStateOf(initialFilter) }
@@ -147,21 +154,27 @@ fun ChatsScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas),
+            .zunoCanvasBackground(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                .navigationBarsPadding(),
         ) {
-            ChatsTopBar(
+            ZunoSectionTopBar(
+                title = stringResource(R.string.chats_title),
+                onBack = onBack,
                 showSearch = showSearch,
                 searchActive = searchVisible,
                 onSearchToggle = {
                     searchVisible = !searchVisible
                     if (!searchVisible) searchQuery = ""
                 },
-                onNewChat = { showNewChatSheet = true },
+                searchDescription = stringResource(R.string.chats_search),
+                showAdd = true,
+                onAdd = { showNewChatSheet = true },
+                addDescription = stringResource(R.string.chats_new_chat),
             )
 
             if (data == null) {
@@ -171,7 +184,7 @@ fun ChatsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s6, bottom = 112.dp),
+                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s6, bottom = ZunoSpace.s32),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
                 ) {
                     item(key = "open-toggle") {
@@ -421,30 +434,6 @@ fun ChatsScreen(
                 }
             }
         }
-
-        // Bottom gradient scrim + Floating 5-tab nav
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(104.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.45f to ZunoColors.BgCanvas.copy(alpha = 0.85f),
-                        1f to ZunoColors.BgCanvas,
-                    ),
-                ),
-        )
-
-        ZunoFloatingBottomNav(
-            activeTab = HomeNavTab.Chats,
-            onTabSelected = onNavigateTab,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = ZunoSpace.s12),
-        )
     }
 
     if (showNewChatSheet && data != null) {
@@ -497,53 +486,6 @@ fun ChatsScreen(
 }
 
 @Composable
-private fun ChatsTopBar(
-    showSearch: Boolean,
-    searchActive: Boolean,
-    onSearchToggle: () -> Unit,
-    onNewChat: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .padding(horizontal = ZunoSpace.s24),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.chats_title),
-            style = ZunoType.TitleLarge,
-            color = ZunoColors.TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (showSearch) {
-                ZunoIconButton(
-                    icon = if (searchActive) R.drawable.zuno_ic_t_x else R.drawable.zuno_ic_t_search,
-                    onClick = onSearchToggle,
-                    style = ZunoIconButtonStyle.Ghost,
-                    size = ZunoIconButtonSize.Medium,
-                    tint = ZunoColors.IconPrimary,
-                    contentDescription = stringResource(R.string.chats_search),
-                )
-            }
-            ZunoIconButton(
-                icon = R.drawable.zuno_ic_plus,
-                onClick = onNewChat,
-                style = ZunoIconButtonStyle.Strong,
-                size = ZunoIconButtonSize.Medium,
-                contentDescription = stringResource(R.string.chats_new_chat),
-            )
-        }
-    }
-}
-
-@Composable
 private fun OpenToSpeakToggleCard(
     userInitial: String,
     userImageUrl: String?,
@@ -556,9 +498,7 @@ private fun OpenToSpeakToggleCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .clickable(role = Role.Switch, onClick = { onToggle(!openToSpeak) })
             .padding(start = ZunoSpace.s12, end = ZunoSpace.s14, top = ZunoSpace.s10, bottom = ZunoSpace.s10),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -617,9 +557,10 @@ fun ChatsSearchField(
         modifier = modifier
             .fillMaxWidth()
             .height(42.dp)
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, if (query.isNotEmpty()) ZunoColors.BorderFocus else ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(
+                shape = shape,
+                borderBrush = if (query.isNotEmpty()) SolidColor(ZunoColors.BorderFocus) else ZunoGlassBorderSubtleBrush,
+            )
             .padding(horizontal = ZunoSpace.s14),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         verticalAlignment = Alignment.CenterVertically,
@@ -667,64 +608,17 @@ private fun ChatsFilterChipsRow(
     selected: ChatsFilter,
     onSelect: (ChatsFilter) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-    ) {
-        FilterPill(
-            label = stringResource(R.string.chats_filter_all),
-            selected = selected == ChatsFilter.All,
-            onClick = { onSelect(ChatsFilter.All) },
-        )
-        FilterPill(
-            label = stringResource(R.string.chats_filter_ai_tutor),
-            icon = R.drawable.zuno_ic_t_sparkles,
-            selected = selected == ChatsFilter.AiTutor,
-            onClick = { onSelect(ChatsFilter.AiTutor) },
-        )
-        FilterPill(
-            label = stringResource(R.string.chats_filter_people),
-            icon = R.drawable.zuno_ic_t_users,
-            selected = selected == ChatsFilter.People,
-            onClick = { onSelect(ChatsFilter.People) },
-        )
-        FilterPill(
-            label = stringResource(R.string.chats_filter_open),
-            icon = R.drawable.zuno_ic_t_mic,
-            selected = selected == ChatsFilter.Open,
-            onClick = { onSelect(ChatsFilter.Open) },
-        )
-    }
-}
-
-@Composable
-private fun FilterPill(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    @DrawableRes icon: Int? = null,
-) {
-    val bg = if (selected) ZunoColors.SurfaceInverse else ZunoColors.SurfaceSubtle
-    val fg = if (selected) ZunoColors.TextOnInverse else ZunoColors.TextSecondary
-    val iconTint = if (selected) ZunoColors.IconOnInverse else ZunoColors.IconSecondary
-    Row(
-        modifier = Modifier
-            .height(30.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .then(if (selected) Modifier else Modifier.border(1.dp, ZunoColors.BorderSubtle, CircleShape))
-            .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) {
-            ZunoIcon(icon, 13.dp, tint = iconTint)
-        }
-        Text(text = label, style = ZunoType.LabelSmall, color = fg, maxLines = 1)
-    }
+    val tabs = listOf(
+        ChatsFilter.All to stringResource(R.string.chats_filter_all),
+        ChatsFilter.AiTutor to stringResource(R.string.chats_filter_ai_tutor),
+        ChatsFilter.People to stringResource(R.string.chats_filter_people),
+        ChatsFilter.Open to stringResource(R.string.chats_filter_open),
+    )
+    ZunoSegmentedTabs(
+        labels = tabs.map { it.second },
+        selectedIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
+        onSelect = { idx -> onSelect(tabs[idx].first) },
+    )
 }
 
 @Composable
@@ -733,9 +627,7 @@ private fun StartAiChatCard(onChat: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(shape)
             .clickable(role = Role.Button, onClick = onChat)
             .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -787,13 +679,11 @@ private fun ConversationsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderSubtle, shape),
+                .zunoGlassSubtle(shape),
         ) {
             items.forEachIndexed { index, item ->
                 if (index > 0) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                    ZunoGlassHairline()
                 }
                 UnifiedConversationRow(item = item, onClick = { onClickItem(item) })
             }
@@ -936,13 +826,11 @@ private fun AddedPartnersSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderSubtle, shape),
+                .zunoGlassSubtle(shape),
         ) {
             partners.forEachIndexed { index, partner ->
                 if (index > 0) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                    ZunoGlassHairline()
                 }
                 LearnerActionRow(
                     learner = partner,
@@ -975,13 +863,11 @@ private fun OpenSpeakersFullListSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderSubtle, shape),
+                .zunoGlassSubtle(shape),
         ) {
             speakers.forEachIndexed { index, speaker ->
                 if (index > 0) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                    ZunoGlassHairline()
                 }
                 val interests = speaker.interests.take(2).joinToString(", ")
                 val subtitle = if (interests.isNotBlank()) {
@@ -1105,9 +991,7 @@ private fun ChatsEmptySection(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(cardShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderSubtle, cardShape),
+                    .zunoGlassSubtle(cardShape),
             ) {
                 quickStarts()
             }
@@ -1129,7 +1013,7 @@ private fun QuickStartAiRow(onClick: () -> Unit) {
 
 @Composable
 private fun QuickStartOpenSpeakersRow(speakers: List<PeerLearner>, onClick: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+    ZunoGlassHairline()
     val first = speakers.firstOrNull()
     QuickStartRow(
         leading = {
@@ -1236,7 +1120,7 @@ private fun NewChatSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s8),
+                .padding(horizontal = ZunoSpace.s12),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
         ) {
             ChatsSearchField(
@@ -1249,9 +1133,7 @@ private fun NewChatSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(aiCardShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderDefault, aiCardShape)
+                    .zunoGlassSubtle(aiCardShape)
                     .clickable(role = Role.Button, onClick = onChatAi)
                     .padding(ZunoSpace.s14),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -1304,12 +1186,10 @@ private fun NewChatSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(listShape)
-                            .background(ZunoColors.SurfaceDefault)
-                            .border(1.dp, ZunoColors.BorderSubtle, listShape),
+                            .zunoGlassSubtle(listShape),
                     ) {
                         filteredSpeakers.take(4).forEachIndexed { idx, speaker ->
-                            if (idx > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                            if (idx > 0) ZunoGlassHairline()
                             LearnerActionRow(
                                 learner = speaker,
                                 subtitle = "${speaker.languageName} ${speaker.level} · ${speaker.activeLabel}",
@@ -1334,12 +1214,10 @@ private fun NewChatSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(listShape)
-                            .background(ZunoColors.SurfaceDefault)
-                            .border(1.dp, ZunoColors.BorderSubtle, listShape),
+                            .zunoGlassSubtle(listShape),
                     ) {
                         filteredPartners.forEachIndexed { idx, partner ->
-                            if (idx > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                            if (idx > 0) ZunoGlassHairline()
                             LearnerActionRow(
                                 learner = partner,
                                 subtitle = "${partner.languageName} ${partner.level} · ${partner.activeLabel}",

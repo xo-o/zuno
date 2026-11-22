@@ -22,18 +22,33 @@ import androidx.compose.ui.res.stringResource
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.CoachPromptItem
 import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.Message
+import com.zuno.ai.data.Profile
+import com.zuno.ai.data.RecentKind
+import com.zuno.ai.data.RecentSession
+import com.zuno.ai.data.Schedule
+import com.zuno.ai.data.ScheduleRepeat
 import com.zuno.ai.ui.components.ContinueSessionUi
 import com.zuno.ai.ui.components.ZunoDialog
 import com.zuno.ai.ui.screens.ChatScreen
+import com.zuno.ai.ui.screens.CommunityScreen
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
+import com.zuno.ai.ui.screens.LiveRoomsScreen
+import com.zuno.ai.ui.screens.PaywallScreen
+import com.zuno.ai.ui.screens.ProgressScreen
+import com.zuno.ai.ui.screens.ScheduledScreen
+import com.zuno.ai.ui.screens.SettingsAccountScreen
+import com.zuno.ai.ui.screens.SettingsOverviewScreen
+import com.zuno.ai.ui.screens.VocabularyScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.VoiceModeScreen
 import com.zuno.ai.ui.theme.ZunoTheme
+import com.zuno.ai.viewmodel.Loadable
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -168,6 +183,29 @@ class HomeScreensUiTest {
             title = "At the café",
             subtitle = "Spanish B1 · 2h ago",
         )
+        val recentSessions = listOf(
+            RecentSession("conv-1", RecentKind.FreeTalk, "Café en Madrid", "AI · Now", pinned = true, conversationId = "conv-1"),
+            RecentSession("rp-1", RecentKind.Roleplay, "Ordering at a café", "Roleplay", pinned = false, conversationId = "conv-2"),
+            RecentSession("tp-1", RecentKind.Topic, "Job interview basics", "Topic · 60%", pinned = false, conversationId = null),
+        )
+        val sampleProfile = Profile(
+            name = "Noah Carter",
+            email = "noah.carter@gmail.com",
+            targetLanguage = "es",
+            level = "B1",
+            appLanguage = AppLanguage.English,
+            accent = "es-ES",
+            levelChecked = true,
+            onboardingCompleted = true,
+            plan = "free",
+            imageUrl = null,
+            providers = listOf("google"),
+        )
+        val now = System.currentTimeMillis()
+        val sampleSchedules = listOf(
+            Schedule("s1", false, "t1", null, "Encuentra la parada de autobús", "Topic · Lesson 2", ScheduleRepeat.Once, "18:00", null, emptyList(), null, "UTC", 10, true, 10, false, now + 3_600_000L),
+            Schedule("s2", false, "t2", null, "Job interview basics", "Topic · Lesson 4", ScheduleRepeat.Daily, "08:00", null, emptyList(), null, "UTC", 15, true, 10, false, now + 86_400_000L),
+        )
 
         ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
@@ -191,6 +229,7 @@ class HomeScreensUiTest {
                                     level = "B1",
                                     showUpgrade = true,
                                     continueSession = if (stage == "home_active") activeSession else null,
+                                    recentSessions = recentSessions,
                                     onStreakClick = {},
                                     onAvatarClick = {},
                                     onDailyGoalContinue = {},
@@ -217,6 +256,99 @@ class HomeScreensUiTest {
                                     )
                                 }
                             }
+
+                            "paywall" -> PaywallScreen(
+                                onClose = {},
+                                onStartTrial = {},
+                                onOpenTerms = {},
+                                onOpenPrivacy = {},
+                                onRestorePurchases = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "vocabulary" -> VocabularyScreen(
+                                languageName = "Spanish",
+                                level = "B1",
+                                onBack = {},
+                                onStartVoiceSprint = {},
+                                onSpeakPhrase = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "progress" -> ProgressScreen(
+                                languageName = "Spanish",
+                                level = "B1",
+                                streakDays = 22,
+                                onBack = {},
+                                onStartDrill = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "community" -> CommunityScreen(
+                                userName = "Noah Carter",
+                                userInitial = "N",
+                                userImageUrl = null,
+                                languageName = "Spanish",
+                                level = "B1",
+                                openToSpeak = true,
+                                partners = emptyList(),
+                                onlineLearners = emptyList(),
+                                onToggleOpenToSpeak = {},
+                                onTalkToPartner = {},
+                                onInviteClick = {},
+                                onOpenChats = {},
+                                onBack = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "live_rooms" -> LiveRoomsScreen(
+                                languageName = "Spanish",
+                                level = "B1",
+                                onBack = {},
+                                onJoinRoom = {},
+                                onCreateRoom = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "settings" -> SettingsOverviewScreen(
+                                profile = sampleProfile,
+                                appLanguage = AppLanguage.English,
+                                onBack = {},
+                                onUpgrade = {},
+                                onAccount = {},
+                                onLearning = {},
+                                onAppLanguage = {},
+                                onPreferences = {},
+                                onNotifications = {},
+                                onAbout = {},
+                                onContactSupport = {},
+                                onSignOut = {},
+                                onDeleteAccount = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "account" -> SettingsAccountScreen(
+                                profile = sampleProfile,
+                                uploadingPhoto = false,
+                                onUpdateName = {},
+                                onChangePhoto = {},
+                                onPlanClick = {},
+                                onDownloadData = {},
+                                onDeleteAccount = {},
+                                onBack = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "scheduled" -> ScheduledScreen(
+                                schedules = Loadable(sampleSchedules),
+                                highlightId = null,
+                                onBack = {},
+                                onRetry = {},
+                                onCreate = {},
+                                onOpen = {},
+                                onStart = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
 
                             "voice" -> {
                                 VoiceModeScreen(
@@ -301,48 +433,51 @@ class HomeScreensUiTest {
                 }
             }
 
-            // 1. Home · 1 · Active — Continue with Zuno
+            // 1. Home · 1 · Active — Continue with Zuno (Clean Foundations tokens + Next tasks)
             waitForText("Hola, Noah")
-            waitForText("Daily target · 8 / 15 min")
+            waitForText("Spanish · B1")
+            waitForText("7 min left to reach today’s 15 min goal")
+            waitForText("8 / 15 min today")
             waitForText("53%")
             waitForText("Pick up where you left off")
             waitForText("At the café")
             waitForText("Spanish B1 · 2h ago")
             waitForText("Resume")
-            waitForText("Live now")
-            waitForText("Café small talk circle")
-            waitForText("Practice with a partner")
+            waitForText("Next tasks")
+            waitForText("Practice vocabulary")
+            waitForText("12 due")
+            waitForText("Roleplay · Ordering food")
+            waitForText("5 min")
+            waitForText("Free talk with Zuno")
+            waitForText("Open")
             saveScreenshot(scenario, "01_home_active")
 
             tapText("Resume")
             assertTrue("Expected Resume to open conversation", resumedConversationId == "conv-1")
 
-            // 2. Home · 5 · More — Explore Zuno (Pure App Directory)
-            tapText("More")
-            waitForText("Explore")
+            // 2. Home · 5 · Sidebar Drawer (BgElevated #1E1E1E overlay)
+            tapText("Open navigation menu")
             waitForText("Noah Carter")
-            waitForText("Spanish · B1 · 22-day streak")
-            waitForText("Unlock unlimited roleplays")
-            waitForText("Practice & Learn")
-            waitForText("Roleplay")
-            waitForText("Live rooms")
-            waitForText("2 active")
+            waitForText("Practice")
+            waitForText("Free Talk")
+            waitForText("Topics")
+            waitForText("Roleplays")
             waitForText("Vocabulary")
-            waitForText("14 due")
-            waitForText("Scheduled")
-            waitForText("7:00 PM")
-            waitForText("Social & Milestones")
-            waitForText("Community")
-            waitForText("Partners")
-            waitForText("12 online")
-            waitForText("Leaderboard")
-            waitForText("#5")
-            saveScreenshot(scenario, "02_home_more_explore")
-            tapText("Home")
+            waitForText("12 due")
+            waitForText("Live & social")
+            waitForText("Live rooms")
+            waitForText("Community & Partners")
+            waitForText("Progress")
+            waitForText("Recent sessions")
+            waitForText("Café en Madrid")
+            waitForText("Settings")
+            waitForText("New chat")
+            saveScreenshot(scenario, "02_home_sidebar_drawer")
+            tapText("Close navigation menu")
             waitForText("Hola, Noah")
 
             // 3. Home · 8 · Mic Blocked → Dialog
-            tapText("Start voice call with Zuno")
+            showMicDialog = true
             waitForText("Allow microphone access?")
             saveScreenshot(scenario, "03_home_mic_dialog", useFullScreen = true)
             tapText("Not now")
@@ -388,6 +523,61 @@ class HomeScreensUiTest {
             waitForText("¡Claro! Son tres euros. ¿Algo más?")
             waitForText("Responde en español…")
             saveScreenshot(scenario, "07_free_talk_chat")
+
+            // 8. Paywall · 1 · Plans
+            stage = "paywall"
+            waitForText("Zuno Pro")
+            waitForText("Save 50%")
+            waitForText("Start 7-day free trial")
+            saveScreenshot(scenario, "08_paywall")
+
+            // 9. Vocabulary — SRS Library
+            stage = "vocabulary"
+            waitForText("Vocabulary")
+            waitForText("Start 2-min Voice Sprint")
+            waitForText("pedir la cuenta")
+            saveScreenshot(scenario, "09_vocabulary")
+
+            // 10. Progress
+            stage = "progress"
+            waitForText("Progress")
+            waitForText("Skill balance")
+            waitForText("Daily goals")
+            saveScreenshot(scenario, "10_progress")
+
+            // 11. Community — Partners & League
+            stage = "community"
+            waitForText("Community")
+            waitForText("Your partners")
+            saveScreenshot(scenario, "11_community_partners")
+            tapText("League")
+            waitForText("Your rank · #4")
+            waitForText("Standings")
+            saveScreenshot(scenario, "12_community_league")
+
+            // 12. Live Rooms
+            stage = "live_rooms"
+            waitForText("Live rooms")
+            waitForText("Café culture & morning routines")
+            waitForText("Join live room")
+            saveScreenshot(scenario, "13_live_rooms")
+
+            // 13. Settings Overview & Account & Scheduled
+            stage = "settings"
+            waitForText("Settings")
+            waitForText("Noah Carter")
+            waitForText("Zuno Pro")
+            saveScreenshot(scenario, "14_settings_overview")
+
+            stage = "account"
+            waitForText("Account")
+            waitForText("Privacy & visibility")
+            saveScreenshot(scenario, "15_account")
+
+            stage = "scheduled"
+            waitForText("Scheduled")
+            waitForText("Encuentra la parada de autobús")
+            saveScreenshot(scenario, "16_scheduled")
         }
     }
 }

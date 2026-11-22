@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -35,9 +36,13 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.zuno.ai.R
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoRecessedTrack
 
 private val TopBarHeight = 56.dp
 
@@ -149,6 +154,121 @@ fun ZunoActionTopBar(
     }
 }
 
+/**
+ * Top Bar · Section (`2653:3340`): 64dp header with leading arrow-left back button,
+ * Title/Large title, optional search ghost button, and optional circular glass `+` button.
+ */
+@Composable
+fun ZunoSectionTopBar(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    showSearch: Boolean = false,
+    searchActive: Boolean = false,
+    onSearchToggle: () -> Unit = {},
+    searchDescription: String = "Search",
+    showAdd: Boolean = false,
+    onAdd: () -> Unit = {},
+    addDescription: String = "Add",
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .padding(start = ZunoSpace.s12, end = ZunoSpace.s24),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ZunoIconButton(
+            icon = R.drawable.zuno_ic_arrow_left,
+            onClick = onBack,
+            size = ZunoIconButtonSize.Large,
+            contentDescription = "Back",
+        )
+        EllipsizedText(
+            text = title,
+            style = ZunoType.TitleLarge,
+            color = ZunoColors.TextPrimary,
+            modifier = Modifier.weight(1f),
+        )
+        if (showSearch || showAdd) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showSearch) {
+                    ZunoIconButton(
+                        icon = if (searchActive) R.drawable.zuno_ic_t_x else R.drawable.zuno_ic_t_search,
+                        onClick = onSearchToggle,
+                        style = ZunoIconButtonStyle.Ghost,
+                        size = ZunoIconButtonSize.Medium,
+                        tint = ZunoColors.IconPrimary,
+                        contentDescription = searchDescription,
+                    )
+                }
+                if (showAdd) {
+                    ZunoIconButton(
+                        icon = R.drawable.zuno_ic_plus,
+                        onClick = onAdd,
+                        style = ZunoIconButtonStyle.Strong,
+                        size = ZunoIconButtonSize.Medium,
+                        contentDescription = addDescription,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Segmented Tabs (`3091:3712`): 40dp glass pill track with elevated glass active pill.
+ */
+@Composable
+fun ZunoSegmentedTabs(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .zunoGlassSubtle(CircleShape, fillColor = ZunoColors.SurfaceControlTrack)
+            .padding(ZunoSpace.s4),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        labels.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .then(
+                        if (selected) {
+                            Modifier.zunoGlassElevated(
+                                CircleShape,
+                                fillColor = ZunoColors.SurfaceControlActive,
+                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            )
+                        } else {
+                            Modifier.clip(CircleShape)
+                        },
+                    )
+                    .clickable(role = Role.Tab) { onSelect(index) },
+                contentAlignment = Alignment.Center,
+            ) {
+                EllipsizedText(
+                    text = label,
+                    style = ZunoType.LabelSmall,
+                    color = if (selected) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
+                )
+            }
+        }
+    }
+}
+
 /** Top Bar — Type=Menu + Selector. Home: menu plus the "Spanish · B1" pill that opens the learning sheet. */
 @Composable
 fun ZunoSelectorTopBar(
@@ -166,7 +286,7 @@ fun ZunoSelectorTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(R.drawable.zuno_ic_menu, onMenu, size = ZunoIconButtonSize.Large, contentDescription = "Menu")
-        // The 36dp pill sits inside a 44dp-tall tap area.
+        // The 34dp glass pill sits inside a 44dp-tall tap area.
         Box(
             modifier = Modifier
                 .height(ZunoIconButtonSize.Large.button)
@@ -176,11 +296,9 @@ fun ZunoSelectorTopBar(
         ) {
             Box(
                 modifier = Modifier
-                    .height(36.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.SurfaceSubtle)
-                    .border(1.dp, ZunoColors.BorderDefault, CircleShape)
-                    .padding(horizontal = ZunoSpace.s14),
+                    .height(34.dp)
+                    .zunoGlassSubtle(CircleShape)
+                    .padding(horizontal = ZunoSpace.s12),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(selector, style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary, maxLines = 1)
@@ -210,7 +328,7 @@ fun ZunoSectionHeader(
     }
 }
 
-/** Primary drawer navigation row. */
+/** Primary drawer navigation row (`3077:14461`..`14500`). */
 @Composable
 fun ZunoMenuItem(
     label: String,
@@ -218,28 +336,46 @@ fun ZunoMenuItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     active: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
+    val shape = RoundedCornerShape(ZunoRadius.md)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(42.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (active) ZunoColors.SurfaceDefault else Color.Transparent)
+            .height(38.dp)
+            .then(
+                if (active) {
+                    Modifier.zunoGlassElevated(
+                        shape,
+                        fillColor = ZunoColors.SurfaceControlActive,
+                        borderBrush = SolidColor(ZunoColors.BorderSubtle),
+                    )
+                } else {
+                    Modifier.clip(shape)
+                },
+            )
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(start = ZunoSpace.s12, end = ZunoSpace.s10),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoIcon(icon, 18.dp, tint = if (active) ZunoColors.IconPrimary else ZunoColors.IconSecondary)
-        Text(
-            label,
-            style = if (active) ZunoType.BodyMediumStrong else ZunoType.BodyMedium,
-            color = if (active) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
-        )
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZunoIcon(icon, 17.dp, tint = if (active) ZunoColors.IconPrimary else ZunoColors.IconSecondary)
+            EllipsizedText(
+                text = label,
+                style = if (active) ZunoType.LabelMedium else ZunoType.BodySmall,
+                color = if (active) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
+            )
+        }
+        trailing?.invoke()
     }
 }
 
-/** Recent session row. Title truncates; selected marks the open session. */
+/** Recent session row (`3077:14509`..`14521`). Title truncates; selected marks the open session. */
 @Composable
 fun ZunoSessionRow(
     title: String,
@@ -247,34 +383,48 @@ fun ZunoSessionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    /** Pinned rows (drawer "Pinned") lead with a pin and use the stronger title style. */
+    /** Pinned rows lead with a pin and use the stronger title style. */
     pinned: Boolean = false,
+    unread: Boolean = false,
 ) {
+    val shape = RoundedCornerShape(ZunoRadius.lg)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(ZunoRadius.md))
-            .background(if (selected) ZunoColors.SurfaceDefault else Color.Transparent)
+            .height(38.dp)
+            .then(if (selected) Modifier.clip(shape).background(ZunoColors.SurfaceDefault) else Modifier.clip(shape))
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(start = ZunoSpace.s12, end = ZunoSpace.s10),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (pinned) ZunoIcon(R.drawable.zuno_ic_t_pin, 14.dp, tint = ZunoColors.IconTertiary)
+        if (pinned) ZunoIcon(R.drawable.zuno_ic_t_pin, 13.dp, tint = ZunoColors.IconTertiary)
         EllipsizedText(
             text = title,
-            style = if (selected || pinned) ZunoType.BodyMediumStrong else ZunoType.BodyMedium,
+            style = if (selected || pinned) ZunoType.LabelMedium else ZunoType.BodySmall,
             color = if (selected || pinned) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
             modifier = Modifier.weight(1f),
         )
-        Text(meta, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary, maxLines = 1)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(meta, style = ZunoType.Micro, color = ZunoColors.TextTertiary, maxLines = 1)
+            if (unread) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(ZunoColors.SurfaceInverse),
+                )
+            }
+        }
     }
 }
 
 enum class LessonStatus { Done, Current, Upcoming }
 
-/** Lesson in a topic path; sits inside a [ZunoListGroup]. */
+/** Lesson in a topic path; sits inside a glass [ZunoListGroup]. */
 @Composable
 fun ZunoLessonRow(
     number: Int,
@@ -283,48 +433,58 @@ fun ZunoLessonRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     meta: String? = null,
+    showDivider: Boolean = false,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .background(if (status == LessonStatus.Current) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s16, end = ZunoSpace.s16),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val indicatorModifier = Modifier.size(32.dp).clip(CircleShape)
-        Box(
-            modifier = when (status) {
-                LessonStatus.Done -> indicatorModifier.background(ZunoColors.SurfaceInverse)
-                LessonStatus.Current -> indicatorModifier.border(1.5.dp, ZunoColors.TextPrimary, CircleShape)
-                LessonStatus.Upcoming -> indicatorModifier.border(1.5.dp, ZunoColors.BorderStrong, CircleShape)
-            },
-            contentAlignment = Alignment.Center,
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showDivider) ZunoGlassHairline()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .then(
+                    if (status == LessonStatus.Current) {
+                        Modifier.background(ZunoColors.SurfaceStrong)
+                    } else {
+                        Modifier
+                    },
+                )
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = ZunoSpace.s16),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (status == LessonStatus.Done) {
-                ZunoIcon(R.drawable.zuno_ic_check_inverse, 16.dp)
-            } else {
+            val indicatorModifier = Modifier.size(32.dp).clip(CircleShape)
+            Box(
+                modifier = when (status) {
+                    LessonStatus.Done -> indicatorModifier.background(ZunoColors.SurfaceInverse)
+                    LessonStatus.Current -> indicatorModifier.border(1.5.dp, ZunoColors.TextPrimary, CircleShape)
+                    LessonStatus.Upcoming -> indicatorModifier.border(1.5.dp, ZunoColors.BorderStrong, CircleShape)
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (status == LessonStatus.Done) {
+                    ZunoIcon(R.drawable.zuno_ic_check_inverse, 16.dp)
+                } else {
+                    Text(
+                        number.toString(),
+                        style = ZunoType.FootnoteStrong,
+                        color = if (status == LessonStatus.Current) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
+                    )
+                }
+            }
+            EllipsizedText(
+                text = title,
+                style = ZunoType.BodyMediumStrong,
+                color = if (status == LessonStatus.Upcoming) ZunoColors.TextSecondary else ZunoColors.TextPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            meta?.let {
                 Text(
-                    number.toString(),
-                    style = ZunoType.FootnoteStrong,
-                    color = if (status == LessonStatus.Current) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
+                    it,
+                    style = ZunoType.FootnoteRegular,
+                    color = if (status == LessonStatus.Current) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
                 )
             }
-        }
-        EllipsizedText(
-            text = title,
-            style = ZunoType.BodyMediumStrong,
-            color = if (status == LessonStatus.Upcoming) ZunoColors.TextSecondary else ZunoColors.TextPrimary,
-            modifier = Modifier.weight(1f),
-        )
-        meta?.let {
-            Text(
-                it,
-                style = ZunoType.FootnoteRegular,
-                color = if (status == LessonStatus.Current) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
-            )
         }
     }
 }
@@ -359,7 +519,7 @@ fun ZunoAvatar(
     }
 }
 
-/** Signed-in user summary at the top of the drawer. */
+/** Signed-in user summary glass pill at the top of the drawer (`3077:14450`). */
 @Composable
 fun ZunoProfileCard(
     name: String,
@@ -370,26 +530,30 @@ fun ZunoProfileCard(
 ) {
     Row(
         modifier = modifier
-            .height(64.dp)
-            .clip(CircleShape)
-            .background(ZunoColors.SurfaceDefault)
+            .height(50.dp)
+            .zunoGlassSubtle(CircleShape)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s10, end = ZunoSpace.s16),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(start = ZunoSpace.s6, end = ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoAvatar(name.take(1).uppercase(), imageUrl = imageUrl)
+        ZunoAvatar(
+            initial = name.take(1).uppercase(),
+            imageUrl = imageUrl,
+            size = 36.dp,
+            textStyle = ZunoType.LabelMedium,
+        )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            EllipsizedText(name, ZunoType.BodyMediumStrong, ZunoColors.TextPrimary)
-            EllipsizedText(detail, ZunoType.FootnoteRegular, ZunoColors.TextTertiary)
+            EllipsizedText(name, ZunoType.LabelMedium, ZunoColors.TextPrimary)
+            EllipsizedText(detail, ZunoType.Micro, ZunoColors.TextTertiary)
         }
     }
 }
 
-/** Subscription upsell row in the drawer. */
+/** Subscription upsell glass row in the drawer & settings (`3077:14528`). */
 @Composable
 fun ZunoUpgradeBanner(
     onClick: () -> Unit,
@@ -397,40 +561,37 @@ fun ZunoUpgradeBanner(
     text: String = "Get more with Zuno Pro",
     action: String = "Upgrade",
 ) {
-    val shape = RoundedCornerShape(ZunoRadius.lg)
+    val shape = RoundedCornerShape(ZunoRadius.xxl)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .height(44.dp)
+            .zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderDefault))
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s16, end = ZunoSpace.s12),
+            .padding(start = ZunoSpace.s14, end = ZunoSpace.s12),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        EllipsizedText(text, ZunoType.BodySmall, ZunoColors.TextSecondary, Modifier.weight(1f, fill = false))
+        EllipsizedText(text, ZunoType.CaptionRegular, ZunoColors.TextSecondary, Modifier.weight(1f, fill = false))
         Spacer(Modifier.width(ZunoSpace.s8))
         Row(
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(action, style = ZunoType.LabelMedium, color = ZunoColors.TextPrimary)
-            ZunoIcon(R.drawable.zuno_ic_chevron_right, 16.dp)
+            Text(action, style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary)
+            ZunoIcon(R.drawable.zuno_ic_chevron_right, 14.dp)
         }
     }
 }
 
-/** 6dp rounded progress track; [progress] in 0..1. */
+/** 6dp rounded recessed glass progress track; [progress] in 0..1. */
 @Composable
-fun ZunoProgressBar(progress: Float, modifier: Modifier = Modifier) {
+fun ZunoProgressBar(progress: Float, modifier: Modifier = Modifier, height: Dp = 6.dp) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(6.dp)
-            .clip(CircleShape)
-            .background(ZunoColors.SurfaceStrong),
+            .height(height)
+            .zunoRecessedTrack(CircleShape),
     ) {
         Box(
             Modifier

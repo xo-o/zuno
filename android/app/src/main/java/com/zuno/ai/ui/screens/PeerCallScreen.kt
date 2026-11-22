@@ -63,6 +63,10 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassMediaPill
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.delay
@@ -125,7 +129,7 @@ fun PeerCallScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -223,9 +227,7 @@ fun PeerCallScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(hudShape)
-                        .background(ZunoColors.SurfaceSubtle)
-                        .border(1.dp, ZunoColors.BorderSubtle, hudShape)
+                        .zunoGlassSubtle(hudShape)
                         .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 ) {
@@ -346,16 +348,18 @@ private fun ParticipantTile(
     dimmed: Boolean = false,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.xxl)
-    val borderColor = highlightColor ?: ZunoColors.BorderDefault
-    val borderWidth = if (highlightColor != null) 1.5.dp else 1.dp
 
     Box(
         modifier = modifier
             .height(204.dp)
             .alpha(if (dimmed) 0.72f else 1f)
-            .clip(shape)
-            .background(if (highlightColor != null) ZunoColors.SurfaceDefault else ZunoColors.SurfaceSubtle)
-            .border(borderWidth, borderColor, shape),
+            .then(
+                if (highlightColor != null) {
+                    Modifier.zunoGlassElevated(shape, borderWidth = 1.5.dp, borderBrush = androidx.compose.ui.graphics.SolidColor(highlightColor))
+                } else {
+                    Modifier.zunoGlassSubtle(shape)
+                },
+            ),
     ) {
         if (videoTrack != null) {
             LiveKitVideoFeed(
@@ -420,8 +424,7 @@ private fun ParticipantTile(
                     Box(
                         modifier = Modifier
                             .size(23.dp)
-                            .clip(CircleShape)
-                            .background(ZunoColors.SurfaceStrong),
+                            .zunoGlassMediaPill(CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         ZunoIcon(

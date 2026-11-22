@@ -39,9 +39,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
+import com.zuno.ai.ui.theme.ZunoGlassHairlineBrush
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 
 /** User message — right-aligned, tail bottom-right. */
 @Composable
@@ -67,9 +71,11 @@ fun ZunoUserBubble(
         }
         Box(
             modifier = Modifier
-                .clip(shape)
-                .background(ZunoColors.SurfaceStrong)
-                .border(1.dp, ZunoColors.BorderSubtle, shape)
+                .zunoGlassElevated(
+                    shape,
+                    fillColor = ZunoColors.SurfaceStrong,
+                    borderBrush = SolidColor(ZunoColors.BorderSubtle),
+                )
                 .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
         ) {
             Text(
@@ -82,7 +88,7 @@ fun ZunoUserBubble(
     }
 }
 
-/** Assistant message — full-width card with optional translation, glossary and quick actions. */
+/** Assistant message — full-width glass card with optional translation, glossary and quick actions. */
 @Composable
 fun ZunoAssistantBubble(
     message: String,
@@ -120,15 +126,13 @@ fun ZunoAssistantBubble(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ZunoColors.SurfaceSubtle)
-                .border(1.dp, ZunoColors.BorderDefault, shape)
+                .zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderDefault))
                 .padding(ZunoSpace.s16),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         ) {
             Text(message, style = ZunoType.BodyMedium, color = ZunoColors.TextPrimary)
             if (!translation.isNullOrBlank()) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(ZunoColors.BorderSubtle))
+                ZunoGlassHairline()
                 Text(translation, style = ZunoType.BodySmall, color = ZunoColors.TextSecondary)
             }
             if (glossary.isNotEmpty()) {
@@ -136,9 +140,7 @@ fun ZunoAssistantBubble(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(glossaryShape)
-                        .background(ZunoColors.SurfaceSubtle)
-                        .border(1.dp, ZunoColors.BorderSubtle, glossaryShape)
+                        .zunoGlassSubtle(glossaryShape)
                         .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
                 ) {
@@ -163,9 +165,7 @@ fun ZunoFeedbackPill(text: String, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(ZunoRadius.md)
     Row(
         modifier = modifier
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .padding(start = ZunoSpace.s10, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.Top,
@@ -203,9 +203,11 @@ fun ZunoComposer(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .zunoGlassElevated(
+                shape,
+                fillColor = ZunoColors.SurfaceStrong,
+                borderBrush = null,
+            )
             .padding(
                 start = ZunoSpace.s8,
                 end = ZunoSpace.s8,
@@ -266,9 +268,11 @@ fun ZunoComposer(
                     modifier = Modifier
                         .size(40.dp)
                         .alpha(if (canSend) 1f else 0.4f)
-                        .clip(CircleShape)
-                        .background(ZunoColors.SurfaceStronger)
-                        .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+                        .zunoGlassElevated(
+                            CircleShape,
+                            fillColor = ZunoColors.SurfaceStronger,
+                            borderBrush = SolidColor(ZunoColors.BorderDefault),
+                        )
                         .clickable(enabled = canSend, role = Role.Button, onClick = onSend),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -308,9 +312,7 @@ fun ZunoTypingBubble(modifier: Modifier = Modifier) {
         Text("ZunoAI", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
         Row(
             modifier = Modifier
-                .clip(shape)
-                .background(ZunoColors.SurfaceSubtle)
-                .border(1.dp, ZunoColors.BorderDefault, shape)
+                .zunoGlassSubtle(shape)
                 .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14)
                 .alpha(alpha),
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
@@ -328,8 +330,8 @@ fun ZunoSessionStart(label: String, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.weight(1f).height(1.dp).background(ZunoColors.BorderDefault))
+        Box(Modifier.weight(1f).height(1.dp).background(ZunoGlassHairlineBrush))
         Text(label, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
-        Box(Modifier.weight(1f).height(1.dp).background(ZunoColors.BorderDefault))
+        Box(Modifier.weight(1f).height(1.dp).background(ZunoGlassHairlineBrush))
     }
 }

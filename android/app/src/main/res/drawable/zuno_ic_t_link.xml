@@ -1,20 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable (white) Lucide glyph; color it with ZunoIcon(tint = …). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M1.125 12C1.125 8.33675 4.08675 5.375 7.75 5.375C8.23325 5.375 8.625 5.76675 8.625 6.25C8.625 6.73325 8.23325 7.125 7.75 7.125C5.05325 7.125 2.875 9.30325 2.875 12C2.875 14.6968 5.05325 16.875 7.75 16.875C10.4468 16.875 12.625 14.6968 12.625 12C12.625 11.5168 13.0168 11.125 13.5 11.125C13.9832 11.125 14.375 11.5168 14.375 12C14.375 15.6632 11.4132 18.625 7.75 18.625C4.08675 18.625 1.125 15.6632 1.125 12Z" />
     <path
-        android:pathData="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21.125 12C21.125 9.17325 18.8268 6.875 16 6.875C13.1732 6.875 10.875 9.17325 10.875 12C10.875 12.4832 10.4832 12.875 10 12.875C9.51675 12.875 9.125 12.4832 9.125 12C9.125 8.20675 12.2068 5.125 16 5.125C19.7932 5.125 22.875 8.20675 22.875 12C22.875 15.7932 19.7932 18.875 16 18.875C15.5168 18.875 15.125 18.4832 15.125 18C15.125 17.5168 15.5168 17.125 16 17.125C18.8268 17.125 21.125 14.8268 21.125 12Z" />
 </vector>

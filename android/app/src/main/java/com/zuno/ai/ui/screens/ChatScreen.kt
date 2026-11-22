@@ -67,6 +67,8 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.DraftAttachment
 import com.zuno.ai.viewmodel.DraftUploadState
 
@@ -112,7 +114,7 @@ fun ChatScreen(
         if (lastIndex > 0) listState.animateScrollToItem(lastIndex)
     }
 
-    Box(modifier.fillMaxSize().background(ZunoColors.BgCanvas)) {
+    Box(modifier.fillMaxSize().zunoCanvasBackground()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -249,7 +251,7 @@ private fun AiTutorTopBar(
         ZunoIconButton(
             icon = R.drawable.zuno_ic_t_phone,
             onClick = onStartCall,
-            style = ZunoIconButtonStyle.Subtle,
+            style = ZunoIconButtonStyle.Strong,
             size = ZunoIconButtonSize.Medium,
             tint = ZunoColors.IconPrimary,
             contentDescription = stringResource(R.string.chats_action_talk),
@@ -267,9 +269,7 @@ private fun ReturnedCallSummaryCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .clickable(role = Role.Button, onClick = onNotesClick)
             .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -278,8 +278,7 @@ private fun ReturnedCallSummaryCard(
         Box(
             modifier = Modifier
                 .size(34.dp)
-                .clip(CircleShape)
-                .background(ZunoColors.SurfaceStrong),
+                .zunoGlassSubtle(CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             ZunoIcon(

@@ -40,9 +40,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairlineBrush
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 
 /**
  * Draws a design asset with the colors baked into the Figma export. Pass [tint] for the white
@@ -87,24 +90,20 @@ fun ZunoButton(
     loading: Boolean = false,
 ) {
     val shape = CircleShape
-    val container = when (variant) {
-        ZunoButtonVariant.Primary -> ZunoColors.SurfaceInverse
-        ZunoButtonVariant.Secondary -> ZunoColors.SurfaceSubtle
-        ZunoButtonVariant.Ghost -> Color.Transparent
-        ZunoButtonVariant.Danger -> ZunoColors.SurfaceDanger
-    }
     val contentColor = if (variant == ZunoButtonVariant.Primary) ZunoColors.TextOnInverse else ZunoColors.TextPrimary
     val textStyle = if (size == ZunoButtonSize.Small) ZunoType.LabelSmall else ZunoType.LabelLarge
+    val surfaceModifier = when (variant) {
+        ZunoButtonVariant.Primary -> Modifier.clip(shape).background(ZunoColors.SurfaceInverse)
+        ZunoButtonVariant.Secondary -> Modifier.zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderDefault))
+        ZunoButtonVariant.Ghost -> Modifier.clip(shape)
+        ZunoButtonVariant.Danger -> Modifier.clip(shape).background(ZunoColors.SurfaceDanger)
+    }
 
     Row(
         modifier = modifier
             .alpha(if (enabled || loading) 1f else 0.4f)
             .height(size.height)
-            .clip(shape)
-            .background(container)
-            .then(
-                if (variant == ZunoButtonVariant.Secondary) Modifier.border(1.dp, ZunoColors.BorderDefault, shape) else Modifier
-            )
+            .then(surfaceModifier)
             .clickable(enabled = enabled && !loading, role = Role.Button, onClick = onClick)
             .padding(horizontal = size.horizontalPadding),
         horizontalArrangement = Arrangement.spacedBy(size.gap, Alignment.CenterHorizontally),
@@ -143,19 +142,20 @@ fun ZunoIconButton(
     contentDescription: String? = null,
 ) {
     val buttonSize = size.button
-    val background = when (style) {
-        ZunoIconButtonStyle.Ghost -> Color.Transparent
-        ZunoIconButtonStyle.Subtle -> ZunoColors.SurfaceDefault
-        ZunoIconButtonStyle.Outline -> ZunoColors.SurfaceSubtle
-        ZunoIconButtonStyle.Strong -> ZunoColors.SurfaceStronger
+    val surfaceModifier = when (style) {
+        ZunoIconButtonStyle.Ghost -> Modifier.clip(CircleShape)
+        ZunoIconButtonStyle.Subtle -> Modifier.clip(CircleShape).background(ZunoColors.SurfaceDefault)
+        ZunoIconButtonStyle.Outline -> Modifier.zunoGlassSubtle(CircleShape, borderBrush = SolidColor(ZunoColors.BorderDefault))
+        ZunoIconButtonStyle.Strong -> Modifier.zunoGlassElevated(
+            CircleShape,
+            fillColor = ZunoColors.SurfaceStronger,
+            borderBrush = SolidColor(ZunoColors.BorderDefault),
+        )
     }
-    val bordered = style == ZunoIconButtonStyle.Outline || style == ZunoIconButtonStyle.Strong
     Box(
         modifier = modifier
             .size(buttonSize)
-            .clip(CircleShape)
-            .background(background)
-            .then(if (bordered) Modifier.border(1.dp, ZunoColors.BorderDefault, CircleShape) else Modifier)
+            .then(surfaceModifier)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -177,9 +177,17 @@ fun ZunoChip(
     Row(
         modifier = modifier
             .height(32.dp)
-            .clip(shape)
-            .background(if (selected) ZunoColors.SurfaceStrong else ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .then(
+                if (selected) {
+                    Modifier.zunoGlassElevated(
+                        shape,
+                        fillColor = ZunoColors.SurfaceStrong,
+                        borderBrush = SolidColor(ZunoColors.BorderDefault),
+                    )
+                } else {
+                    Modifier.zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderDefault))
+                },
+            )
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = ZunoSpace.s12),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
@@ -228,9 +236,13 @@ fun ZunoTextField(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .clip(shape)
-                        .background(if (focused) ZunoColors.SurfaceDefault else ZunoColors.SurfaceSubtle)
-                        .border(1.dp, if (focused) ZunoColors.BorderFocus else ZunoColors.BorderDefault, shape)
+                        .then(
+                            if (focused) {
+                                Modifier.zunoGlassElevated(shape, borderBrush = SolidColor(ZunoColors.BorderFocus))
+                            } else {
+                                Modifier.zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderDefault))
+                            },
+                        )
                         .padding(horizontal = ZunoSpace.s16),
                     contentAlignment = Alignment.CenterStart,
                 ) {
@@ -275,9 +287,13 @@ fun ZunoTextFieldValue(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = minHeight)
-                    .clip(shape)
-                    .background(if (focused) ZunoColors.SurfaceDefault else ZunoColors.SurfaceSubtle)
-                    .border(1.dp, if (focused) ZunoColors.BorderFocus else ZunoColors.BorderDefault, shape)
+                    .then(
+                        if (focused) {
+                            Modifier.zunoGlassElevated(shape, borderBrush = SolidColor(ZunoColors.BorderFocus))
+                        } else {
+                            Modifier.zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderDefault))
+                        },
+                    )
                     .padding(horizontal = ZunoSpace.s16, vertical = if (singleLine) 0.dp else ZunoSpace.s16),
                 contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
             ) {
@@ -290,7 +306,7 @@ fun ZunoTextFieldValue(
     )
 }
 
-/** Hairline separator; pass a label for the auth "or" split. */
+/** Hairline separator (`Glass/Divider/Hairline`); pass a label for the auth "or" split. */
 @Composable
 fun ZunoDivider(modifier: Modifier = Modifier, label: String? = null) {
     Row(
@@ -298,10 +314,10 @@ fun ZunoDivider(modifier: Modifier = Modifier, label: String? = null) {
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.weight(1f).height(1.dp).background(ZunoColors.BorderDefault))
+        Box(Modifier.weight(1f).height(1.dp).background(ZunoGlassHairlineBrush))
         if (label != null) {
             Text(label, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
-            Box(Modifier.weight(1f).height(1.dp).background(ZunoColors.BorderDefault))
+            Box(Modifier.weight(1f).height(1.dp).background(ZunoGlassHairlineBrush))
         }
     }
 }

@@ -1,26 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable (white) Lucide glyph; color it with ZunoIcon(tint = …). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21.125 12C21.125 6.98325 17.0168 2.875 12 2.875C6.98325 2.875 2.875 6.98325 2.875 12C2.875 17.0168 6.98325 21.125 12 21.125C17.0168 21.125 21.125 17.0168 21.125 12ZM22.875 12C22.875 17.9832 17.9832 22.875 12 22.875C6.01675 22.875 1.125 17.9832 1.125 12C1.125 6.01675 6.01675 1.125 12 1.125C17.9832 1.125 22.875 6.01675 22.875 12Z" />
     <path
-        android:pathData="M12 16v-4"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11.125 13V8C11.125 7.51675 11.5168 7.125 12 7.125C12.4832 7.125 12.875 7.51675 12.875 8V13C12.875 13.4832 12.4832 13.875 12 13.875C11.5168 13.875 11.125 13.4832 11.125 13Z" />
     <path
-        android:pathData="M12 8h0.01"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12.0034 15.125C12.4867 15.125 12.8784 15.5168 12.8784 16C12.8784 16.4832 12.4867 16.875 12.0034 16.875H11.9946C11.5114 16.875 11.1196 16.4832 11.1196 16C11.1196 15.5168 11.5114 15.125 11.9946 15.125H12.0034Z" />
 </vector>

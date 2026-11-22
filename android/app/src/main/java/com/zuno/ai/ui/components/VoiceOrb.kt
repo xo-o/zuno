@@ -240,7 +240,7 @@ private class OrbSimulation(private val count: Int, initial: VoiceOrbState) {
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true, widthDp = 620, heightDp = 170)
+@Preview(backgroundColor = 0xFF171717, showBackground = true, widthDp = 620, heightDp = 170)
 @Composable
 private fun ZunoVoiceOrbPreview() {
     Row(Modifier.background(ZunoColors.BgCanvas), horizontalArrangement = Arrangement.spacedBy(0.dp)) {

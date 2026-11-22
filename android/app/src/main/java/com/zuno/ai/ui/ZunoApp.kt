@@ -102,15 +102,20 @@ import com.zuno.ai.ui.screens.AuthScreen
 import com.zuno.ai.ui.screens.ChatScreen
 import com.zuno.ai.ui.screens.ChatsScreen
 import com.zuno.ai.ui.screens.CommunityRoleplayPreviewScreen
+import com.zuno.ai.ui.screens.CommunityScreen
 import com.zuno.ai.ui.screens.CommunityTopicPreviewScreen
 import com.zuno.ai.ui.screens.ExploreRoleplaysScreen
 import com.zuno.ai.ui.screens.ExploreTopicsScreen
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
 import com.zuno.ai.ui.screens.LessonEvaluationScreen
+import com.zuno.ai.ui.screens.LiveRoomsScreen
+import com.zuno.ai.ui.screens.PaywallScreen
 import com.zuno.ai.ui.screens.PeerCallScreen
 import com.zuno.ai.ui.screens.PeerChatScreen
+import com.zuno.ai.ui.screens.ProgressScreen
 import com.zuno.ai.ui.screens.RoleplaySettingsScreen
+import com.zuno.ai.ui.screens.VocabularyScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.VoiceModeScreen
 import com.zuno.ai.ui.screens.NewRoleplayScreen
@@ -203,6 +208,11 @@ sealed interface ZunoRoute {
     data object SettingsLearningLanguage : ZunoRoute
     data object SettingsAccount : ZunoRoute
     data object SettingsNotifications : ZunoRoute
+    data object Paywall : ZunoRoute
+    data object Vocabulary : ZunoRoute
+    data object Progress : ZunoRoute
+    data object Community : ZunoRoute
+    data object LiveRooms : ZunoRoute
 
     /** Routes inside the signed-in shell. */
     val isSignedInShell: Boolean get() = this !is Splash && this !is Onboarding && this !is OnboardingSetup && this !is Auth
@@ -241,6 +251,11 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.SettingsLearningLanguage -> "settings:learning-language"
     ZunoRoute.SettingsAccount -> "settings:account"
     ZunoRoute.SettingsNotifications -> "settings:notifications"
+    ZunoRoute.Paywall -> "paywall"
+    ZunoRoute.Vocabulary -> "vocabulary"
+    ZunoRoute.Progress -> "progress"
+    ZunoRoute.Community -> "community"
+    ZunoRoute.LiveRooms -> "live-rooms"
 }
 
 private fun decodeRoute(value: String): ZunoRoute = when {
@@ -307,6 +322,11 @@ private fun decodeRoute(value: String): ZunoRoute = when {
     value == "settings:learning-language" -> ZunoRoute.SettingsLearningLanguage
     value == "settings:account" -> ZunoRoute.SettingsAccount
     value == "settings:notifications" -> ZunoRoute.SettingsNotifications
+    value == "paywall" -> ZunoRoute.Paywall
+    value == "vocabulary" -> ZunoRoute.Vocabulary
+    value == "progress" -> ZunoRoute.Progress
+    value == "community" -> ZunoRoute.Community
+    value == "live-rooms" -> ZunoRoute.LiveRooms
     else -> ZunoRoute.Splash
 }
 
@@ -1543,12 +1563,14 @@ fun ZunoApp(
                         level = currentLevel,
                         showUpgrade = profile?.isPro != true,
                         continueSession = continueSession,
+                        recentSessions = recent,
+                        nextRoleplayTitle = roleplays.items?.firstOrNull()?.title,
                         partnersOnlineCount = partnersOnline,
                         scheduledTimeLabel = scheduledTimeLabel,
-                        onStreakClick = {
-                            toasts.show(ToastEvent(str(R.string.home_streak_toast, streakDays), ToastIcon.Check))
-                        },
+                        onStreakClick = { openSection(ZunoRoute.Progress) },
+                        onLanguageClick = { navigate(ZunoRoute.SettingsLearning) },
                         onAvatarClick = { navigate(ZunoRoute.Settings) },
+                        onNotificationsClick = { navigate(ZunoRoute.SettingsNotifications) },
                         onDailyGoalContinue = {
                             val firstTopic = recent.firstOrNull { it.kind == RecentKind.Topic }
                             when {
@@ -1559,17 +1581,28 @@ fun ZunoApp(
                         },
                         onOpenTopics = { openSection(ZunoRoute.Topics) },
                         onOpenChats = { openSection(ZunoRoute.Chats()) },
-                        onOpenPartners = { openSection(ZunoRoute.Chats(ChatsFilter.People)) },
-                        onOpenLiveRooms = { openSection(ZunoRoute.Chats(ChatsFilter.Open)) },
+                        onOpenPartners = { openSection(ZunoRoute.Community) },
+                        onOpenLiveRooms = { openSection(ZunoRoute.LiveRooms) },
+                        onOpenVocabulary = { openSection(ZunoRoute.Vocabulary) },
+                        onOpenProgress = { openSection(ZunoRoute.Progress) },
                         onOpenRoleplays = { openSection(ZunoRoute.Roleplays) },
                         onOpenScheduled = { openSection(ZunoRoute.Scheduled) },
                         onOpenSettings = { navigate(ZunoRoute.Settings) },
                         onStartHomeVoice = { withMicrophone(::startHomeCall) },
                         onStartFreeTalk = { startFreeTalk(null) },
                         onOpenConversation = ::openChat,
-                        onUpgrade = { comingSoon("Zuno Pro") },
+                        onOpenRecentSession = { session ->
+                            when (session.kind) {
+                                RecentKind.Topic -> navigate(ZunoRoute.Topic(session.id))
+                                RecentKind.Roleplay -> {
+                                    val convId = session.conversationId
+                                    if (convId != null) openChat(convId) else openSection(ZunoRoute.Roleplays)
+                                }
+                                RecentKind.FreeTalk -> openChat(session.conversationId ?: session.id)
+                            }
+                        },
+                        onUpgrade = { navigate(ZunoRoute.Paywall) },
                         onComingSoon = ::comingSoon,
-                        initialExplore = homeInitialExplore,
                         modifier = screenModifier,
                     )
                 }
@@ -1650,6 +1683,7 @@ fun ZunoApp(
                                 HomeNavTab.More -> openHome(explore = true)
                             }
                         },
+                        onBack = ::pop,
                         modifier = screenModifier,
                     )
                 }
@@ -1885,6 +1919,7 @@ fun ZunoApp(
                         onExplore = { q -> navigate(ZunoRoute.ExploreTopics(q)) },
                         onOpenPreview = { id -> navigate(ZunoRoute.CommunityTopicPreview(id)) },
                         onNavTabSelected = ::handleSectionNavTab,
+                        onBack = ::pop,
                         recommendedTopics = profile?.recommendedTopics.orEmpty(),
                         busy = busy,
                         onSelectRecommended = { rec ->
@@ -2030,6 +2065,7 @@ fun ZunoApp(
                         onExplore = { q -> navigate(ZunoRoute.ExploreRoleplays(q)) },
                         onOpenPreview = { id -> navigate(ZunoRoute.CommunityRoleplayPreview(id)) },
                         onNavTabSelected = ::handleSectionNavTab,
+                        onBack = ::pop,
                         modifier = screenModifier,
                     )
                 }
@@ -2375,7 +2411,7 @@ fun ZunoApp(
                     profile = profile,
                     appLanguage = appLanguage,
                     onBack = ::pop,
-                    onUpgrade = { comingSoon("Zuno Pro") },
+                    onUpgrade = { navigate(ZunoRoute.Paywall) },
                     onAccount = { navigate(ZunoRoute.SettingsAccount) },
                     onLearning = { navigate(ZunoRoute.SettingsLearning) },
                     onAppLanguage = { navigate(ZunoRoute.SettingsAppLanguage) },
@@ -2439,7 +2475,7 @@ fun ZunoApp(
                     uploadingPhoto = uploadingPhoto,
                     onUpdateName = { zunoViewModel.updateProfile(name = it) },
                     onChangePhoto = { avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    onPlanClick = { comingSoon("Zuno Pro") },
+                    onPlanClick = { navigate(ZunoRoute.Paywall) },
                     onDownloadData = { comingSoon(str(R.string.settings_acc_download_data)) },
                     onDeleteAccount = { confirmDeleteAccount = true },
                     onBack = ::pop,
@@ -2469,6 +2505,91 @@ fun ZunoApp(
                         modifier = screenModifier,
                     )
                 }
+
+                ZunoRoute.Paywall -> PaywallScreen(
+                    onClose = ::pop,
+                    onStartTrial = { yearly ->
+                        toasts.show(
+                            ToastEvent(
+                                if (yearly) "7-day Zuno Pro trial selected" else "Monthly Zuno Pro plan selected",
+                                ToastIcon.Check,
+                            ),
+                        )
+                        pop()
+                    },
+                    onOpenTerms = { openUrl(TERMS_URL) },
+                    onOpenPrivacy = { openUrl(PRIVACY_URL) },
+                    onRestorePurchases = { toast("No previous purchases found") },
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.Vocabulary -> VocabularyScreen(
+                    languageName = language.displayName(appLanguage),
+                    level = profile?.level ?: "B1",
+                    onBack = ::pop,
+                    onStartVoiceSprint = { withMicrophone(::startHomeCall) },
+                    onSpeakPhrase = { phrase ->
+                        tts.speak(
+                            text = phrase,
+                            language = language.code,
+                            nativeLanguage = appLanguage.code,
+                            voiceKey = preferences?.tutorVoice ?: "warm",
+                        )
+                    },
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.Progress -> ProgressScreen(
+                    languageName = language.displayName(appLanguage),
+                    level = profile?.level ?: "B1",
+                    streakDays = 22,
+                    onBack = ::pop,
+                    onStartDrill = { withMicrophone(::startHomeCall) },
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.Community -> {
+                    LaunchedEffect(Unit) {
+                        if (chatsOverview.items == null) zunoViewModel.loadChatsOverview(silent = true)
+                    }
+                    val overview = chatsOverview.items
+                    val userInitial = profile?.displayName?.take(1)?.uppercase()?.ifBlank { "Z" } ?: "Z"
+                    CommunityScreen(
+                        userName = profile?.displayName.orEmpty(),
+                        userInitial = userInitial,
+                        userImageUrl = profile?.imageUrl,
+                        languageName = language.displayName(appLanguage),
+                        level = profile?.level ?: "B1",
+                        openToSpeak = overview?.openToSpeak ?: true,
+                        partners = overview?.partners.orEmpty(),
+                        onlineLearners = overview?.openSpeakers.orEmpty(),
+                        onToggleOpenToSpeak = { enabled ->
+                            if (enabled) requestChatsNotificationsOnce()
+                            zunoViewModel.toggleOpenToSpeak(enabled)
+                        },
+                        onTalkToPartner = { partner ->
+                            zunoViewModel.openPeerChat(partner.id) { thread ->
+                                navigate(ZunoRoute.PeerChat(thread.conversation.id, partner.id))
+                            }
+                        },
+                        onInviteClick = { openSection(ZunoRoute.Chats(ChatsFilter.Open)) },
+                        onOpenChats = { openSection(ZunoRoute.Chats(ChatsFilter.People)) },
+                        onBack = ::pop,
+                        modifier = screenModifier,
+                    )
+                }
+
+                ZunoRoute.LiveRooms -> LiveRoomsScreen(
+                    languageName = language.displayName(appLanguage),
+                    level = profile?.level ?: "B1",
+                    onBack = ::pop,
+                    onJoinRoom = { roomTitle ->
+                        toasts.show(ToastEvent("Joining $roomTitle…", ToastIcon.Check))
+                        withMicrophone(::startHomeCall)
+                    },
+                    onCreateRoom = { comingSoon("Create live room") },
+                    modifier = screenModifier,
+                )
             }
         }
 

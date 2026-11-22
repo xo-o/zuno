@@ -1,26 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Tintable (white) Lucide glyph; color it with ZunoIcon(tint = …). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M15 3h6v6"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20.5811 2.1809C20.9226 1.83942 21.4766 1.83962 21.8184 2.1809C22.1601 2.52261 22.1601 3.07748 21.8184 3.41918L13.6191 11.6184C13.2774 11.9601 12.7226 11.9601 12.3809 11.6184C12.0396 11.2767 12.0394 10.7227 12.3809 10.3811L20.5811 2.1809Z" />
     <path
-        android:pathData="M10 14L21 3"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21.1248 6.7998V2.875H17.2C16.7167 2.875 16.325 2.48325 16.325 2C16.325 1.51675 16.7167 1.125 17.2 1.125H21.9998C22.483 1.125 22.8748 1.51675 22.8748 2V6.7998C22.8748 7.28305 22.483 7.6748 21.9998 7.6748C21.5166 7.6747 21.1248 7.28299 21.1248 6.7998Z" />
     <path
-        android:pathData="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.75"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M1.125 15V9C1.125 6.4137 1.63648 4.37524 3.00586 3.00586C4.37524 1.63648 6.4137 1.125 9 1.125H11C11.4832 1.125 11.875 1.51675 11.875 2C11.875 2.48325 11.4832 2.875 11 2.875H9C6.5863 2.875 5.12476 3.36352 4.24414 4.24414C3.36352 5.12476 2.875 6.5863 2.875 9V15C2.875 17.4137 3.36352 18.8752 4.24414 19.7559C5.12476 20.6365 6.5863 21.125 9 21.125H15C17.4137 21.125 18.8752 20.6365 19.7559 19.7559C20.6365 18.8752 21.125 17.4137 21.125 15V13C21.125 12.5168 21.5168 12.125 22 12.125C22.4832 12.125 22.875 12.5168 22.875 13V15C22.875 17.5863 22.3635 19.6248 20.9941 20.9941C19.6248 22.3635 17.5863 22.875 15 22.875H9C6.4137 22.875 4.37524 22.3635 3.00586 20.9941C1.63648 19.6248 1.125 17.5863 1.125 15Z" />
 </vector>

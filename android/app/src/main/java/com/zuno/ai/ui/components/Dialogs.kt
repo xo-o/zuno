@@ -42,6 +42,7 @@ import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoTheme
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassOverlay
 
 private val DialogShape = RoundedCornerShape(ZunoRadius.xxl)
 
@@ -102,10 +103,7 @@ private fun ZunoDialogCard(
         modifier = modifier
             .padding(horizontal = ZunoSpace.s24)
             .fillMaxWidth()
-            .shadow(8.dp, DialogShape, ambientColor = Color.Black, spotColor = Color.Black)
-            .clip(DialogShape)
-            .background(ZunoColors.BgElevated)
-            .border(1.dp, ZunoColors.BorderSubtle, DialogShape)
+            .zunoGlassOverlay(DialogShape, shadowElevation = 14.dp)
             .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s24, bottom = ZunoSpace.s20),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
     ) {
@@ -177,7 +175,7 @@ fun ZunoInputDialog(
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true)
+@Preview(backgroundColor = 0xFF171717, showBackground = true)
 @Composable
 private fun ZunoDialogPreview() {
     ZunoTheme {
@@ -196,7 +194,7 @@ private fun ZunoDialogPreview() {
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true)
+@Preview(backgroundColor = 0xFF171717, showBackground = true)
 @Composable
 private fun ZunoInputDialogPreview() {
     ZunoTheme {

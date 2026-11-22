@@ -105,6 +105,10 @@ import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoTheme
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassMediaPill
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.delay
@@ -202,7 +206,7 @@ fun VoiceModeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -594,7 +598,7 @@ private fun AiVideoParticipantsRow(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = ZunoSpace.s12, vertical = 10.dp),
+                    .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(
@@ -604,10 +608,9 @@ private fun AiVideoParticipantsRow(
                 ) {
                     Row(
                         modifier = Modifier
-                            .clip(CircleShape)
-                            .background(overlayPill)
+                            .zunoGlassMediaPill(CircleShape)
                             .padding(horizontal = ZunoSpace.s8, vertical = ZunoSpace.s4),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         ZunoIcon(
@@ -626,9 +629,8 @@ private fun AiVideoParticipantsRow(
                         Box(
                             modifier = Modifier
                                 .height(22.dp)
-                                .clip(CircleShape)
-                                .background(overlayPill)
-                                .padding(horizontal = 7.dp),
+                                .zunoGlassMediaPill(CircleShape)
+                                .padding(horizontal = ZunoSpace.s8),
                             contentAlignment = Alignment.Center,
                         ) {
                             ZunoVoiceWaveform(
@@ -715,8 +717,7 @@ private fun AiVideoParticipantsRow(
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(CircleShape)
-                            .background(overlayPill)
+                            .zunoGlassMediaPill(CircleShape)
                             .padding(horizontal = 7.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -903,9 +904,7 @@ private fun FreeTalkCoachCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(cardShape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, cardShape)
+            .zunoGlassSubtle(cardShape)
             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
@@ -981,9 +980,7 @@ private fun FreeTalkCoachCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(rowShape)
-                            .background(ZunoColors.SurfaceSubtle)
-                            .border(1.dp, ZunoColors.BorderSubtle, rowShape)
+                            .zunoGlassElevated(rowShape)
                             .clickable(role = Role.Button, onClick = { onSpeakCoachPhrase(item.phrase) })
                             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
@@ -1005,7 +1002,7 @@ private fun FreeTalkCoachCard(
                         }
                         Text(
                             text = item.translation,
-                            style = ZunoType.Micro,
+                            style = ZunoType.FootnoteRegular,
                             color = ZunoColors.TextSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1388,7 +1385,7 @@ private fun CallButton(
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true, widthDp = 402, heightDp = 874)
+@Preview(backgroundColor = 0xFF171717, showBackground = true, widthDp = 402, heightDp = 874)
 @Composable
 private fun VoiceModeScreenNoCaptionsPreview() {
     ZunoTheme {
@@ -1407,7 +1404,7 @@ private fun VoiceModeScreenNoCaptionsPreview() {
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true, widthDp = 402, heightDp = 874)
+@Preview(backgroundColor = 0xFF171717, showBackground = true, widthDp = 402, heightDp = 874)
 @Composable
 private fun VoiceModeScreenCaptionsPreview() {
     ZunoTheme {

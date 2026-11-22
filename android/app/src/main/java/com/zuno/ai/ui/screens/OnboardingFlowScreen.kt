@@ -102,9 +102,14 @@ import com.zuno.ai.ui.components.ZunoSpinner
 import com.zuno.ai.ui.components.ZunoUserBubble
 import com.zuno.ai.ui.theme.Lexend
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassBorderSubtleBrush
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.OnboardingChatItem
 import com.zuno.ai.viewmodel.OnboardingChatRole
 import com.zuno.ai.viewmodel.OnboardingInputMode
@@ -115,13 +120,8 @@ import com.zuno.ai.viewmodel.VoiceSessionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val StarterCardTitleStyle = TextStyle(
-    fontFamily = Lexend,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 18.sp,
-    lineHeight = 24.sp,
-    letterSpacing = (-0.2).sp,
-)
+private val StarterCardTitleStyle: TextStyle
+    get() = ZunoType.TitleMedium
 
 /**
  * 01 · Onboarding (`5a` Target Language -> `5b` Name -> `5c` Level -> `5d` Goals -> `5e` Preparing -> `5f` Ready).
@@ -493,7 +493,7 @@ fun OnboardingFlowScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas),
+            .zunoCanvasBackground(),
     ) {
         Crossfade(targetState = state.step, label = "onboardingStep") { step ->
             when (step) {
@@ -678,20 +678,18 @@ private fun TargetLanguageStep(
             query = query,
             onQueryChange = { query = it },
             placeholder = stringResource(R.string.onboarding_search_languages, languages.size),
-            modifier = Modifier.padding(horizontal = ZunoSpace.s16),
+            modifier = Modifier.padding(horizontal = ZunoSpace.s24),
         )
 
         Spacer(Modifier.height(ZunoSpace.s16))
 
-        val listShape = RoundedCornerShape(20.dp)
+        val listShape = RoundedCornerShape(ZunoRadius.xxxxl)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s16)
-                .clip(listShape)
-                .background(ZunoColors.SurfaceSubtle)
-                .border(1.dp, ZunoColors.BorderSubtle, listShape),
+                .padding(horizontal = ZunoSpace.s24)
+                .zunoGlassSubtle(listShape),
         ) {
             LazyColumn(
                 state = listState,
@@ -712,7 +710,7 @@ private fun TargetLanguageStep(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(62.dp)
-                                .padding(horizontal = 18.dp, vertical = 11.dp),
+                                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                         ) {
@@ -742,12 +740,7 @@ private fun TargetLanguageStep(
                             }
                         }
                         if (index < filtered.lastIndex) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(ZunoColors.BorderSubtle),
-                            )
+                            ZunoGlassHairline()
                         }
                     }
                 }
@@ -775,7 +768,7 @@ private fun TargetLanguageStep(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp, start = ZunoSpace.s24, end = ZunoSpace.s24)
+                    .padding(top = ZunoSpace.s16, start = ZunoSpace.s24, end = ZunoSpace.s24)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
@@ -829,9 +822,13 @@ private fun OnboardingLanguageSearchField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(46.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, if (focused) ZunoColors.BorderFocus else ZunoColors.BorderSubtle, CircleShape)
+                    .then(
+                        if (focused) {
+                            Modifier.zunoGlassElevated(CircleShape, borderBrush = SolidColor(ZunoColors.BorderFocus))
+                        } else {
+                            Modifier.zunoGlassSubtle(CircleShape, borderBrush = ZunoGlassBorderSubtleBrush)
+                        },
+                    )
                     .padding(start = ZunoSpace.s16, end = ZunoSpace.s8),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1151,13 +1148,7 @@ private fun VoiceStepBody(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(CircleShape)
-                        .background(if (isMicActive) ZunoColors.SurfaceStronger else ZunoColors.SurfaceDefault)
-                        .border(
-                            1.dp,
-                            if (isMicActive) ZunoColors.BorderDefault else ZunoColors.BorderSubtle,
-                            CircleShape,
-                        )
+                        .then(if (isMicActive) Modifier.zunoGlassElevated(CircleShape) else Modifier.zunoGlassSubtle(CircleShape))
                         .clickable(role = Role.Button, onClick = onMicTap),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1175,9 +1166,7 @@ private fun VoiceStepBody(
                 Row(
                     modifier = Modifier
                         .height(44.dp)
-                        .clip(CircleShape)
-                        .background(ZunoColors.SurfaceSubtle)
-                        .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+                        .zunoGlassSubtle(CircleShape)
                         .clickable(role = Role.Button, onClick = onTypeInstead)
                         .padding(horizontal = ZunoSpace.s20),
                     horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
@@ -1195,8 +1184,7 @@ private fun VoiceStepBody(
                     modifier = Modifier
                         .size(44.dp)
                         .alpha(if (canAdvance) 1f else 0.4f)
-                        .clip(CircleShape)
-                        .background(ZunoColors.SurfaceDefault)
+                        .zunoGlassSubtle(CircleShape)
                         .clickable(enabled = canAdvance, role = Role.Button, onClick = onNext),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1353,9 +1341,7 @@ private fun OnboardingComposer(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceStrong)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassElevated(shape)
             .padding(
                 start = ZunoSpace.s16,
                 end = ZunoSpace.s10,
@@ -1413,12 +1399,7 @@ private fun OnboardingComposer(
                 modifier = Modifier
                     .size(40.dp)
                     .alpha(if (canSend || submitting) 1f else 0.4f)
-                    .clip(CircleShape)
-                    .background(if (canSend || submitting) ZunoColors.SurfaceStronger else ZunoColors.SurfaceDefault)
-                    .then(
-                        if (canSend || submitting) Modifier.border(1.dp, ZunoColors.BorderDefault, CircleShape)
-                        else Modifier
-                    )
+                    .zunoGlassElevated(CircleShape)
                     .clickable(enabled = canSend, role = Role.Button, onClick = onSend),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1467,7 +1448,7 @@ private fun PreparingPathStep(
                 ZunoSpinner(size = 20.dp, color = ZunoColors.TextPrimary)
                 Text(
                     text = stringResource(R.string.onboarding_building_title),
-                    style = ZunoType.WebTitle,
+                    style = ZunoType.TitleMedium,
                     color = ZunoColors.TextPrimary,
                     textAlign = TextAlign.Center,
                 )
@@ -1504,8 +1485,8 @@ private fun StartingPathReadyStep(
     val starter = result.starterTopic
     val starterObjective = starter.lessons.firstOrNull()?.objective?.takeIf { it.isNotBlank() }
         ?: starter.summary.translation
-    val starterCardShape = RoundedCornerShape(20.dp)
-    val recGroupShape = RoundedCornerShape(20.dp)
+    val starterCardShape = RoundedCornerShape(ZunoRadius.xxxxl)
+    val recGroupShape = RoundedCornerShape(ZunoRadius.xxxxl)
 
     Column(
         modifier = Modifier
@@ -1520,13 +1501,11 @@ private fun StartingPathReadyStep(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = ZunoSpace.s20),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s20),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = ZunoSpace.s8),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
             ) {
                 Text(
@@ -1549,10 +1528,8 @@ private fun StartingPathReadyStep(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(starterCardShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, ZunoColors.BorderSubtle, starterCardShape)
-                    .padding(18.dp),
+                    .zunoGlassSubtle(starterCardShape)
+                    .padding(ZunoSpace.s16),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
             ) {
                 Text(
@@ -1597,9 +1574,7 @@ private fun StartingPathReadyStep(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(recGroupShape)
-                            .background(ZunoColors.SurfaceSubtle)
-                            .border(1.dp, ZunoColors.BorderSubtle, recGroupShape),
+                            .zunoGlassSubtle(recGroupShape),
                     ) {
                         val visibleRecommendations = result.recommendedTopics.take(2)
                         visibleRecommendations.forEachIndexed { index, rec ->
@@ -1613,7 +1588,7 @@ private fun StartingPathReadyStep(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 18.dp, end = ZunoSpace.s16, top = ZunoSpace.s14, bottom = ZunoSpace.s14),
+                                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
                                     horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -1638,12 +1613,7 @@ private fun StartingPathReadyStep(
                                     )
                                 }
                                 if (index < visibleRecommendations.lastIndex) {
-                                    Box(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(1.dp)
-                                            .background(ZunoColors.BorderSubtle),
-                                    )
+                                    ZunoGlassHairline()
                                 }
                             }
                         }

@@ -91,9 +91,15 @@ import com.zuno.ai.ui.components.ZunoSpinner
 import com.zuno.ai.ui.components.ZunoUpgradeBanner
 import com.zuno.ai.ui.theme.Lexend
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassBorderSubtleBrush
+import com.zuno.ai.ui.theme.ZunoGlassHairline
+import com.zuno.ai.ui.theme.ZunoGlassTokens
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import kotlin.math.roundToInt
 
 // ── Shared Settings Components (Form Row, Card Group, Switch) ────────────────
@@ -123,9 +129,7 @@ fun ZunoSettingsGroup(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderSubtle, shape),
+                .zunoGlassSubtle(shape),
             content = content,
         )
     }
@@ -146,6 +150,7 @@ fun ZunoSettingsRow(
     checked: Boolean? = null,
     selected: Boolean = false,
     muted: Boolean = false,
+    destructive: Boolean = false,
     showDivider: Boolean = false,
     /** Custom leading content instead of [icon] (e.g. a tinted glyph). */
     leading: (@Composable () -> Unit)? = null,
@@ -155,12 +160,7 @@ fun ZunoSettingsRow(
 ) {
     Column(modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.4f)) {
         if (showDivider) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(ZunoColors.BorderSubtle)
-            )
+            ZunoGlassHairline()
         }
         val rowModifier = Modifier
             .fillMaxWidth()
@@ -186,7 +186,7 @@ fun ZunoSettingsRow(
             if (leading != null) {
                 leading()
             } else if (icon != null) {
-                ZunoIcon(icon = icon, size = 18.dp)
+                ZunoIcon(icon = icon, size = 18.dp, tint = if (destructive) ZunoColors.IconDanger else null)
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -195,7 +195,11 @@ fun ZunoSettingsRow(
                 Text(
                     text = title,
                     style = ZunoType.BodyMedium,
-                    color = if (muted) ZunoColors.TextTertiary else ZunoColors.TextPrimary,
+                    color = when {
+                        destructive -> ZunoColors.TextDanger
+                        muted -> ZunoColors.TextTertiary
+                        else -> ZunoColors.TextPrimary
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -325,7 +329,7 @@ fun SettingsOverviewScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -337,7 +341,7 @@ fun SettingsOverviewScreen(
                 .fillMaxSize()
                 .padding(top = HeaderHeight)
                 .verticalScroll(scrollState)
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             // Reserves the 200dp Hero Profile space in the scroll container
@@ -346,8 +350,8 @@ fun SettingsOverviewScreen(
             if (profile?.isPro != true) {
                 ZunoUpgradeBanner(
                     onClick = onUpgrade,
-                    text = stringResource(R.string.drawer_upgrade_banner),
-                    action = stringResource(R.string.drawer_upgrade_action),
+                    text = stringResource(R.string.home_explore_upgrade_text),
+                    action = stringResource(R.string.home_explore_upgrade_action),
                 )
             }
 
@@ -430,12 +434,12 @@ fun SettingsOverviewScreen(
             }
         }
 
-        // Opaque 64dp Top Bar background so scrolled cards slide cleanly underneath the header
+        // Top Bar background matching CanvasTop so scrolled cards slide cleanly underneath the header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(HeaderHeight)
-                .background(ZunoColors.BgCanvas),
+                .background(ZunoGlassTokens.CanvasTop.copy(alpha = 0.94f)),
         )
 
         // Pinned Back button (x=12dp, y=10dp) + fading "Settings" large title (x=64dp)
@@ -474,8 +478,8 @@ fun SettingsOverviewScreen(
         val avatarStartX = (containerWidth - 80.dp) / 2f
         val avatarX = lerp(avatarStartX, 64.dp, progress)
         val avatarY = lerp(80.dp, 14.dp, progress)
-        val avatarFontSize = lerp(30.91.sp, 15.sp, progress)
-        val avatarLineHeight = lerp(43.6.sp, 20.sp, progress)
+        val avatarFontSize = lerp(32.sp, 15.sp, progress)
+        val avatarLineHeight = lerp(40.sp, 20.sp, progress)
 
         Box(
             modifier = Modifier
@@ -668,7 +672,7 @@ fun SettingsPreferencesScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -677,7 +681,7 @@ fun SettingsPreferencesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoSettingsGroup {
@@ -794,7 +798,7 @@ fun SettingsAppLanguageScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -806,7 +810,7 @@ fun SettingsAppLanguageScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Text(
@@ -865,7 +869,7 @@ fun SettingsLearningScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -874,7 +878,7 @@ fun SettingsLearningScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_learn_studying)) {
@@ -922,9 +926,10 @@ fun SettingsLearningScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) ZunoColors.SurfaceInverse else ZunoColors.SurfaceDefault)
-                                        .then(if (isSelected) Modifier else Modifier.border(1.dp, ZunoColors.BorderDefault, CircleShape))
+                                        .then(
+                                            if (isSelected) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
+                                            else Modifier.zunoGlassSubtle(CircleShape),
+                                        )
                                         .clickable(role = Role.RadioButton, onClick = { onLevelChange(item) }),
                                     contentAlignment = Alignment.Center,
                                 ) {
@@ -1031,7 +1036,7 @@ fun SettingsLearningLanguageScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding(),
@@ -1041,7 +1046,7 @@ fun SettingsLearningLanguageScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             if (!searching) {
@@ -1145,9 +1150,13 @@ fun ZunoSearchField(query: String, onQueryChange: (String) -> Unit, placeholder:
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .clip(CircleShape)
-                    .background(ZunoColors.SurfaceDefault)
-                    .border(1.dp, if (focused) ZunoColors.BorderFocus else ZunoColors.BorderDefault, CircleShape)
+                    .then(
+                        if (focused) {
+                            Modifier.zunoGlassElevated(CircleShape, borderBrush = SolidColor(ZunoColors.BorderFocus))
+                        } else {
+                            Modifier.zunoGlassSubtle(CircleShape, borderBrush = ZunoGlassBorderSubtleBrush)
+                        },
+                    )
                     .padding(start = ZunoSpace.s16, end = ZunoSpace.s8),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1192,7 +1201,7 @@ fun SettingsAccountScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -1201,7 +1210,7 @@ fun SettingsAccountScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Column(
@@ -1214,11 +1223,24 @@ fun SettingsAccountScreen(
                         initial = initial,
                         imageUrl = profile?.imageUrl,
                         size = 72.dp,
-                        textStyle = TextStyle(fontFamily = Lexend, fontWeight = FontWeight.Medium, fontSize = 27.82.sp, lineHeight = 39.27.sp),
+                        textStyle = TextStyle(fontFamily = Lexend, fontWeight = FontWeight.Medium, fontSize = 28.sp, lineHeight = 34.sp),
                     )
                     if (uploadingPhoto) {
                         Box(Modifier.size(72.dp).clip(CircleShape).background(ZunoColors.BgScrim), contentAlignment = Alignment.Center) {
                             ZunoSpinner(size = 24.dp)
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.SurfaceInverse)
+                                .border(2.dp, ZunoGlassTokens.CanvasTop, CircleShape)
+                                .clickable(role = Role.Button, onClick = onChangePhoto),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ZunoIcon(R.drawable.zuno_ic_t_camera, 13.dp, tint = ZunoColors.IconOnInverse)
                         }
                     }
                 }
@@ -1257,7 +1279,7 @@ fun SettingsAccountScreen(
                 }
             }
 
-            ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_acc_subscription)) {
+            ZunoSettingsGroup(sectionLabel = "Subscription & Privacy") {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_acc_plan),
                     icon = R.drawable.zuno_ic_sparkles_secondary,
@@ -1272,6 +1294,14 @@ fun SettingsAccountScreen(
                     showDivider = true,
                     enabled = false,
                 )
+                ZunoSettingsRow(
+                    title = "Privacy & visibility",
+                    subtitle = "Open to speak · Partners",
+                    icon = R.drawable.zuno_ic_t_lock,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = onDownloadData,
+                )
             }
 
             ZunoSettingsGroup {
@@ -1283,8 +1313,8 @@ fun SettingsAccountScreen(
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_delete_account),
-                    icon = R.drawable.zuno_ic_trash_muted,
-                    muted = true,
+                    icon = R.drawable.zuno_ic_t_trash,
+                    destructive = true,
                     showChevron = true,
                     showDivider = true,
                     onClick = onDeleteAccount,
@@ -1334,7 +1364,7 @@ fun SettingsNotificationsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas)
+            .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -1347,7 +1377,7 @@ fun SettingsNotificationsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s16, top = ZunoSpace.s8, bottom = 48.dp),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_notif_practice)) {

@@ -71,6 +71,10 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassOverlay
+import com.zuno.ai.ui.theme.zunoGlassSubtle
 import kotlinx.coroutines.delay
 import java.util.Date
 
@@ -162,7 +166,7 @@ fun PeerChatScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ZunoColors.BgCanvas),
+            .zunoCanvasBackground(),
     ) {
         Column(
             modifier = Modifier
@@ -391,7 +395,7 @@ private fun MemberTopBar(
         ZunoIconButton(
             icon = R.drawable.zuno_ic_t_phone,
             onClick = onStartCall,
-            style = ZunoIconButtonStyle.Subtle,
+            style = ZunoIconButtonStyle.Strong,
             size = ZunoIconButtonSize.Medium,
             tint = ZunoColors.IconPrimary,
             contentDescription = stringResource(R.string.member_invite_to_talk),
@@ -426,9 +430,7 @@ private fun IncomingMemberBubble(
         Box(
             modifier = Modifier
                 .widthIn(max = 290.dp)
-                .clip(shape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderSubtle, shape)
+                .zunoGlassSubtle(shape)
                 .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
         ) {
             Text(
@@ -454,9 +456,7 @@ private fun CallRoomInviteCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(shape)
             .padding(ZunoSpace.s14),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
     ) {
@@ -520,9 +520,7 @@ private fun MissedInviteCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderDefault, shape)
+            .zunoGlassSubtle(shape)
             .clickable(role = Role.Button, onClick = onTapToCall)
             .padding(ZunoSpace.s14),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -558,9 +556,7 @@ private fun PeerCallSummaryCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(ZunoColors.SurfaceDefault)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .clickable(role = Role.Button, onClick = onTapToCall)
             .padding(ZunoSpace.s14),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -569,8 +565,7 @@ private fun PeerCallSummaryCard(
         Box(
             modifier = Modifier
                 .size(34.dp)
-                .clip(CircleShape)
-                .background(ZunoColors.SurfaceStrong),
+                .zunoGlassSubtle(CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             ZunoIcon(R.drawable.zuno_ic_t_phone, 16.dp, tint = ZunoColors.IconPrimary)
@@ -602,10 +597,7 @@ private fun IncomingInviteNotificationBanner(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(12.dp, shape)
-            .clip(shape)
-            .background(Color(0xFF2A2A2D))
-            .border(1.dp, ZunoColors.BorderStrong, shape)
+            .zunoGlassOverlay(shape, shadowElevation = 14.dp)
             .clickable(role = Role.Button, onClick = onJoin)
             .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),

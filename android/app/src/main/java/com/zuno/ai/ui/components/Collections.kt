@@ -49,9 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zuno.ai.R
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassBorderElevatedBrush
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoRecessedTrack
 
 /** Top Bar — Type=Back + Title. 64dp, Title/Large, optional trailing action. */
 @Composable
@@ -116,12 +121,13 @@ fun ZunoSearchTopBar(
     }
 }
 
-/** Rounded container whose rows are separated by 2dp gaps (List Group). */
+/** Unified container for grouped list rows (`surface/default` + `border/subtle`). */
 @Composable
 fun ZunoListGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(ZunoRadius.xl)),
-        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+        modifier = modifier
+            .fillMaxWidth()
+            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
         content = content,
     )
 }
@@ -138,7 +144,7 @@ data class ZunoMenuAction(
     val onClick: () -> Unit,
 )
 
-/** Collection Card — topic / roleplay row with icon badge, two lines and an overflow menu. */
+/** Collection Card — topic / roleplay row with glass icon badge, two lines and an overflow menu. */
 @Composable
 fun ZunoCollectionCard(
     @DrawableRes icon: Int,
@@ -147,27 +153,36 @@ fun ZunoCollectionCard(
     onClick: () -> Unit,
     menu: List<ZunoMenuAction>,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = false,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(ZunoColors.SurfaceDefault)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = ZunoSpace.s16, end = ZunoSpace.s8, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(ZunoRadius.md)).background(ZunoColors.SurfaceStrong),
-            contentAlignment = Alignment.Center,
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showDivider) ZunoGlassHairline()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(start = ZunoSpace.s16, end = ZunoSpace.s8, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ZunoIcon(icon, 18.dp)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .zunoGlassSubtle(
+                        RoundedCornerShape(ZunoRadius.md),
+                        borderBrush = null,
+                        fillColor = ZunoColors.SurfaceStrong,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(icon, 18.dp)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                EllipsizedText(title, ZunoType.BodyMediumStrong, ZunoColors.TextPrimary)
+                EllipsizedText(subtitle, ZunoType.FootnoteRegular, ZunoColors.TextTertiary)
+            }
+            ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Small)
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-            EllipsizedText(title, ZunoType.BodyMediumStrong, ZunoColors.TextPrimary)
-            EllipsizedText(subtitle, ZunoType.FootnoteRegular, ZunoColors.TextTertiary)
-        }
-        ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Small)
     }
 }
 
@@ -190,7 +205,7 @@ fun ZunoOverflowMenu(
     }
 }
 
-/** Overflow Menu — elevated card (16dp radius, strong border) of 44dp icon rows. */
+/** Overflow Menu — `Glass/Surface/Overlay` card (16dp radius, specular border) of 44dp icon rows. */
 @Composable
 fun ZunoDropdownMenu(
     expanded: Boolean,
@@ -203,9 +218,9 @@ fun ZunoDropdownMenu(
         onDismissRequest = onDismiss,
         containerColor = ZunoColors.BgElevated,
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(ZunoRadius.lg),
-        border = BorderStroke(1.dp, ZunoColors.BorderStrong),
+        shadowElevation = 14.dp,
+        shape = RoundedCornerShape(ZunoRadius.xxl),
+        border = BorderStroke(1.dp, ZunoColors.BorderSubtle),
         modifier = Modifier
             .layout { measurable, constraints ->
                 val trim = ZunoSpace.s4.roundToPx()
@@ -218,12 +233,8 @@ fun ZunoDropdownMenu(
     ) {
         actions.forEach { action ->
             if (action.dividerBefore) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s4)
-                        .height(1.dp)
-                        .background(ZunoColors.Divider)
+                ZunoGlassHairline(
+                    Modifier.padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s4),
                 )
             }
             val color = if (action.destructive) ZunoColors.TextDanger else ZunoColors.TextPrimary
@@ -232,7 +243,7 @@ fun ZunoDropdownMenu(
                     .fillMaxWidth()
                     .widthIn(min = 176.dp, max = 248.dp)
                     .height(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(ZunoRadius.md))
                     .clickable(role = Role.Button) {
                         onDismiss()
                         action.onClick()
@@ -244,7 +255,7 @@ fun ZunoDropdownMenu(
                 action.icon?.let { ZunoIcon(it, 18.dp, tint = color) }
                 Text(
                     text = action.label,
-                    style = ZunoType.BodyMedium.copy(lineHeight = 20.sp),
+                    style = ZunoType.BodyMedium,
                     color = color,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -278,7 +289,7 @@ fun ZunoFab(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** Empty State — round icon badge, title and description. */
+/** Empty State — round glass icon badge, title and description. */
 @Composable
 fun ZunoEmptyState(
     @DrawableRes icon: Int,
@@ -291,7 +302,11 @@ fun ZunoEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier.size(52.dp).clip(CircleShape).background(ZunoColors.SurfaceStrong),
+            modifier = Modifier.size(52.dp).zunoGlassElevated(
+                CircleShape,
+                fillColor = ZunoColors.SurfaceStrong,
+                borderBrush = SolidColor(ZunoColors.BorderSubtle),
+            ),
             contentAlignment = Alignment.Center,
         ) {
             ZunoIcon(icon, 24.dp, tint = ZunoColors.IconPrimary)
@@ -312,8 +327,13 @@ fun ZunoSegmentedProgress(total: Int, completed: Int, modifier: Modifier = Modif
                 Modifier
                     .weight(1f)
                     .height(6.dp)
-                    .clip(CircleShape)
-                    .background(if (index < completed) ZunoColors.SurfaceInverse else ZunoColors.SurfaceStrong)
+                    .then(
+                        if (index < completed) {
+                            Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
+                        } else {
+                            Modifier.zunoRecessedTrack(CircleShape)
+                        },
+                    )
             )
         }
     }
@@ -325,9 +345,7 @@ fun ZunoTutorHint(text: String, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(ZunoRadius.md)
     Row(
         modifier = modifier
-            .clip(shape)
-            .background(ZunoColors.SurfaceSubtle)
-            .border(1.dp, ZunoColors.BorderSubtle, shape)
+            .zunoGlassSubtle(shape)
             .padding(start = ZunoSpace.s10, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,

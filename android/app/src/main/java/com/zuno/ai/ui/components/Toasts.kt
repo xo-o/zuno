@@ -179,7 +179,7 @@ fun ZunoToastHost(controller: ToastController, modifier: Modifier = Modifier) {
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true)
+@Preview(backgroundColor = 0xFF171717, showBackground = true)
 @Composable
 private fun ZunoToastPreview() {
     ZunoTheme {
