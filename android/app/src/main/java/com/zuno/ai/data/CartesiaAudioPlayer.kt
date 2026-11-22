@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.zuno.ai.avatar.audio.AvatarSpeechSink
+import com.zuno.ai.avatar.audio.WavPcmFeeder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,9 +34,17 @@ class CartesiaAudioPlayer(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var mediaPlayer: MediaPlayer? = null
     private var playJob: Job? = null
+    private var wavSyncJob: Job? = null
+
+    @Volatile
+    private var avatarSpeechSink: AvatarSpeechSink? = null
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    fun setAvatarSpeechSink(sink: AvatarSpeechSink?) {
+        avatarSpeechSink = sink
+    }
 
     fun speak(
         text: String,
@@ -86,6 +96,12 @@ class CartesiaAudioPlayer(
                     start()
                 }
                 mediaPlayer = mp
+                avatarSpeechSink?.let { sink ->
+                    wavSyncJob?.cancel()
+                    wavSyncJob = scope.launch {
+                        WavPcmFeeder.streamWhilePlaying(file, mp, sink)
+                    }
+                }
             } catch (e: Exception) {
                 Log.w("CartesiaAudioPlayer", "TTS preview playback failed", e)
                 _isSpeaking.value = false
@@ -97,6 +113,8 @@ class CartesiaAudioPlayer(
     fun stop() {
         playJob?.cancel()
         playJob = null
+        wavSyncJob?.cancel()
+        wavSyncJob = null
         mediaPlayer?.let(::releaseSafely)
         mediaPlayer = null
         _isSpeaking.value = false
@@ -108,6 +126,8 @@ class CartesiaAudioPlayer(
     }
 
     private fun releaseSafely(player: MediaPlayer) {
+        wavSyncJob?.cancel()
+        wavSyncJob = null
         runCatching {
             if (player.isPlaying) player.stop()
         }

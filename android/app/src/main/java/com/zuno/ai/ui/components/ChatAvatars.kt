@@ -1,7 +1,6 @@
 package com.zuno.ai.ui.components
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -45,6 +43,9 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.zuno.ai.R
+import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
+import com.zuno.ai.avatar.model.TutorAvatarProfile
+import com.zuno.ai.avatar.ui.TutorStaticAvatar
 import com.zuno.ai.data.CoachPromptItem
 import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.ui.theme.ZunoColors
@@ -114,25 +115,20 @@ fun ZunoOpenToSpeakAvatar(
 }
 
 /**
- * Sofía AI Tutor circular avatar.
+ * Static circular AI Tutor avatar used in chat headers and conversation list rows.
  */
 @Composable
 fun ZunoAiTutorAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
+    tutor: TutorAvatarProfile = TutorAvatarCatalog.DEFAULT_TUTOR,
 ) {
-    Box(modifier = modifier.size(size)) {
-        Image(
-            painter = painterResource(R.drawable.sofia_tutor_avatar),
-            contentDescription = stringResource(R.string.onboarding_sender_sofia),
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .border(1.dp, ZunoColors.BorderDefault, CircleShape),
-        )
-    }
+    TutorStaticAvatar(
+        tutor = tutor,
+        size = size,
+        contentDescription = stringResource(R.string.onboarding_sender_sofia),
+        modifier = modifier,
+    )
 }
 
 /**

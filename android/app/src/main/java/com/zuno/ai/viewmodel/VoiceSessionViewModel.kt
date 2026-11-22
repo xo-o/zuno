@@ -4,6 +4,8 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zuno.ai.avatar.audio.AvatarSpeechSink
+import com.zuno.ai.avatar.audio.LiveKitAvatarAudioTap
 import com.zuno.ai.data.LessonEvaluation
 import com.zuno.ai.data.LessonSessionTicket
 import com.zuno.ai.data.LessonStageUi
@@ -25,6 +27,7 @@ import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.DataPublishReliability
+import io.livekit.android.room.track.RemoteAudioTrack
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CancellationException
@@ -104,6 +107,10 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     val partnerJoined: StateFlow<Boolean> = _partnerJoined.asStateFlow()
 
     val activeRoom: Room? get() = currentRoom
+
+    /** Real-time PCM audio sink driving dynamic client-side tutor avatar lip-sync. */
+    val avatarSpeechSink = AvatarSpeechSink()
+    private val avatarAudioTap = LiveKitAvatarAudioTap(avatarSpeechSink)
 
     private var currentRoom: Room? = null
     private var eventJob: Job? = null
@@ -332,6 +339,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         _localVideoTrack.value = null
         _remoteVideoTrack.value = null
         _partnerJoined.value = false
+        avatarAudioTap.detachAll()
         currentRoom?.let { room ->
             try {
                 room.disconnect()
@@ -403,6 +411,19 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
             ?.getTrackPublication(Track.Source.CAMERA)
             ?.track as? VideoTrack
         _remoteVideoTrack.value = remote
+        syncRemoteAudioSinks(room)
+    }
+
+    private fun syncRemoteAudioSinks(room: Room) {
+        val tracks = buildList {
+            for (participant in room.remoteParticipants.values) {
+                for (pub in participant.trackPublications.values) {
+                    val audioTrack = pub.track as? RemoteAudioTrack
+                    if (audioTrack != null) add(audioTrack)
+                }
+            }
+        }
+        avatarAudioTap.syncRemoteTracks(tracks)
     }
 
     fun interrupt() {

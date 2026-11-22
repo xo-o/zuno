@@ -63,6 +63,7 @@ import com.zuno.ai.BuildConfig
 import com.zuno.ai.R
 import com.zuno.ai.auth.AuthState
 import com.zuno.ai.auth.AuthViewModel
+import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
 import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.AttachmentFiles
@@ -402,6 +403,13 @@ fun ZunoApp(
     val language: LearningLanguage = profile?.language ?: LearningLanguages.Spanish
     val tts = rememberCartesiaAudioPlayer(zunoViewModel::fetchTtsPreview)
     val preferences = profile?.preferences
+    val activeTutor = remember(preferences?.tutorVoice) {
+        TutorAvatarCatalog.resolve(voicePreset = preferences?.tutorVoice)
+    }
+    DisposableEffect(tts, viewModel) {
+        tts.setAvatarSpeechSink(viewModel.avatarSpeechSink)
+        onDispose { tts.setAvatarSpeechSink(null) }
+    }
 
     var appLanguage by rememberSaveable {
         val currentTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
@@ -1487,6 +1495,7 @@ fun ZunoApp(
                         confirmSignOut = true
                     },
                     onError = { message -> toast(message) },
+                    tutor = activeTutor,
                     modifier = screenModifier,
                 )
 
@@ -2247,6 +2256,8 @@ fun ZunoApp(
                         isSpeakerOn = isSpeakerOn,
                         room = viewModel.activeRoom,
                         localVideoTrack = localVideoTrack,
+                        tutor = activeTutor,
+                        avatarSpeechSink = viewModel.avatarSpeechSink,
                         coachPrompts = coachPrompts,
                         onToggleCamera = {
                             if (isCameraOn) {

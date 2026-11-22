@@ -9,7 +9,6 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,11 +59,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -78,6 +75,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zuno.ai.R
+import com.zuno.ai.avatar.audio.AvatarSpeechSink
+import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
+import com.zuno.ai.avatar.model.TutorAvatarProfile
+import com.zuno.ai.avatar.ui.TutorStageAvatar
 import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.CartesiaAudioPlayer
 import com.zuno.ai.data.LearningLanguage
@@ -155,6 +156,7 @@ fun OnboardingFlowScreen(
     onGoHome: () -> Unit,
     onExitOnboarding: () -> Unit,
     onError: (String) -> Unit = {},
+    tutor: TutorAvatarProfile = TutorAvatarCatalog.DEFAULT_TUTOR,
     modifier: Modifier = Modifier,
 ) {
     val state by onboardingViewModel.state.collectAsStateWithLifecycle()
@@ -204,7 +206,8 @@ fun OnboardingFlowScreen(
         } else null
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(ttsPlayer, voiceViewModel) {
+        ttsPlayer.setAvatarSpeechSink(voiceViewModel.avatarSpeechSink)
         onDispose {
             ttsPlayer.stop()
             voiceViewModel.disconnect()
@@ -525,6 +528,8 @@ fun OnboardingFlowScreen(
                     prompt = if (state.inputMode == OnboardingInputMode.Voice) voicePrompt else currentPrompt,
                     liveTranscript = liveSpokenTranscript,
                     orbState = orbState,
+                    tutor = tutor,
+                    avatarSpeechSink = voiceViewModel.avatarSpeechSink,
                     onBack = ::handleBack,
                     onMicTap = {
                         if (!micGranted()) {
@@ -864,6 +869,8 @@ private fun ConversationalOnboardingStep(
     prompt: String,
     liveTranscript: String,
     orbState: VoiceOrbState,
+    tutor: TutorAvatarProfile,
+    avatarSpeechSink: AvatarSpeechSink,
     onBack: () -> Unit,
     onMicTap: () -> Unit,
     onNextInVoice: () -> Unit,
@@ -912,6 +919,8 @@ private fun ConversationalOnboardingStep(
                     liveTranscript = liveTranscript,
                     orbState = orbState,
                     submitting = state.submittingTurn,
+                    tutor = tutor,
+                    avatarSpeechSink = avatarSpeechSink,
                     levelChips = listOf(
                         beginnerLabel to "beginner",
                         intermediateLabel to "intermediate",
@@ -957,6 +966,8 @@ private fun VoiceStepBody(
     liveTranscript: String,
     orbState: VoiceOrbState,
     submitting: Boolean,
+    tutor: TutorAvatarProfile,
+    avatarSpeechSink: AvatarSpeechSink,
     levelChips: List<Pair<String, String>>,
     goalChips: List<String>,
     onMicTap: () -> Unit,
@@ -999,11 +1010,10 @@ private fun VoiceStepBody(
                     .height(portraitHeight)
                     .clip(RoundedCornerShape(0.dp)),
             ) {
-                Image(
-                    painter = painterResource(R.drawable.sofia_tutor_avatar),
+                TutorStageAvatar(
+                    tutor = tutor,
+                    speechSink = avatarSpeechSink,
                     contentDescription = stringResource(R.string.onboarding_sender_sofia),
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
                     modifier = Modifier.fillMaxSize(),
                 )
                 Box(
