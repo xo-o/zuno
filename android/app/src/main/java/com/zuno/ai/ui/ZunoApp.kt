@@ -378,6 +378,7 @@ fun ZunoApp(
     val topics by zunoViewModel.topics.collectAsStateWithLifecycle()
     val topicDetails by zunoViewModel.topicDetails.collectAsStateWithLifecycle()
     val lessonEvaluations by zunoViewModel.lessonEvaluations.collectAsStateWithLifecycle()
+    val savedVocabPhrases by zunoViewModel.savedVocabPhrases.collectAsStateWithLifecycle()
     val roleplays by zunoViewModel.roleplays.collectAsStateWithLifecycle()
     val roleplayDetails by zunoViewModel.roleplayDetails.collectAsStateWithLifecycle()
     val discoverTopics by zunoViewModel.discoverTopics.collectAsStateWithLifecycle()
@@ -503,6 +504,7 @@ fun ZunoApp(
     val partnerJoined by viewModel.partnerJoined.collectAsStateWithLifecycle()
     val voiceError by viewModel.errorMessage.collectAsStateWithLifecycle()
     val lessonStage by viewModel.lessonStage.collectAsStateWithLifecycle()
+    val lessonTurns by viewModel.lessonTurns.collectAsStateWithLifecycle()
     val pronunciationEval by viewModel.pronunciationEval.collectAsStateWithLifecycle()
     val rescuePayload by viewModel.rescuePayload.collectAsStateWithLifecycle()
     val completedLessonEval by viewModel.completedLessonEvaluation.collectAsStateWithLifecycle()
@@ -1137,7 +1139,7 @@ fun ZunoApp(
     @Composable
     fun topicMenu(summary: com.zuno.ai.data.TopicSummary, closeDetailOnDelete: Boolean = false): List<ZunoMenuAction> = buildList {
         add(
-            ZunoMenuAction(stringResource(R.string.topics_menu_start_next), icon = R.drawable.zuno_ic_t_arrow_right) {
+            ZunoMenuAction(stringResource(R.string.topics_menu_start_next), icon = R.drawable.zuno_ic_t_play_circle) {
                 val detail = topicDetails[summary.id]
                 if (detail != null) {
                     val target = detail.nextLesson ?: detail.lessons.firstOrNull()
@@ -1148,7 +1150,7 @@ fun ZunoApp(
             },
         )
         add(
-            ZunoMenuAction(stringResource(R.string.topics_menu_schedule), icon = R.drawable.zuno_ic_t_clock) {
+            ZunoMenuAction(stringResource(R.string.topics_menu_schedule), icon = R.drawable.zuno_ic_t_calendar) {
                 navigate(ZunoRoute.NewSchedule(prefillTargetId = summary.id, prefillIsRoleplay = false))
             },
         )
@@ -1186,13 +1188,6 @@ fun ZunoApp(
             add(
                 ZunoMenuAction(stringResource(R.string.chat_menu_report), icon = R.drawable.zuno_ic_t_flag) {
                     topicReportTarget = summary.sourceTopicId ?: summary.id
-                },
-            )
-        }
-        if (summary.completedLessons > 0) {
-            add(
-                ZunoMenuAction(stringResource(R.string.topics_menu_reset), icon = R.drawable.zuno_ic_t_rotate_ccw) {
-                    zunoViewModel.resetTopic(summary.id)
                 },
             )
         }
@@ -1947,6 +1942,7 @@ fun ZunoApp(
                         languageName = language.displayName(appLanguage),
                         onBack = ::pop,
                         onFilterChanged = { cat, q -> zunoViewModel.loadDiscoverTopics(cat, q) },
+                        onFilterWithLevel = { cat, q, lvl -> zunoViewModel.loadDiscoverTopics(cat, q, lvl) },
                         onOpenPreview = { item -> navigate(ZunoRoute.CommunityTopicPreview(item.id)) },
                         onCreateFromQuery = { q -> openNewTopic(q) },
                         modifier = screenModifier,
@@ -1994,6 +1990,8 @@ fun ZunoApp(
                         onAttach = { openAttachmentSheet(TOPIC_DRAFT_KEY) },
                         onRemoveAttachment = { zunoViewModel.removeAttachment(TOPIC_DRAFT_KEY, it.localId) },
                         onRetryAttachment = { zunoViewModel.retryAttachment(TOPIC_DRAFT_KEY, it.localId) },
+                        nativeLanguageBcp47 = appLanguage.bcp47,
+                        onRequestMicPermission = { onGranted -> withMicrophone(onGranted) },
                         modifier = screenModifier,
                     )
                 }
@@ -2343,6 +2341,8 @@ fun ZunoApp(
 
                     val status = voiceCallStatus(agentState, isMuted)
                     val recentTurns = if (inVoice) voiceMessages.drop(voiceMessageStart) else emptyList()
+                    val userName = profile?.firstName?.ifBlank { null } ?: profile?.displayName.orEmpty().ifBlank { "You" }
+                    val userInitial = userName.take(1).uppercase()
                     VoiceModeScreen(
                         status = status,
                         level = {
@@ -2355,14 +2355,32 @@ fun ZunoApp(
                         startedAtMillis = callStartedAt.takeIf { inVoice },
                         tutorLine = recentTurns.lastOrNull { it.speaker == Speaker.AGENT }?.text,
                         userLine = recentTurns.lastOrNull()?.takeIf { it.speaker == Speaker.USER }?.text,
+                        turns = recentTurns,
                         isMuted = isMuted,
                         menu = emptyList(),
                         isLessonMode = true,
                         lessonPosition = screen.position,
                         learnerLevel = profile?.level ?: "B1",
                         lessonStage = lessonStage,
+                        lessonTurns = lessonTurns,
                         pronunciationEval = pronunciationEval,
                         rescuePayload = rescuePayload,
+                        userName = userName,
+                        userInitial = userInitial,
+                        isCameraOn = isCameraOn,
+                        isSpeakerOn = isSpeakerOn,
+                        room = viewModel.activeRoom,
+                        localVideoTrack = localVideoTrack,
+                        tutor = activeTutor,
+                        avatarSpeechSink = viewModel.avatarSpeechSink,
+                        onToggleCamera = {
+                            if (isCameraOn) {
+                                viewModel.toggleCamera(false)
+                            } else {
+                                withCameraPermission { viewModel.toggleCamera(true) }
+                            }
+                        },
+                        onToggleSpeaker = { viewModel.toggleSpeaker() },
                         onLessonAction = { action, payload -> viewModel.sendLessonAction(action, payload) },
                         onEnd = {
                             // Mid-lesson early exit: disconnect cleanly without marking lesson complete
@@ -2389,6 +2407,33 @@ fun ZunoApp(
                         lessonPositionFallback = lesson?.position ?: 1,
                         totalLessonsFallback = topicDetail?.summary?.totalLessons ?: 5,
                         busy = busy,
+                        savedPhrases = savedVocabPhrases,
+                        onToggleSavePhrase = { phrase ->
+                            val added = zunoViewModel.toggleSavedVocabularyPhrase(phrase)
+                            if (added) {
+                                toasts.show(
+                                    ToastEvent(
+                                        str(R.string.topics_eval_saved_toast, phrase),
+                                        ToastIcon.Check,
+                                        actionLabel = str(R.string.common_undo),
+                                        onAction = { zunoViewModel.removeSavedVocabularyPhrases(listOf(phrase)) },
+                                    ),
+                                )
+                            }
+                        },
+                        onSaveAllPhrases = { phrases ->
+                            val addedCount = zunoViewModel.saveAllVocabularyPhrases(phrases)
+                            if (addedCount > 0) {
+                                toasts.show(
+                                    ToastEvent(
+                                        str(R.string.topics_eval_saved_count_toast, addedCount),
+                                        ToastIcon.Check,
+                                        actionLabel = str(R.string.common_undo),
+                                        onAction = { zunoViewModel.removeSavedVocabularyPhrases(phrases) },
+                                    ),
+                                )
+                            }
+                        },
                         onPlaySample = { sample ->
                             tts.speak(
                                 text = sample,
@@ -2547,6 +2592,7 @@ fun ZunoApp(
                             voiceKey = preferences?.tutorVoice ?: "warm",
                         )
                     },
+                    extraSavedPhrases = savedVocabPhrases,
                     modifier = screenModifier,
                 )
 

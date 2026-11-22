@@ -80,13 +80,33 @@ fun VocabularyScreen(
     onBack: () -> Unit,
     onStartVoiceSprint: () -> Unit,
     onSpeakPhrase: (String) -> Unit,
+    extraSavedPhrases: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
 ) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf<VocabFilter?>(null) }
     var showAddSheet by rememberSaveable { mutableStateOf(false) }
-    val items = remember { mutableStateListOf<VocabPhraseItem>().apply { addAll(DefaultVocabPhrases) } }
+    val items = remember(extraSavedPhrases) {
+        mutableStateListOf<VocabPhraseItem>().apply {
+            extraSavedPhrases.forEachIndexed { idx, phrase ->
+                if (DefaultVocabPhrases.none { it.phrase.equals(phrase, ignoreCase = true) }) {
+                    add(
+                        VocabPhraseItem(
+                            id = "lesson-$idx-${phrase.hashCode()}",
+                            phrase = phrase,
+                            translation = "Saved from lesson",
+                            source = "Lesson evaluation",
+                            dueNow = true,
+                            intervalLabel = "Due now",
+                            bucket = VocabFilter.Due,
+                        ),
+                    )
+                }
+            }
+            addAll(DefaultVocabPhrases)
+        }
+    }
 
     val q = query.trim().lowercase()
     val visible = items.filter { item ->

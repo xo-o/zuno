@@ -9,12 +9,14 @@ import com.zuno.ai.avatar.audio.LiveKitAvatarAudioTap
 import com.zuno.ai.data.LessonEvaluation
 import com.zuno.ai.data.LessonSessionTicket
 import com.zuno.ai.data.LessonStageUi
+import com.zuno.ai.data.LessonTurnUi
 import com.zuno.ai.data.LivekitTicket
 import com.zuno.ai.data.OnboardingVoiceTurnEvent
 import com.zuno.ai.data.PronunciationEvalUi
 import com.zuno.ai.data.RescuePayloadUi
 import com.zuno.ai.data.toLessonEvaluation
 import com.zuno.ai.data.toLessonStageUi
+import com.zuno.ai.data.toLessonTurnUi
 import com.zuno.ai.data.toOnboardingVoiceTurnEvent
 import com.zuno.ai.data.toPronunciationEvalUi
 import com.zuno.ai.data.toRescuePayloadUi
@@ -80,6 +82,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
 
     private val _completedLessonEvaluation = MutableStateFlow<LessonEvaluation?>(null)
     val completedLessonEvaluation: StateFlow<LessonEvaluation?> = _completedLessonEvaluation.asStateFlow()
+
+    private val _lessonTurns = MutableStateFlow<List<LessonTurnUi>>(emptyList())
+    val lessonTurns: StateFlow<List<LessonTurnUi>> = _lessonTurns.asStateFlow()
 
     private val _onboardingEvents = MutableSharedFlow<OnboardingVoiceTurnEvent>(extraBufferCapacity = 8)
     val onboardingEvents: SharedFlow<OnboardingVoiceTurnEvent> = _onboardingEvents.asSharedFlow()
@@ -320,6 +325,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         _pronunciationEval.value = null
         _rescuePayload.value = null
         _completedLessonEvaluation.value = null
+        _lessonTurns.value = emptyList()
     }
 
     /** Hangs up synchronously, so a new call can be started right away. */
@@ -355,6 +361,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         _lessonStage.value = null
         _pronunciationEval.value = null
         _rescuePayload.value = null
+        _lessonTurns.value = emptyList()
     }
 
     fun toggleMute() {
@@ -534,6 +541,33 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                             _lessonStage.value = json.toLessonStageUi()
                             _pronunciationEval.value = null
                             _rescuePayload.value = null
+                        }
+                        "lesson_turn" -> {
+                            val turn = json.toLessonTurnUi()
+                            if (turn.text.isNotBlank()) {
+                                _lessonTurns.update { current ->
+                                    if (current.any { it.id == turn.id }) current else (current + turn).takeLast(12)
+                                }
+                            }
+                        }
+                        "lesson_turn_update" -> {
+                            val targetId = json.optString("id")
+                            val newLabel = json.optString("senderLabel").takeIf { it.isNotBlank() }
+                            val newTranslation = json.optString("translation").takeIf { it.isNotBlank() }
+                            if (targetId.isNotBlank()) {
+                                _lessonTurns.update { current ->
+                                    current.map { t ->
+                                        if (t.id == targetId) {
+                                            t.copy(
+                                                senderLabel = newLabel ?: t.senderLabel,
+                                                translation = newTranslation ?: t.translation,
+                                            )
+                                        } else {
+                                            t
+                                        }
+                                    }
+                                }
+                            }
                         }
                         "pronunciation_eval" -> {
                             _pronunciationEval.value = json.toPronunciationEvalUi()

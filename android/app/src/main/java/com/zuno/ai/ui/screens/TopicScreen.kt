@@ -249,11 +249,7 @@ fun CommunityTopicPreviewScreen(
                 onBack = onBack,
             )
             if (item != null) {
-                Row(
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = ZunoSpace.s12),
-                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = ZunoSpace.s12)) {
                     ZunoIconButton(
                         icon = R.drawable.zuno_ic_t_share,
                         onClick = { onShare(item) },
@@ -261,22 +257,6 @@ fun CommunityTopicPreviewScreen(
                         tint = ZunoColors.IconPrimary,
                         contentDescription = stringResource(R.string.share_action),
                     )
-                    if (!item.isOfficial) {
-                        ZunoOverflowMenu(
-                            actions = listOf(
-                                ZunoMenuAction(
-                                    label = stringResource(R.string.share_action),
-                                    icon = R.drawable.zuno_ic_t_share,
-                                    onClick = { onShare(item) },
-                                ),
-                                ZunoMenuAction(
-                                    label = stringResource(R.string.chat_menu_report),
-                                    icon = R.drawable.zuno_ic_t_flag,
-                                    onClick = { onReport(item) },
-                                ),
-                            ),
-                        )
-                    }
                 }
             }
         }

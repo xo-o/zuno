@@ -220,6 +220,7 @@ export const topicRoutes = new Hono<AuthEnv>()
     const userId = c.get("user").id;
     const { targetLanguage, level } = await getProfile(userId);
     const category = (c.req.query("category") ?? "all").toLowerCase();
+    const levelFilter = (c.req.query("level") ?? "all").toUpperCase();
     const rawQ = c.req.query("q") ?? "";
     const q = normalizeSearch(rawQ);
 
@@ -287,6 +288,8 @@ export const topicRoutes = new Hono<AuthEnv>()
     const combined = [...seeds, ...community].filter((item) => {
       const catOk = category === "all" || item.category === category;
       if (!catOk) return false;
+      const lvlOk = levelFilter === "ALL" || item.level.toUpperCase() === levelFilter;
+      if (!lvlOk) return false;
       if (!q) return true;
       const hay = normalizeSearch(`${item.title} ${item.translation} ${item.authorHandle ?? ""} ${item.category}`);
       return hay.includes(q);

@@ -75,7 +75,7 @@ Both **Topics** and **Roleplays** keep the root library screens clean and focuse
 | **`03a`–`03f` · Voice Lesson** | `2677:27447`–`2677:27574` | 5-stage interactive voice lesson | See `docs/VOICE_LESSON_FLOW_SPEC.md`. |
 | **`04 · Lesson complete — Evaluation`** | `2677:27395` | Post-lesson evaluation | `Save all` bookmark action on `Practiced phrases` + 1-tap `Show save` bookmark toggles per `Phrase Row`. |
 | **`05 · Topic — Updated`** | `2677:27421` | Topic progress after lesson | Trailing `⋮` overflow action + `Public` visibility status in metadata. |
-| **`06 · Topics — Empty`** *(New)* | `2998:12928` | Empty state (0 user topics) | `Empty State` (`No topics yet`), balanced 2-up CTAs (**`+ Create topic`** primary + **`Explore`** secondary, `24px` margins), and `Explore Zuno & community` preview cards. |
+| **`06 · Topics — Empty`** *(New)* | `2998:12928` | Empty state (0 user topics) | Top bar (`+` only), optically centered `Empty State` (`No topics yet`), `24px` gap, and centered `168px` **`Explore`** (`Icon/search`, `Secondary`) pill CTA. |
 | **`07 · Topics — Add Choice Sheet`** *(New)* | `3001:13792` | Bottom drawer from `+` | Modal bottom sheet (`Add topic`) with 2 `Sheet Row` options: **`Create a new topic`** (`Chat with Sofía & upload notes or PDFs`) and **`Find community topics`** (`Browse by category & add shared paths`). |
 | **`08 · Topics — Browse Community`** *(New)* | `2998:13067` | Dedicated `Explore topics` view | `Back` + `Explore topics` top bar, `Search Field` (`café`), **Category tabs** (`All`, `Travel`, `Food`, `Work`, `Daily life`), grouped `ZUNO OFFICIAL` & `COMMUNITY TOPICS` cards. |
 | **`09 · Topics — Community Preview`** *(New)* | `2998:13198` | Preview before adding | `Community topic` top bar (`Share` action), creator attribution (`By @carlos.v · 5 lessons · 142 learners`), **`+ Add to my Topics`**, and 5-lesson `Syllabus` preview. |
@@ -91,7 +91,7 @@ Both **Topics** and **Roleplays** keep the root library screens clean and focuse
 
 | Frame | Figma Node | Description | Key Elements |
 | :--- | :--- | :--- | :--- |
-| **`Roleplays · 1 · Empty`** *(Updated)* | `2065:2693` | Empty state (0 user roleplays) | Top bar (`Search` + `+`), balanced 2-up CTAs (**`+ New roleplay`** + **`Explore`**, `24px` margins), and `Zuno & community scenarios` preview list. |
+| **`Roleplays · 1 · Empty`** *(Updated)* | `2065:2693` | Empty state (0 user roleplays) | Top bar (`+` only), optically centered `Empty State` (`No roleplays yet`), `24px` gap, and centered `168px` **`Explore`** (`Icon/search`, `Secondary`) pill CTA. |
 | **`Roleplays · 2 · List`** *(Updated)* | `2026:2322` | User's added/saved roleplays only | Clean list with no ownership filter pills; `Public` indicator in row metadata (`Tenant / Landlord · Public`). |
 | **`Roleplays · 3a · Chat Builder (Greeting)`** *(New)* | `3008:13872` | Sofía opens the conversation | Sofía greets first (`"Hey Noah! What kind of scene do you want to practice?"`), offers chips (`Startup interview`, `Renting a flat`, `Doctor’s visit`) + `+` attach `Composer`. |
 | **`Roleplays · 3b · Chat Builder (Draft Ready)`** *(Updated)* | `3005:13865` | Multi-turn + mid-chat JD → Draft | Text-first turns (`"Friendly product interview in Madrid"` → Sofía follow-up), followed by a **mid-conversation** `Startup_JD_Madrid.pdf` upload, and inline **`DRAFT ROLEPLAY`** card (`Refine` | `Create roleplay`). |

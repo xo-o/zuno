@@ -1,5 +1,12 @@
 package com.zuno.ai.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -37,10 +45,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.zuno.ai.R
 import com.zuno.ai.data.Roleplay
 import com.zuno.ai.data.RoleplayDraft
@@ -88,12 +98,78 @@ fun NewTopicScreen(
     onAttach: () -> Unit,
     onRemoveAttachment: (DraftAttachment) -> Unit,
     onRetryAttachment: (DraftAttachment) -> Unit,
+    nativeLanguageBcp47: String = "en-US",
+    onRequestMicPermission: ((onGranted: () -> Unit) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
+    var dictating by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val composerFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
+
+    val speechRecognizer = remember(context) {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
+        } else {
+            null
+        }
+    }
+
+    DisposableEffect(speechRecognizer) {
+        onDispose {
+            runCatching { speechRecognizer?.destroy() }
+        }
+    }
+
+    fun startDictation() {
+        val recognizer = speechRecognizer ?: run {
+            composerFocus.requestFocus()
+            return
+        }
+        val hasMic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!hasMic) {
+            onRequestMicPermission?.invoke { startDictation() } ?: composerFocus.requestFocus()
+            return
+        }
+        if (dictating) {
+            dictating = false
+            runCatching { recognizer.stopListening() }
+            return
+        }
+        recognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) { dictating = true }
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() { dictating = false }
+            override fun onError(error: Int) { dictating = false }
+            override fun onPartialResults(partialResults: Bundle?) {
+                val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
+                if (!partial.isNullOrBlank()) input = partial.take(500)
+            }
+            override fun onResults(results: Bundle?) {
+                dictating = false
+                val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
+                if (!spoken.isNullOrBlank()) {
+                    input = spoken.take(500)
+                    composerFocus.requestFocus()
+                }
+            }
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, nativeLanguageBcp47)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        }
+        runCatching { recognizer.startListening(intent) }.onFailure {
+            dictating = false
+            composerFocus.requestFocus()
+        }
+    }
 
     val attachmentsReady = attachments.all { it.state == DraftUploadState.Ready }
     val canSend = !builder.sending && !busy && attachmentsReady && (input.isNotBlank() || attachments.isNotEmpty())
@@ -122,7 +198,6 @@ fun NewTopicScreen(
         stringResource(R.string.topics_chip_trip),
         stringResource(R.string.topics_chip_interview),
         stringResource(R.string.topics_chip_cafe),
-        stringResource(R.string.topics_chip_small_talk),
     )
 
     Column(
@@ -212,10 +287,10 @@ fun NewTopicScreen(
             }
         }
 
-        val placeholder = if (builder.draft != null) {
-            stringResource(R.string.topics_builder_refine_placeholder)
-        } else {
-            stringResource(R.string.topics_builder_placeholder)
+        val placeholder = when {
+            dictating -> stringResource(R.string.voice_listening)
+            builder.draft != null -> stringResource(R.string.topics_builder_refine_placeholder)
+            else -> stringResource(R.string.topics_builder_placeholder)
         }
 
         Box(Modifier.fillMaxWidth().padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s8)) {
@@ -224,7 +299,7 @@ fun NewTopicScreen(
                 onValueChange = { input = it.take(500) },
                 onSend = ::sendCurrent,
                 onAttach = onAttach,
-                onVoice = { composerFocus.requestFocus() },
+                onVoice = ::startDictation,
                 placeholder = placeholder,
                 focusRequester = composerFocus,
                 enabled = !builder.sending && !busy,
@@ -304,7 +379,7 @@ private fun DraftTopicCard(
                 onClick = onRefine,
                 variant = ZunoButtonVariant.Secondary,
                 size = ZunoButtonSize.Medium,
-                leadingIcon = R.drawable.zuno_ic_t_sparkles,
+                leadingIcon = R.drawable.zuno_ic_t_pencil,
                 leadingIconTint = ZunoColors.IconPrimary,
                 enabled = !busy,
             )
@@ -472,7 +547,7 @@ fun TopicSettingsScreen(
                 label = primaryLabel,
                 onClick = { onPrimaryAction(topic) },
                 size = ZunoButtonSize.Large,
-                leadingIcon = R.drawable.zuno_ic_t_arrow_right,
+                leadingIcon = if (summary.status == TopicStatus.NotStarted) R.drawable.zuno_ic_t_play_circle else R.drawable.zuno_ic_t_arrow_right,
                 leadingIconTint = ZunoColors.IconOnInverse,
                 loading = busy,
                 modifier = Modifier.fillMaxWidth(),

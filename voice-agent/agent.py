@@ -24,6 +24,7 @@ import livekit.plugins.deepgram as dg
 import livekit.plugins.google as gg
 import livekit.plugins.silero as silero
 
+from avatar_session import MuseTalkAvatarSession
 from bilingual import segment_bilingual_text, strip_lang_tags
 from lesson_flow import LessonAgent, LessonOrchestrator
 from onboarding_flow import OnboardingAgent, OnboardingOrchestrator
@@ -67,7 +68,25 @@ STT_ACCENT_CODES = {
 }
 
 
-def create_stt(language: str = "en", accent: str | None = None):
+NOVA3_MULTI_LANGS = {"en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"}
+
+
+def create_stt(
+    language: str = "en",
+    accent: str | None = None,
+    native_language: str | None = None,
+    multilingual: bool = False,
+):
+    base_target = (language or "en").lower().split("-")[0]
+    base_native = (native_language or "").lower().split("-")[0]
+    if multilingual and base_native and base_native != base_target and base_target in NOVA3_MULTI_LANGS and base_native in NOVA3_MULTI_LANGS:
+        return dg.STT(
+            model="nova-3",
+            language="multi",
+            endpointing_ms=25,
+            interim_results=True,
+            api_key=os.environ.get("DEEPGRAM_API_KEY"),
+        )
     if language == "en" and accent in (None, "us"):
         return dg.STTv2(
             model="flux-general-en",
@@ -232,14 +251,16 @@ async def entrypoint(ctx: JobContext) -> None:
         except Exception as e:
             logger.debug(f"Failed to broadcast partner_joined: {e}")
 
-    stt_lang = (
-        str(meta.get("nativeLanguage") or "en")
-        if mode == "onboarding"
-        else current_language
-    )
+    native_language = str(meta.get("nativeLanguage") or "en")
+    stt_lang = native_language if mode == "onboarding" else current_language
     stt_accent = None if mode == "onboarding" else current_accent
     vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
-    stt = create_stt(stt_lang, stt_accent)
+    stt = create_stt(
+        stt_lang,
+        stt_accent,
+        native_language=native_language,
+        multilingual=(mode == "lesson"),
+    )
     llm = gg.LLM(
         model="gemini-2.5-flash",
         temperature=0.4,
@@ -296,13 +317,28 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         initial_endpointing = 0.5 if hands_free else 1.6
 
+    avatar_id_meta = meta.get("avatarId") or ("elena" if meta.get("videoAvatar") else None)
+    render_mode = str(meta.get("renderMode") or "server").lower()
+    use_video_avatar = bool(avatar_id_meta) and render_mode != "client"
+
     session = AgentSession(
         stt=stt,
         vad=vad,
         llm=llm,
         tts=tts,
         min_endpointing_delay=initial_endpointing,
+        resume_false_interruption=not use_video_avatar,
     )
+
+    avatar_session: MuseTalkAvatarSession | None = None
+    if use_video_avatar:
+        try:
+            avatar_session = MuseTalkAvatarSession(avatar_id=str(avatar_id_meta))
+            await avatar_session.start(session, room=ctx.room)
+        except Exception as e:
+            logger.error(f"Failed to start MuseTalk avatar '{avatar_id_meta}', falling back to audio-only: {e}")
+            avatar_session = None
+            use_video_avatar = False
 
     if lesson_orchestrator is not None:
         lesson_orchestrator.session = session
@@ -366,6 +402,20 @@ async def entrypoint(ctx: JobContext) -> None:
             logger.info(f"Agent reply: {clean_text}")
             if lesson_orchestrator is not None and lesson_orchestrator.stage == "roleplay":
                 lesson_orchestrator.last_tutor_line = clean_text
+                ai_role = lesson_orchestrator.roleplay_cfg.get("aiRole") or "Sofía"
+                role_label = f"{ai_role} · Sofía" if "sofía" not in ai_role.lower() else ai_role
+                turn_id = f"rp-agent-{int(time.time() * 1000)}"
+                lesson_orchestrator.last_tutor_turn_id = turn_id
+                asyncio.create_task(
+                    broadcast_event({
+                        "type": "lesson_turn",
+                        "id": turn_id,
+                        "speaker": "agent",
+                        "senderLabel": role_label,
+                        "text": clean_text,
+                        "actions": ["translate", "listen_slow"],
+                    })
+                )
             asyncio.create_task(
                 broadcast_event({
                     "type": "transcript",
@@ -423,6 +473,7 @@ async def entrypoint(ctx: JobContext) -> None:
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(),
+            audio_output=not use_video_avatar,
         ),
     )
 

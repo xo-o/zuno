@@ -8,22 +8,31 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -36,8 +45,11 @@ import androidx.compose.ui.unit.sp
 import com.zuno.ai.R
 import com.zuno.ai.data.LessonCardUi
 import com.zuno.ai.data.LessonPillUi
+import com.zuno.ai.data.LessonStageKind
+import com.zuno.ai.data.LessonStageUi
 import com.zuno.ai.data.PronunciationEvalUi
 import com.zuno.ai.data.RecallPromptUi
+import com.zuno.ai.data.RescuePayloadUi
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
@@ -475,5 +487,390 @@ fun ZunoLessonRescueBar(
                 modifier = if (isPulsing) Modifier.alpha(pulseAlpha) else Modifier,
             )
         }
+    }
+}
+
+/**
+ * Unified Lesson Coach Card (`2949:13391` .. `2949:13630`) rendered at the bottom of the
+ * avatar voice lesson stage (`03a`–`03f`), adapting cleanly per pedagogical stage.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ZunoLessonCoachCard(
+    lessonStage: LessonStageUi,
+    pronunciationEval: PronunciationEvalUi?,
+    rescuePayload: RescuePayloadUi?,
+    pulseFirstWord: Boolean,
+    onLessonAction: (action: String, payload: String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardShape = RoundedCornerShape(ZunoRadius.xxxl)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .zunoGlassSubtle(cardShape)
+            .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+    ) {
+        when (lessonStage.stage) {
+            LessonStageKind.TeachModel -> {
+                val card = lessonStage.card as? LessonCardUi.TeachCard
+                val headerLeft = "${lessonStage.pill.role} · ${lessonStage.pill.goal}".trim(' ', '·')
+                val headerRight = card?.goalLabel?.ifBlank { null } ?: lessonStage.pill.contextNote
+                CoachStageHeader(left = headerLeft, right = headerRight)
+
+                if (card != null) {
+                    val syllables = parseSyllables(card.syllables)
+                    val noteText = card.setupPrompt.ifBlank { card.cue }
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    ) {
+                        syllables.forEach { (part, stressed) ->
+                            CoachTilePill(
+                                text = part,
+                                inverse = stressed,
+                                onClick = if (card.focusWord.isNotBlank()) {
+                                    { onLessonAction("play_chunk", card.focusWord) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                        if (noteText.isNotBlank()) {
+                            Text(
+                                text = noteText,
+                                style = ZunoType.FootnoteRegular,
+                                color = ZunoColors.TextSecondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .align(Alignment.CenterVertically)
+                                    .padding(start = ZunoSpace.s2),
+                            )
+                        }
+                    }
+                }
+            }
+
+            LessonStageKind.ShadowDrill -> {
+                val card = lessonStage.card as? LessonCardUi.TeachCard
+                val headerLeft = "${lessonStage.pill.role} · ${lessonStage.pill.goal}".trim(' ', '·')
+                val headerRight = pronunciationEval?.feedbackText
+                    ?: lessonStage.pill.contextNote.ifBlank { card?.cue.orEmpty() }
+                CoachStageHeader(left = headerLeft, right = headerRight)
+
+                if (card != null) {
+                    val syllables = parseSyllables(card.syllables)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    ) {
+                        syllables.forEach { (part, stressed) ->
+                            CoachTilePill(
+                                text = part,
+                                inverse = stressed,
+                                onClick = if (card.focusWord.isNotBlank()) {
+                                    { onLessonAction("play_chunk", card.focusWord) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                        card.chunks.forEach { chunk ->
+                            ZunoChip(
+                                label = chunk,
+                                leadingIcon = R.drawable.zuno_ic_volume,
+                                onClick = { onLessonAction("play_chunk", chunk) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            LessonStageKind.BuildingBlocks -> {
+                val card = lessonStage.card as? LessonCardUi.ScaffoldCard
+                val headerLeft = "${lessonStage.pill.role} · ${lessonStage.pill.goal}".trim(' ', '·')
+                val headerRight = lessonStage.pill.contextNote.ifBlank {
+                    stringResource(R.string.lesson_stage_pattern_drill)
+                }
+                CoachStageHeader(left = headerLeft, right = headerRight)
+
+                if (card != null) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    ) {
+                        if (card.newWord.isNotBlank()) {
+                            CoachTilePill(
+                                text = card.newWord,
+                                inverse = true,
+                                onClick = { onLessonAction("play_chunk", card.newWord) },
+                            )
+                        }
+                        if (card.meaning.isNotBlank()) {
+                            CoachTilePill(text = card.meaning, inverse = false)
+                        }
+                        if (card.stemHint.isNotBlank()) {
+                            CoachTilePill(text = card.stemHint, inverse = false)
+                        }
+                    }
+                }
+            }
+
+            LessonStageKind.ActiveRecall -> {
+                val prompt = lessonStage.recallPrompt
+                val headerLeft = "${lessonStage.pill.role} · ${lessonStage.pill.goal}".trim(' ', '·')
+                val headerRight = lessonStage.pill.contextNote.ifBlank {
+                    stringResource(R.string.lesson_stage_target_hidden)
+                }
+                CoachStageHeader(left = headerLeft, right = headerRight)
+
+                val revealed = rescuePayload?.takeIf { it.action == "reveal" }?.text
+                val firstWord = rescuePayload?.takeIf { it.action == "first_word" }?.text
+                when {
+                    !revealed.isNullOrBlank() -> {
+                        CoachTilePill(
+                            text = revealed,
+                            inverse = true,
+                            onClick = { onLessonAction("play_chunk", revealed) },
+                        )
+                    }
+                    !firstWord.isNullOrBlank() -> {
+                        val pulseAlpha = if (pulseFirstWord) 0.72f else 1f
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            modifier = Modifier.alpha(pulseAlpha),
+                        ) {
+                            CoachTilePill(text = firstWord, inverse = true)
+                            (prompt?.blankLengths ?: listOf(4, 5)).drop(1).forEach { len ->
+                                BlankCueTile(wordLength = len)
+                            }
+                        }
+                    }
+                    else -> {
+                        val lengths = prompt?.blankLengths?.takeIf { it.isNotEmpty() } ?: listOf(5, 4, 6)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        ) {
+                            lengths.forEach { len ->
+                                BlankCueTile(wordLength = len)
+                            }
+                        }
+                    }
+                }
+            }
+
+            LessonStageKind.Roleplay -> {
+                val goals = lessonStage.roleplayGoals
+                val defaultGoalIdx = goals.indexOfFirst { it.current }.takeIf { it >= 0 } ?: 0
+                var selectedTab by remember(goals) { mutableIntStateOf(defaultGoalIdx) }
+                val rescueTabIdx = goals.size
+                val anyCompleted = goals.any { it.completed }
+                val rescueTabLabel = stringResource(
+                    if (anyCompleted) R.string.lesson_roleplay_rescue else R.string.lesson_roleplay_answers,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    goals.forEachIndexed { idx, goal ->
+                        val prefix = when {
+                            goal.completed -> "✓ "
+                            goal.current -> "● "
+                            else -> ""
+                        }
+                        ZunoChip(
+                            label = "$prefix${goal.index}. ${goal.label}",
+                            selected = selectedTab == idx,
+                            onClick = { selectedTab = idx },
+                        )
+                    }
+                    ZunoChip(
+                        label = rescueTabLabel,
+                        selected = selectedTab == rescueTabIdx,
+                        onClick = { selectedTab = rescueTabIdx },
+                    )
+                }
+
+                val promptRowShape = RoundedCornerShape(ZunoRadius.lg)
+                if (selectedTab < goals.size) {
+                    val activeGoal = goals[selectedTab]
+                    val phraseText = activeGoal.samplePhrase.ifBlank { activeGoal.description }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zunoGlassSubtle(promptRowShape)
+                            .clickable(
+                                enabled = phraseText.isNotBlank(),
+                                role = Role.Button,
+                                onClick = { onLessonAction("play_chunk", phraseText) },
+                            )
+                            .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = if (activeGoal.samplePhrase.isNotBlank()) "“${activeGoal.samplePhrase}”" else activeGoal.description,
+                                style = ZunoType.FootnoteStrong,
+                                color = ZunoColors.TextPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            ZunoIcon(R.drawable.zuno_ic_t_volume, 14.dp, tint = ZunoColors.IconSecondary)
+                        }
+                        if (activeGoal.description.isNotBlank()) {
+                            Text(
+                                text = "Goal ${activeGoal.index} · ${activeGoal.description}",
+                                style = ZunoType.FootnoteRegular,
+                                color = ZunoColors.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zunoGlassSubtle(promptRowShape)
+                            .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    ) {
+                        if (!rescuePayload?.text.isNullOrBlank()) {
+                            Text(
+                                text = rescuePayload!!.text,
+                                style = ZunoType.FootnoteStrong,
+                                color = ZunoColors.TextPrimary,
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ZunoChip(
+                                label = stringResource(R.string.lesson_bubble_hint),
+                                leadingIcon = R.drawable.zuno_ic_sparkles,
+                                onClick = { onLessonAction("hint", null) },
+                            )
+                            ZunoChip(
+                                label = stringResource(R.string.voice_chip_translate),
+                                leadingIcon = R.drawable.zuno_ic_languages,
+                                onClick = { onLessonAction("translate", null) },
+                            )
+                            ZunoChip(
+                                label = stringResource(R.string.voice_chip_speed_slow),
+                                leadingIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                onClick = { onLessonAction("listen_slow", null) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoachStageHeader(left: String, right: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = left,
+            style = ZunoType.LabelSmall,
+            color = ZunoColors.TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false).padding(end = ZunoSpace.s8),
+        )
+        if (right.isNotBlank()) {
+            Text(
+                text = right,
+                style = ZunoType.LabelSmall,
+                color = ZunoColors.TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CoachTilePill(
+    text: String,
+    inverse: Boolean,
+    onClick: (() -> Unit)? = null,
+) {
+    val shape = RoundedCornerShape(ZunoRadius.lg)
+    val baseModifier = if (inverse) {
+        Modifier.clip(shape).background(ZunoColors.SurfaceInverse)
+    } else {
+        Modifier.zunoGlassSubtle(shape)
+    }
+    Box(
+        modifier = baseModifier
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s4),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = ZunoType.FootnoteStrong,
+            color = if (inverse) ZunoColors.TextOnInverse else ZunoColors.TextPrimary,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun BlankCueTile(wordLength: Int) {
+    val shape = RoundedCornerShape(ZunoRadius.md)
+    val dashes = List(wordLength.coerceIn(2, 7)) { "_" }.joinToString(" ")
+    Box(
+        modifier = Modifier
+            .zunoGlassSubtle(shape)
+            .padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s4),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = dashes,
+            style = ZunoType.FootnoteStrong,
+            color = ZunoColors.TextTertiary,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun parseSyllables(raw: String): List<Pair<String, Boolean>> {
+    val parts = raw.split("·").map { it.trim() }.filter { it.isNotEmpty() }
+    if (parts.isEmpty()) return emptyList()
+    return parts.map { part ->
+        val hasLetter = part.any { it.isLetter() }
+        val isAllUpper = hasLetter && part.filter { it.isLetter() }.all { it.isUpperCase() }
+        val stressed = isAllUpper && (parts.size > 1)
+        part to stressed
     }
 }

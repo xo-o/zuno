@@ -374,8 +374,8 @@ class TopicsAndRoleplaysUiTest {
                                 discoverPreview = listOf(officialTopic, communityTopic),
                                 menuForTopic = { summary ->
                                     buildList {
-                                        add(ZunoMenuAction("Start next lesson", icon = R.drawable.zuno_ic_t_arrow_right) {})
-                                        add(ZunoMenuAction("Schedule practice", icon = R.drawable.zuno_ic_t_clock) {})
+                                        add(ZunoMenuAction("Start next lesson", icon = R.drawable.zuno_ic_t_play_circle) {})
+                                        add(ZunoMenuAction("Schedule practice", icon = R.drawable.zuno_ic_t_calendar) {})
                                         add(ZunoMenuAction("Pin", icon = R.drawable.zuno_ic_t_pin) {})
                                         if (summary.isPublic || !summary.isUserOwned) {
                                             add(ZunoMenuAction("Share", icon = R.drawable.zuno_ic_t_share) {})
@@ -675,8 +675,8 @@ class TopicsAndRoleplaysUiTest {
             // 3. 08 · Explore Topics
             step = "03_topics_explore"
             waitForText("Explore topics")
-            waitForText("ZUNO OFFICIAL")
-            waitForText("COMMUNITY TOPICS")
+            waitForText("Zuno official")
+            waitForText("Community topics")
             waitForText("Café y tapas en Madrid")
             saveScreenshot("04_topics_explore")
 

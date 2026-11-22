@@ -198,6 +198,7 @@ data class LessonPillUi(
     val icon: String,
     val role: String,
     val goal: String,
+    val contextNote: String = "",
 )
 
 sealed interface LessonCardUi {
@@ -209,6 +210,7 @@ sealed interface LessonCardUi {
         val syllables: String,
         val cue: String,
         val chunks: List<String>,
+        val goalLabel: String = "",
     ) : LessonCardUi
 
     data class ScaffoldCard(
@@ -222,6 +224,26 @@ sealed interface LessonCardUi {
 data class RecallPromptUi(
     val eyebrow: String,
     val cue: String,
+    val blankLengths: List<Int> = emptyList(),
+)
+
+data class RoleplayGoalUi(
+    val id: String,
+    val index: Int,
+    val label: String,
+    val description: String,
+    val samplePhrase: String = "",
+    val completed: Boolean = false,
+    val current: Boolean = false,
+)
+
+data class LessonTurnUi(
+    val id: String,
+    val isUser: Boolean,
+    val senderLabel: String,
+    val text: String,
+    val translation: String? = null,
+    val actions: List<String> = emptyList(),
 )
 
 data class LessonStageUi(
@@ -230,6 +252,7 @@ data class LessonStageUi(
     val card: LessonCardUi?,
     val recallPrompt: RecallPromptUi?,
     val rescueChips: List<String>,
+    val roleplayGoals: List<RoleplayGoalUi> = emptyList(),
 )
 
 data class PronunciationEvalUi(
@@ -1021,6 +1044,7 @@ internal fun JSONObject.toLessonStageUi(): LessonStageUi {
             syllables = cardObj.optString("syllables"),
             cue = cardObj.optString("cue"),
             chunks = cardObj.optJSONArray("chunks")?.let { arr -> List(arr.length()) { arr.getString(it) } }.orEmpty(),
+            goalLabel = cardObj.optString("goalLabel"),
         )
         "scaffold_card" -> LessonCardUi.ScaffoldCard(
             prompt = cardObj.optString("prompt"),
@@ -1032,22 +1056,52 @@ internal fun JSONObject.toLessonStageUi(): LessonStageUi {
     }
     val recallObj = optJSONObject("recallPrompt")
     val recallPrompt = recallObj?.let {
+        val blanks = it.optJSONArray("blankLengths")?.let { arr ->
+            List(arr.length()) { idx -> arr.optInt(idx, 5) }
+        }.orEmpty()
         RecallPromptUi(
             eyebrow = it.optString("eyebrow", "Say from memory"),
             cue = it.optString("cue"),
+            blankLengths = blanks,
         )
     }
     val chips = optJSONArray("rescueChips")?.let { arr -> List(arr.length()) { arr.getString(it) } }.orEmpty()
+    val goals = optJSONArray("roleplayGoals")?.objects()?.mapIndexed { idx, g ->
+        RoleplayGoalUi(
+            id = g.optString("id", "goal_${idx + 1}"),
+            index = g.optInt("index", idx + 1),
+            label = g.optString("label"),
+            description = g.optString("description"),
+            samplePhrase = g.optString("samplePhrase"),
+            completed = g.optBoolean("completed", false),
+            current = g.optBoolean("current", idx == 0),
+        )
+    }.orEmpty()
     return LessonStageUi(
         stage = LessonStageKind.fromWire(optString("stage")),
         pill = LessonPillUi(
             icon = pillObj.optString("icon", "book-open"),
             role = pillObj.optString("role", "Learn"),
             goal = pillObj.optString("goal"),
+            contextNote = pillObj.optString("contextNote"),
         ),
         card = card,
         recallPrompt = recallPrompt,
         rescueChips = chips,
+        roleplayGoals = goals,
+    )
+}
+
+internal fun JSONObject.toLessonTurnUi(): LessonTurnUi {
+    val actions = optJSONArray("actions")?.let { arr -> List(arr.length()) { arr.optString(it) } }.orEmpty()
+    val speakerStr = optString("speaker", "agent")
+    return LessonTurnUi(
+        id = optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
+        isUser = speakerStr == "user",
+        senderLabel = optString("senderLabel").ifBlank { if (speakerStr == "user") "You" else "Sofía" },
+        text = optString("text"),
+        translation = optStringOrNull("translation"),
+        actions = actions,
     )
 }
 

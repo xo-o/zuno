@@ -165,6 +165,9 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     private val _lessonEvaluations = MutableStateFlow<Map<String, LessonEvaluation>>(emptyMap())
     val lessonEvaluations: StateFlow<Map<String, LessonEvaluation>> = _lessonEvaluations.asStateFlow()
 
+    private val _savedVocabPhrases = MutableStateFlow<Set<String>>(emptySet())
+    val savedVocabPhrases: StateFlow<Set<String>> = _savedVocabPhrases.asStateFlow()
+
     private val _roleplays = MutableStateFlow(Loadable<List<Roleplay>>())
     val roleplays: StateFlow<Loadable<List<Roleplay>>> = _roleplays.asStateFlow()
 
@@ -750,11 +753,11 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onCreated(created)
     }
 
-    fun loadDiscoverTopics(category: String = "all", query: String = "") {
+    fun loadDiscoverTopics(category: String = "all", query: String = "", level: String = "all") {
         _discoverTopics.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             try {
-                _discoverTopics.value = Loadable(api.discoverTopics(category, query))
+                _discoverTopics.value = Loadable(api.discoverTopics(category, query, level))
             } catch (e: ApiException) {
                 handleAuth(e)
                 _discoverTopics.update { it.copy(loading = false, error = e.message) }
@@ -871,6 +874,41 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     fun loadLessonEvaluation(lessonId: String) = launchSafely {
         val eval = api.lessonEvaluation(lessonId)
         _lessonEvaluations.update { it + (lessonId to eval) }
+    }
+
+    fun toggleSavedVocabularyPhrase(phrase: String): Boolean {
+        val normalized = phrase.trim()
+        if (normalized.isEmpty()) return false
+        var added = false
+        _savedVocabPhrases.update { current ->
+            if (normalized in current) {
+                added = false
+                current - normalized
+            } else {
+                added = true
+                current + normalized
+            }
+        }
+        return added
+    }
+
+    fun saveAllVocabularyPhrases(phrases: List<String>): Int {
+        val clean = phrases.map { it.trim() }.filter { it.isNotEmpty() }
+        if (clean.isEmpty()) return 0
+        var newlyAdded = 0
+        _savedVocabPhrases.update { current ->
+            val next = current.toMutableSet()
+            clean.forEach { p ->
+                if (next.add(p)) newlyAdded++
+            }
+            next
+        }
+        return newlyAdded
+    }
+
+    fun removeSavedVocabularyPhrases(phrases: List<String>) {
+        val clean = phrases.map { it.trim() }.toSet()
+        _savedVocabPhrases.update { it - clean }
     }
 
     suspend fun fetchTtsPreview(

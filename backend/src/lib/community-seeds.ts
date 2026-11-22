@@ -135,6 +135,28 @@ const SEED_TOPICS: SeedTopicItem[] = [
       ],
     },
   },
+  {
+    id: "seed-topic-es-cultura",
+    language: "es",
+    category: "culture",
+    sourceKind: "system",
+    authorHandle: null,
+    level: "B1",
+    learnersCount: 158,
+    prompt: "Spanish traditions, sobremesa table talk, and local festivals",
+    generated: {
+      title: "Tradiciones y sobremesa",
+      translation: "Spanish traditions & table talk",
+      category: "culture",
+      lessons: [
+        { title: "La sobremesa después de comer", translation: "After-meal conversation", objective: "Keep relaxed conversation flowing after dinner with friends." },
+        { title: "Horarios y costumbres locales", translation: "Local schedules & customs", objective: "Talk naturally about meal times, siesta hours, and weekends." },
+        { title: "Fiestas populares y música", translation: "Festivals & live music", objective: "Ask about local fiestas and share what you enjoyed." },
+        { title: "Cine y series en español", translation: "Spanish cinema & series", objective: "Discuss your favorite shows and recommend a film." },
+        { title: "Expresiones con historia", translation: "Everyday cultural idioms", objective: "Use common idiomatic phrases naturally in conversation." },
+      ],
+    },
+  },
   // English fallback seeds
   {
     id: "seed-topic-en-standup",

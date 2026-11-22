@@ -23,7 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.CoachNote
@@ -35,7 +38,9 @@ import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
 import com.zuno.ai.ui.components.ZunoIcon
+import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
+import com.zuno.ai.ui.components.ZunoIconButtonStyle
 import com.zuno.ai.ui.components.ZunoListGroup
 import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoMenuAction
@@ -63,6 +68,9 @@ fun LessonEvaluationScreen(
     lessonPositionFallback: Int,
     totalLessonsFallback: Int,
     busy: Boolean,
+    savedPhrases: Set<String> = emptySet(),
+    onToggleSavePhrase: (String) -> Unit = {},
+    onSaveAllPhrases: (List<String>) -> Unit = {},
     onPlaySample: (String) -> Unit,
     onNextLesson: (String) -> Unit,
     onPracticeAgain: () -> Unit,
@@ -172,14 +180,35 @@ fun LessonEvaluationScreen(
 
             // Practiced phrases
             if (evaluation.phraseResults.isNotEmpty()) {
+                val allSaved = evaluation.phraseResults.all { it.phrase.trim() in savedPhrases }
                 Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                    ZunoSectionHeader(title = "Practiced phrases")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ZunoSectionHeader(
+                            title = "Practiced phrases",
+                            modifier = Modifier.weight(1f),
+                        )
+                        ZunoIconButton(
+                            icon = if (allSaved) R.drawable.zuno_ic_t_check_circle else R.drawable.zuno_ic_bookmark,
+                            onClick = { onSaveAllPhrases(evaluation.phraseResults.map { it.phrase }) },
+                            style = ZunoIconButtonStyle.Ghost,
+                            size = ZunoIconButtonSize.Small,
+                            tint = if (allSaved) ZunoColors.StatusSpeaking else ZunoColors.IconPrimary,
+                            contentDescription = stringResource(R.string.topics_eval_save_all),
+                        )
+                    }
                     ZunoListGroup {
                         evaluation.phraseResults.forEachIndexed { index, item ->
                             if (index > 0) ZunoGlassHairline()
+                            val isSaved = item.phrase.trim() in savedPhrases
                             PhraseRow(
                                 item = item,
+                                saved = isSaved,
                                 onListen = { onPlaySample(item.phrase) },
+                                onToggleSave = { onToggleSavePhrase(item.phrase) },
                             )
                         }
                     }
@@ -299,15 +328,20 @@ private fun CoachNoteCard(
 @Composable
 private fun PhraseRow(
     item: PhraseResult,
+    saved: Boolean,
     onListen: () -> Unit,
+    onToggleSave: () -> Unit,
 ) {
     val isMastered = item.isMastered
+    val saveDesc = stringResource(
+        if (saved) R.string.topics_eval_saved_phrase else R.string.topics_eval_save_phrase,
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(role = Role.Button, onClick = onListen)
-            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -346,5 +380,20 @@ private fun PhraseRow(
         )
 
         ZunoIcon(R.drawable.zuno_ic_volume_secondary, 16.dp)
+
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onToggleSave)
+                .semantics { contentDescription = saveDesc },
+            contentAlignment = Alignment.Center,
+        ) {
+            ZunoIcon(
+                icon = if (saved) R.drawable.zuno_ic_t_check_circle else R.drawable.zuno_ic_bookmark,
+                size = 16.dp,
+                tint = if (saved) ZunoColors.StatusSpeaking else ZunoColors.IconSecondary,
+            )
+        }
     }
 }

@@ -146,10 +146,11 @@ class ZunoApi(
         return send("POST", "/topics", body).getJSONObject("topic").toTopicDetail()
     }
 
-    suspend fun discoverTopics(category: String = "all", query: String = ""): DiscoverTopicsResult {
+    suspend fun discoverTopics(category: String = "all", query: String = "", level: String = "all"): DiscoverTopicsResult {
         val encodedQ = java.net.URLEncoder.encode(query, "UTF-8")
         val encodedCat = java.net.URLEncoder.encode(category, "UTF-8")
-        val json = get("/topics/discover?category=$encodedCat&q=$encodedQ")
+        val encodedLevel = java.net.URLEncoder.encode(level, "UTF-8")
+        val json = get("/topics/discover?category=$encodedCat&q=$encodedQ&level=$encodedLevel")
         return DiscoverTopicsResult(
             official = json.listOf("official").map { it.toDiscoverTopic() },
             community = json.listOf("community").map { it.toDiscoverTopic() },

@@ -28,6 +28,22 @@ from voices import (
 
 logger = logging.getLogger("voice-agent.lesson")
 
+NATIVE_QUESTION_CUES = (
+    "what does", "what is", "what's", "what means", "mean in", "meaning of",
+    "how do i", "how do you", "how to say", "why is", "why do", "can you explain",
+    "explain", "translate", "help me", "i don't understand", "didn't catch",
+    "que significa", "qué significa", "como se dice", "cómo se dice", "por qué",
+)
+REPEAT_CUES = ("repeat", "say that again", "one more time", "say it again", "repite", "otra vez")
+SLOW_CUES = ("slower", "slow down", "slowly", "more slowly", "más lento", "despacio")
+HINT_CUES = ("give me a hint", "hint", "first word", "a clue", "pista")
+
+
+def _compute_blank_lengths(phrase: str) -> list[int]:
+    words = [re.sub(r"[^\w]", "", w) for w in (phrase or "").split()]
+    lengths = [max(2, min(8, len(w))) for w in words if w]
+    return lengths[:5] if lengths else [5, 4, 6]
+
 
 def _normalize_tokens(text: str) -> list[str]:
     folded = unicodedata.normalize("NFD", text.lower())
@@ -182,6 +198,8 @@ class LessonOrchestrator:
         self.phrase_results: dict[str, str] = {}
         self.recast_notes: list[dict[str, str]] = []
         self.last_tutor_line: str = ""
+        self.last_tutor_turn_id: str = ""
+        self._turn_seq: int = 0
         self.last_prompt_lang: str = self.target_lang
         self.last_prompt_text: str = ""
         self.last_prompt_clauses: list[SpeechClause] = []
@@ -193,6 +211,66 @@ class LessonOrchestrator:
         )
         self._speech_lock = asyncio.Lock()
         self._genai_client: genai.Client | None = None
+
+    def _next_turn_id(self, prefix: str = "les") -> str:
+        self._turn_seq += 1
+        return f"{prefix}-{self._turn_seq}-{int(time.time() * 1000)}"
+
+    async def _emit_lesson_turn(
+        self,
+        *,
+        speaker: str,
+        sender_label: str,
+        text: str,
+        translation: str | None = None,
+        actions: list[str] | None = None,
+        turn_id: str | None = None,
+    ) -> str:
+        tid = turn_id or self._next_turn_id("agent" if speaker == "agent" else "user")
+        if speaker == "agent":
+            self.last_tutor_turn_id = tid
+        await self.broadcast({
+            "type": "lesson_turn",
+            "id": tid,
+            "speaker": speaker,
+            "senderLabel": sender_label,
+            "text": text,
+            "translation": translation,
+            "actions": actions or [],
+        })
+        return tid
+
+    def _roleplay_goals_payload(self) -> list[dict[str, Any]]:
+        goals = self.roleplay_goals or [{"id": "goal_1", "label": "Complete task", "description": "Complete the conversation"}]
+        first_incomplete_found = False
+        result: list[dict[str, Any]] = []
+        for idx, g in enumerate(goals):
+            gid = str(g.get("id") or f"goal_{idx + 1}")
+            done = gid in self.completed_goal_ids
+            is_current = False
+            if not done and not first_incomplete_found:
+                is_current = True
+                first_incomplete_found = True
+            sample = ""
+            if idx < len(self.target_phrases):
+                sample = str(self.target_phrases[idx].get("phrase") or "")
+            elif self.target_phrases:
+                sample = str(self.target_phrases[-1].get("phrase") or "")
+            result.append({
+                "id": gid,
+                "index": idx + 1,
+                "label": str(g.get("label") or f"Goal {idx + 1}"),
+                "description": str(g.get("description") or g.get("label") or ""),
+                "samplePhrase": sample,
+                "completed": done,
+                "current": is_current,
+            })
+        return result
+
+    def _current_goal_progress(self) -> tuple[int, int]:
+        total = max(1, len(self.roleplay_goals))
+        done = len(self.completed_goal_ids)
+        return min(total, done + 1), total
 
     @property
     def cue_lang(self) -> str:
@@ -327,7 +405,7 @@ class LessonOrchestrator:
         except Exception:
             pass
 
-    def _teach_card_payload(self, item: dict[str, Any], include_setup: bool = True) -> dict[str, Any]:
+    def _teach_card_payload(self, item: dict[str, Any], include_setup: bool = True, goal_label: str = "") -> dict[str, Any]:
         return {
             "kind": "teach_card",
             "setupPrompt": item.get("setupNative", "") if include_setup else "",
@@ -337,6 +415,7 @@ class LessonOrchestrator:
             "syllables": item.get("syllables", ""),
             "cue": item.get("pronunciationCue", ""),
             "chunks": item.get("chunks") or [],
+            "goalLabel": goal_label,
         }
 
     # ── Stage Transitions ─────────────────────────────────────────────────────
@@ -361,6 +440,10 @@ class LessonOrchestrator:
         total = len(self.target_phrases)
         setup = item.get("setupNative") or f"Listen to phrase {idx + 1}:"
         phrase = item.get("phrase", "")
+        translation = item.get("translation", "")
+        goal_label = ""
+        if self.roleplay_goals:
+            goal_label = str(self.roleplay_goals[min(idx, len(self.roleplay_goals) - 1)].get("label") or "")
 
         await self.broadcast({
             "type": "lesson_stage",
@@ -369,11 +452,19 @@ class LessonOrchestrator:
                 "icon": "book-open",
                 "role": "Learn",
                 "goal": f"Phrase {idx + 1} of {total}",
+                "contextNote": goal_label,
             },
-            "card": self._teach_card_payload(item, include_setup=True),
+            "card": self._teach_card_payload(item, include_setup=True, goal_label=goal_label),
             "recallPrompt": None,
             "rescueChips": [],
         })
+        await self._emit_lesson_turn(
+            speaker="agent",
+            sender_label="Sofía · Speaking",
+            text=phrase,
+            translation=None if self.teach_in_target else translation,
+            actions=["listen_normal", "listen_slow"],
+        )
 
         clauses: list[SpeechClause] = []
         if not self.teach_in_target and setup:
@@ -395,6 +486,8 @@ class LessonOrchestrator:
         self.phrase_idx = idx
         self._set_endpointing_delay(0.8)
         item = self.target_phrases[idx]
+        focus_word = item.get("focusWord", "")
+        stress_note = f"Stress “{focus_word}”" if focus_word else (item.get("pronunciationCue") or "Pronunciation drill")
 
         await self.broadcast({
             "type": "lesson_stage",
@@ -403,11 +496,18 @@ class LessonOrchestrator:
                 "icon": "waveform",
                 "role": "Shadow",
                 "goal": "Pronunciation drill",
+                "contextNote": stress_note,
             },
-            "card": self._teach_card_payload(item, include_setup=False),
+            "card": self._teach_card_payload(item, include_setup=False, goal_label=stress_note),
             "recallPrompt": None,
             "rescueChips": [],
         })
+        if self.last_tutor_turn_id:
+            await self.broadcast({
+                "type": "lesson_turn_update",
+                "id": self.last_tutor_turn_id,
+                "senderLabel": "Sofía",
+            })
 
     async def _advance_after_phrase(self) -> None:
         next_idx = self.phrase_idx + 1
@@ -441,6 +541,7 @@ class LessonOrchestrator:
                 "icon": "sparkles",
                 "role": "Build",
                 "goal": "Combine pattern",
+                "contextNote": "Pattern drill",
             },
             "card": {
                 "kind": "scaffold_card",
@@ -452,6 +553,12 @@ class LessonOrchestrator:
             "recallPrompt": None,
             "rescueChips": ["hint", "reveal", "slow"],
         })
+        await self._emit_lesson_turn(
+            speaker="agent",
+            sender_label="Sofía",
+            text=prompt_native,
+            actions=["hint", "reveal"],
+        )
 
         if not self.teach_in_target and clean_meaning and new_word:
             clean_prompt = ensure_terminal_punct(prompt_native)
@@ -480,6 +587,8 @@ class LessonOrchestrator:
 
         item = self.recall_prompts[idx]
         cue = ensure_terminal_punct(item.get("situationNative", ""))
+        targets = item.get("expectedTargets") or []
+        blank_lengths = _compute_blank_lengths(targets[0] if targets else "")
 
         await self.broadcast({
             "type": "lesson_stage",
@@ -488,14 +597,22 @@ class LessonOrchestrator:
                 "icon": "rotate-ccw",
                 "role": "Recall",
                 "goal": "Speak from memory",
+                "contextNote": "Target hidden",
             },
             "card": None,
             "recallPrompt": {
                 "eyebrow": f"Say in {self.target_lang_name}",
                 "cue": cue,
+                "blankLengths": blank_lengths,
             },
             "rescueChips": ["first_word", "reveal", "slow"],
         })
+        await self._emit_lesson_turn(
+            speaker="agent",
+            sender_label="Sofía",
+            text=cue,
+            actions=["first_word", "reveal"],
+        )
 
         await self._speak_mono(cue, language=self.cue_lang, speed=1.0)
 
@@ -525,6 +642,7 @@ class LessonOrchestrator:
             },
             "card": None,
             "recallPrompt": None,
+            "roleplayGoals": self._roleplay_goals_payload(),
             "rescueChips": ["hint", "translate", "slow"],
         })
 
@@ -539,12 +657,102 @@ class LessonOrchestrator:
 
     # ── Turn Handling for Stages 03b / 03c / 03d ─────────────────────────────
 
+    async def _classify_learner_intent(self, transcript: str) -> str:
+        low = transcript.strip().lower()
+        if not low:
+            return "attempt"
+        if any(cue in low for cue in REPEAT_CUES):
+            return "repeat"
+        if any(cue in low for cue in SLOW_CUES):
+            return "slow"
+        if any(cue in low for cue in HINT_CUES):
+            return "hint"
+        if self.native_lang != self.target_lang:
+            looks_like_question = (
+                any(cue in low for cue in NATIVE_QUESTION_CUES)
+                or (
+                    "?" in low
+                    and any(
+                        w in low.split()
+                        for w in ("what", "why", "how", "when", "does", "do", "is", "can", "mean", "means")
+                    )
+                )
+            )
+            if looks_like_question:
+                res = await self._quick_llm_json(
+                    f"The learner is in a {self.target_lang_name} lesson (native language: {self.native_lang_name}). "
+                    f"Current target phrase: '{self._current_target_phrase()}'. "
+                    f"Learner said: '{transcript}'. "
+                    'Is this a question/request to the tutor in their native language, or an attempt at the target phrase? '
+                    'Return JSON: {"intent": "question" | "attempt"}'
+                )
+                if str(res.get("intent") or "").lower() == "question":
+                    return "question"
+        return "attempt"
+
+    async def _answer_bilingual_question(self, question_text: str) -> None:
+        await self._emit_lesson_turn(
+            speaker="user",
+            sender_label="You",
+            text=question_text,
+        )
+        current_target = self._current_target_phrase()
+        res = await self._quick_llm_json(
+            f"You are Sofía, a warm bilingual {self.target_lang_name} tutor speaking with a {self.native_lang_name} learner "
+            f"(level {self.level}). Current lesson prompt/phrase: '{current_target}'. "
+            f"Learner asked: '{question_text}'. "
+            f"Answer concisely in 1–2 short spoken sentences: explain in {self.native_lang_name} and pronounce any "
+            f"{self.target_lang_name} words/examples in separate target clauses. "
+            'Return JSON: {"clauses": [{"text": string, "lang": "native" | "target"}]}'
+        )
+        raw_clauses = res.get("clauses")
+        clauses: list[SpeechClause] = []
+        if isinstance(raw_clauses, list):
+            for item in raw_clauses[:4]:
+                if not isinstance(item, dict):
+                    continue
+                t = str(item.get("text") or "").strip()
+                if not t:
+                    continue
+                lang_flag = str(item.get("lang") or "native").lower()
+                lang_code = self.target_lang if lang_flag == "target" else self.native_lang
+                clauses.append(SpeechClause(text=t, language=lang_code, speed=1.0, pause_after_ms=140))
+
+        if not clauses:
+            clauses = [
+                SpeechClause(text="Here is how that sounds:", language=self.native_lang, speed=1.0, pause_after_ms=180),
+                SpeechClause(text=current_target or "Let's try together.", language=self.target_lang if current_target else self.native_lang, speed=self.model_speed),
+            ]
+        display = " ".join(c.text for c in clauses)
+        await self._emit_lesson_turn(
+            speaker="agent",
+            sender_label="Sofía",
+            text=display,
+            actions=["listen_normal", "listen_slow"] if current_target else [],
+        )
+        await self._speak_clauses(clauses, display_text=display)
+
     async def handle_structured_user_turn(self, transcript: str, confidence: float | None) -> None:
         if self.completed or self.wrapping_up:
             return
         if self.stage == "teach_model":
             # Learner jumped in early and shadowed right away — score it as shadow_drill!
             self.stage = "shadow_drill"
+
+        intent = await self._classify_learner_intent(transcript)
+        if intent == "repeat":
+            await self.handle_client_action("listen_normal")
+            return
+        if intent == "slow":
+            await self.handle_client_action("listen_slow")
+            return
+        if intent == "hint":
+            action = "first_word" if self.stage == "active_recall" else "hint"
+            await self.handle_client_action(action)
+            return
+        if intent == "question":
+            await self._answer_bilingual_question(transcript)
+            return
 
         if self.stage == "shadow_drill":
             await self._handle_shadow_turn(transcript, confidence)
@@ -578,6 +786,12 @@ class LessonOrchestrator:
         self.pronunciation_scores.append(score)
         if self.lowest_focus is None or score < self.lowest_focus[0]:
             self.lowest_focus = (score, item)
+
+        await self._emit_lesson_turn(
+            speaker="user",
+            sender_label=f"You · {score}% match",
+            text=f"“{transcript}”",
+        )
 
         if score >= 85:
             status = "practice" if phrase in self.revealed_phrases else "mastered"
@@ -702,12 +916,22 @@ class LessonOrchestrator:
             self.pronunciation_scores.append(max(score, 85))
             status = "practice" if expected in self.revealed_phrases else "mastered"
             self.phrase_results[expected] = status
+            await self._emit_lesson_turn(
+                speaker="user",
+                sender_label="You · Speaking",
+                text=f"“{transcript}”",
+            )
             praise = PRAISE_BY_LANG.get(self.target_lang, PRAISE_BY_LANG["en"])
             await self._speak_mono(f"{praise} {expected}", language=self.target_lang, speed=1.0)
             await asyncio.sleep(0.3)
             await self._advance_after_block()
             return
 
+        await self._emit_lesson_turn(
+            speaker="user",
+            sender_label="You · Speaking",
+            text=f"“{transcript}”",
+        )
         self.block_retries += 1
         if self.block_retries <= 1:
             if not self.teach_in_target and item.get("stemHint") and new_word:
@@ -755,6 +979,11 @@ class LessonOrchestrator:
 
         if passed:
             self.pronunciation_scores.append(max(best_score, 86))
+            await self._emit_lesson_turn(
+                speaker="user",
+                sender_label="You · Spoken recall",
+                text=f"“{transcript}”",
+            )
             if primary_target:
                 status = "practice" if primary_target in self.revealed_phrases else "mastered"
                 self.phrase_results.setdefault(primary_target, status)
@@ -765,6 +994,11 @@ class LessonOrchestrator:
             await self._advance_after_recall()
             return
 
+        await self._emit_lesson_turn(
+            speaker="user",
+            sender_label="You · Spoken recall",
+            text=f"“{transcript}”",
+        )
         self.recall_retries += 1
         if self.recall_retries <= 1:
             first_word = item.get("firstWordHint") or (primary_target.split(" ")[0] + "…" if primary_target else "")
@@ -833,12 +1067,28 @@ class LessonOrchestrator:
                 },
                 "card": None,
                 "recallPrompt": None,
+                "roleplayGoals": self._roleplay_goals_payload(),
                 "rescueChips": ["hint", "translate", "slow"],
             })
             return (
                 f"Goal marked complete. Stay in character as {ai_role} in {self.target_lang_name} "
                 f"(1–2 short sentences, include a realistic detail if natural) to prompt '{next_goal.get('description', next_goal.get('label', ''))}'."
             )
+
+        # All roleplay goals completed -> broadcast final completed pill/goals and wrap up
+        await self.broadcast({
+            "type": "lesson_stage",
+            "stage": "roleplay",
+            "pill": {
+                "icon": "users",
+                "role": ai_role,
+                "goal": f"Goal {total_goals} of {total_goals} · Complete",
+            },
+            "card": None,
+            "recallPrompt": None,
+            "roleplayGoals": self._roleplay_goals_payload(),
+            "rescueChips": ["hint", "translate", "slow"],
+        })
 
         # All roleplay goals completed -> schedule wrap-up after final reply finishes playing
         if not self.wrapping_up:
@@ -1066,6 +1316,12 @@ class LessonOrchestrator:
                     "action": "translate",
                     "text": translation,
                 })
+                if self.last_tutor_turn_id:
+                    await self.broadcast({
+                        "type": "lesson_turn_update",
+                        "id": self.last_tutor_turn_id,
+                        "translation": translation,
+                    })
 
     def _current_target_phrase(self) -> str:
         if self.stage in ("teach_model", "shadow_drill") and self.phrase_idx < len(self.target_phrases):
@@ -1106,17 +1362,54 @@ class LessonAgent(Agent):
         )
         return (
             f"You are playing the role of '{ai_role}' in a live spoken {orch.target_lang_name} roleplay "
-            f"(learner CEFR level: {orch.level}).\n"
+            f"(learner CEFR level: {orch.level}, native language: {orch.native_lang_name}).\n"
             f"Scene & setting: {setting}\n"
             f"Learner goals to complete:\n{goals_desc}\n\n"
             "STRICT RULES:\n"
             f"1. Speak 100% in {orch.target_lang_name} in 1–2 short, natural conversational sentences (under 140 chars).\n"
-            "2. Stay 100% in character. NEVER break character to explain grammar rules if the learner's meaning is understandable.\n"
-            "3. Implicit recasting: if the learner says something slightly unnatural or ungrammatical, naturally echo the idiomatic phrasing in your reply and record it via `mark_roleplay_goal_complete`.\n"
-            "4. Include one realistic detail or mild curveball (e.g., bus number, platform, price, or stop count) so the learner listens actively.\n"
-            "5. Whenever the learner satisfies a goal, IMMEDIATELY call `mark_roleplay_goal_complete` with that `goal_id`.\n"
-            "6. NEVER output markdown, asterisks, bullets, emojis, or stage directions."
+            f"2. If the learner explicitly asks a question in {orch.native_lang_name} (e.g. 'what does X mean?' or 'how do I say…?'), "
+            f"briefly answer in [{orch.native_lang}]...[/{orch.native_lang}] and model the [{orch.target_lang}]...[/{orch.target_lang}] phrase, then stay in character.\n"
+            "3. Otherwise stay 100% in character. NEVER break character to lecture about grammar.\n"
+            "4. Implicit recasting: if the learner says something slightly unnatural or ungrammatical, naturally echo the idiomatic phrasing in your reply and record it via `mark_roleplay_goal_complete`.\n"
+            "5. Include one realistic detail or mild curveball (e.g., bus number, platform, price, or stop count) so the learner listens actively.\n"
+            "6. Whenever the learner satisfies a goal, IMMEDIATELY call `mark_roleplay_goal_complete` with that `goal_id`.\n"
+            "7. NEVER output markdown, asterisks, bullets, emojis, or stage directions."
         )
+
+    async def transcription_node(self, text, model_settings):
+        async for delta in text:
+            if isinstance(delta, str):
+                yield strip_lang_tags(delta)
+            else:
+                yield delta
+
+    async def tts_node(self, text, model_settings):
+        orch = self.orchestrator
+        chunks: list[str] = []
+        async for delta in text:
+            chunks.append(delta)
+        full_text = "".join(chunks)
+
+        if "[" in full_text and (
+            f"[{orch.native_lang}]" in full_text
+            or f"[{orch.target_lang}]" in full_text
+            or "<lang=" in full_text
+        ):
+            segments = segment_bilingual_text(
+                full_text,
+                native_lang=orch.native_lang,
+                target_lang=orch.target_lang,
+                default_lang=orch.target_lang,
+            )
+            async for frame in synthesize_bilingual_segments(orch.synthesizer, segments):
+                yield frame
+        else:
+            async def _forward():
+                for c in chunks:
+                    yield c
+
+            async for frame in Agent.default.tts_node(self, _forward(), model_settings):
+                yield frame
 
     async def activate_roleplay_instructions(self) -> None:
         await self.update_instructions(self._build_roleplay_instructions())
@@ -1139,6 +1432,16 @@ class LessonAgent(Agent):
         if orch.stage != "roleplay":
             asyncio.create_task(orch.handle_structured_user_turn(text, confidence))
             raise StopResponse()
+
+        if text:
+            goal_num, total_goals = orch._current_goal_progress()
+            asyncio.create_task(
+                orch._emit_lesson_turn(
+                    speaker="user",
+                    sender_label=f"You · Speaking (Goal {goal_num} of {total_goals})",
+                    text=f"“{text}”",
+                )
+            )
 
         # In roleplay (03e/03f): cap runaway roleplays after 6 learner turns so the 5-min lesson always concludes cleanly.
         orch.roleplay_turns += 1
