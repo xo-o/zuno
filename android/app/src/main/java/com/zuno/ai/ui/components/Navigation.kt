@@ -46,20 +46,20 @@ import com.zuno.ai.ui.theme.zunoRecessedTrack
 
 private val TopBarHeight = 56.dp
 
-/** Top Bar — Type=Back (auth flow). Outline back button. */
+/** Top Bar — Type=Back (`8:63`). 56dp height, Ghost Large back button. */
 @Composable
 fun ZunoBackTopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(start = ZunoSpace.s20, end = ZunoSpace.s12),
+            .padding(horizontal = ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(
-            icon = R.drawable.zuno_ic_chevron_left,
+            icon = R.drawable.zuno_ic_arrow_left,
             onClick = onBack,
-            style = ZunoIconButtonStyle.Outline,
+            style = ZunoIconButtonStyle.Ghost,
             size = ZunoIconButtonSize.Large,
             contentDescription = "Back",
         )
@@ -155,8 +155,8 @@ fun ZunoActionTopBar(
 }
 
 /**
- * Top Bar · Section (`2653:3340`): 64dp header with leading arrow-left back button,
- * Title/Large title, optional search ghost button, and optional circular glass `+` button.
+ * Top Bar · Section (`2653:3340`): 56dp header with Ghost Large arrow-left back button,
+ * Header/Title (20sp Regular), and Ghost Large trailing search and `+` buttons.
  */
 @Composable
 fun ZunoSectionTopBar(
@@ -174,26 +174,27 @@ fun ZunoSectionTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .padding(start = ZunoSpace.s12, end = ZunoSpace.s24),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+            .height(TopBarHeight)
+            .padding(horizontal = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(
             icon = R.drawable.zuno_ic_arrow_left,
             onClick = onBack,
+            style = ZunoIconButtonStyle.Ghost,
             size = ZunoIconButtonSize.Large,
             contentDescription = "Back",
         )
         EllipsizedText(
             text = title,
-            style = ZunoType.TitleLarge,
+            style = ZunoType.HeaderTitle,
             color = ZunoColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
         if (showSearch || showAdd) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (showSearch) {
@@ -201,7 +202,7 @@ fun ZunoSectionTopBar(
                         icon = if (searchActive) R.drawable.zuno_ic_t_x else R.drawable.zuno_ic_t_search,
                         onClick = onSearchToggle,
                         style = ZunoIconButtonStyle.Ghost,
-                        size = ZunoIconButtonSize.Medium,
+                        size = ZunoIconButtonSize.Large,
                         tint = ZunoColors.IconPrimary,
                         contentDescription = searchDescription,
                     )
@@ -210,8 +211,8 @@ fun ZunoSectionTopBar(
                     ZunoIconButton(
                         icon = R.drawable.zuno_ic_plus,
                         onClick = onAdd,
-                        style = ZunoIconButtonStyle.Strong,
-                        size = ZunoIconButtonSize.Medium,
+                        style = ZunoIconButtonStyle.Ghost,
+                        size = ZunoIconButtonSize.Large,
                         contentDescription = addDescription,
                     )
                 }
@@ -269,7 +270,7 @@ fun ZunoSegmentedTabs(
     }
 }
 
-/** Top Bar — Type=Menu + Selector. Home: menu plus the "Spanish · B1" pill that opens the learning sheet. */
+/** Top Bar — Type=Menu + Selector (`8:24`). Home: Ghost menu button plus borderless 32dp subtle pill. */
 @Composable
 fun ZunoSelectorTopBar(
     selector: String,
@@ -281,12 +282,12 @@ fun ZunoSelectorTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(start = ZunoSpace.s12, end = ZunoSpace.s20),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(R.drawable.zuno_ic_menu, onMenu, size = ZunoIconButtonSize.Large, contentDescription = "Menu")
-        // The 34dp glass pill sits inside a 44dp-tall tap area.
+        // The 32dp borderless surface/subtle pill sits inside a 44dp-tall tap area.
         Box(
             modifier = Modifier
                 .height(ZunoIconButtonSize.Large.button)
@@ -296,9 +297,9 @@ fun ZunoSelectorTopBar(
         ) {
             Box(
                 modifier = Modifier
-                    .height(34.dp)
-                    .zunoGlassSubtle(CircleShape)
-                    .padding(horizontal = ZunoSpace.s12),
+                    .height(32.dp)
+                    .zunoGlassSubtle(CircleShape, borderBrush = null)
+                    .padding(horizontal = ZunoSpace.s14),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(selector, style = ZunoType.LabelSmall, color = ZunoColors.TextPrimary, maxLines = 1)

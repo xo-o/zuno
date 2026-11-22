@@ -167,6 +167,7 @@ object ZunoType {
     val Display = style(FontWeight.SemiBold, 28, 34, -1f)
     val TitleLarge = style(FontWeight.SemiBold, 24, 30, -0.8f)
     val TitleMedium = style(FontWeight.SemiBold, 20, 26, -0.5f)
+    val HeaderTitle = style(FontWeight.Normal, 20, 26, -0.3f)
     val WebTitle = style(FontWeight.SemiBold, 22, 28, -0.4f)
     val Wordmark = TextStyle(
         fontFamily = Outfit,

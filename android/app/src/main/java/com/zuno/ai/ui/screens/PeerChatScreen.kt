@@ -345,12 +345,13 @@ private fun MemberTopBar(
             .fillMaxWidth()
             .height(56.dp)
             .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(
             icon = R.drawable.zuno_ic_arrow_left,
             onClick = onBack,
+            style = ZunoIconButtonStyle.Ghost,
             size = ZunoIconButtonSize.Large,
             contentDescription = stringResource(R.string.common_back),
         )
@@ -392,16 +393,21 @@ private fun MemberTopBar(
                 }
             }
         }
-        ZunoIconButton(
-            icon = R.drawable.zuno_ic_t_phone,
-            onClick = onStartCall,
-            style = ZunoIconButtonStyle.Strong,
-            size = ZunoIconButtonSize.Medium,
-            tint = ZunoColors.IconPrimary,
-            contentDescription = stringResource(R.string.member_invite_to_talk),
-        )
-        if (menu.isNotEmpty()) {
-            ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Large)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZunoIconButton(
+                icon = R.drawable.zuno_ic_t_phone,
+                onClick = onStartCall,
+                style = ZunoIconButtonStyle.Ghost,
+                size = ZunoIconButtonSize.Large,
+                tint = ZunoColors.IconPrimary,
+                contentDescription = stringResource(R.string.member_invite_to_talk),
+            )
+            if (menu.isNotEmpty()) {
+                ZunoOverflowMenu(menu, size = ZunoIconButtonSize.Large)
+            }
         }
     }
 }

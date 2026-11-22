@@ -154,8 +154,8 @@ fun ZunoExploreTopBar(
 }
 
 /**
- * Top Bar · Home (`7130:11697` in `3077:14335`):
- * 36dp circular menu button on left, Streak pill + Language·Level pill on right.
+ * Top Bar · Home (Sidebar) (`3095:3567`):
+ * 56dp header: Ghost Large (44dp) menu button on left, borderless 32dp subtle Streak + Language·Level pills on right.
  */
 @Composable
 fun ZunoSidebarHomeTopBar(
@@ -169,21 +169,18 @@ fun ZunoSidebarHomeTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = ZunoSpace.s24),
+            .height(56.dp)
+            .padding(start = ZunoSpace.s12, end = ZunoSpace.s20),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .zunoGlassSubtle(CircleShape)
-                .clickable(role = Role.Button, onClick = onMenuClick)
-                .semantics { contentDescription = "Open navigation menu" },
-            contentAlignment = Alignment.Center,
-        ) {
-            ZunoIcon(R.drawable.zuno_ic_menu, 18.dp, tint = ZunoColors.IconPrimary)
-        }
+        ZunoIconButton(
+            icon = R.drawable.zuno_ic_menu,
+            onClick = onMenuClick,
+            style = ZunoIconButtonStyle.Ghost,
+            size = ZunoIconButtonSize.Large,
+            contentDescription = "Open navigation menu",
+        )
         Row(
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             verticalAlignment = Alignment.CenterVertically,
@@ -197,10 +194,10 @@ fun ZunoSidebarHomeTopBar(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ZunoIcon(R.drawable.zuno_ic_flame, 14.dp, tint = ZunoColors.IconSecondary)
+                ZunoIcon(R.drawable.zuno_ic_flame, 15.dp, tint = ZunoColors.IconSecondary)
                 Text(
                     text = streakDays.toString(),
-                    style = ZunoType.FootnoteStrong.copy(fontSize = androidx.compose.ui.unit.TextUnit(12.5f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                    style = ZunoType.LabelSmall,
                     color = ZunoColors.TextPrimary,
                     maxLines = 1,
                 )
@@ -210,12 +207,12 @@ fun ZunoSidebarHomeTopBar(
                     .height(32.dp)
                     .zunoGlassSubtle(CircleShape, borderBrush = null)
                     .clickable(role = Role.Button, onClick = onLanguageClick)
-                    .padding(start = 11.dp, end = ZunoSpace.s12),
+                    .padding(horizontal = ZunoSpace.s12),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = languageLabel,
-                    style = ZunoType.FootnoteStrong.copy(fontSize = androidx.compose.ui.unit.TextUnit(12.5f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                    style = ZunoType.LabelSmall,
                     color = ZunoColors.TextPrimary,
                     maxLines = 1,
                 )

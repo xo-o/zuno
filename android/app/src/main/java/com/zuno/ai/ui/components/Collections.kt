@@ -58,7 +58,7 @@ import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.ui.theme.zunoRecessedTrack
 
-/** Top Bar — Type=Back + Title. 64dp, Title/Large, optional trailing action. */
+/** Top Bar — Type=Back + Title (`2063:1580`). 56dp, Header/Title (20sp Regular), Ghost Large actions. */
 @Composable
 fun ZunoBackTitleTopBar(
     title: String,
@@ -67,19 +67,24 @@ fun ZunoBackTitleTopBar(
     @DrawableRes trailingIcon: Int? = null,
     trailingDescription: String? = null,
     onTrailing: () -> Unit = {},
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(56.dp)
             .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(R.drawable.zuno_ic_arrow_left, onBack, size = ZunoIconButtonSize.Large, contentDescription = "Back")
-        EllipsizedText(title, ZunoType.TitleLarge, ZunoColors.TextPrimary, Modifier.weight(1f))
-        trailingIcon?.let {
-            ZunoIconButton(it, onTrailing, size = ZunoIconButtonSize.Large, contentDescription = trailingDescription)
+        EllipsizedText(title, ZunoType.HeaderTitle, ZunoColors.TextPrimary, Modifier.weight(1f))
+        if (trailing != null) {
+            trailing()
+        } else {
+            trailingIcon?.let {
+                ZunoIconButton(it, onTrailing, size = ZunoIconButtonSize.Large, contentDescription = trailingDescription)
+            }
         }
     }
 }
@@ -97,9 +102,9 @@ fun ZunoSearchTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(56.dp)
             .padding(horizontal = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(R.drawable.zuno_ic_arrow_left, onClose, size = ZunoIconButtonSize.Large, contentDescription = "Close search")

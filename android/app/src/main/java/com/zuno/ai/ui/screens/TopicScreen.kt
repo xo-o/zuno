@@ -82,15 +82,15 @@ fun TopicScreen(
             .zunoCanvasBackground()
             .statusBarsPadding(),
     ) {
-        Box {
-            ZunoBackTitleTopBar(title = "Topic", onBack = onBack)
-            if (topic != null && menu.isNotEmpty()) {
-                ZunoOverflowMenu(
-                    actions = menu,
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = ZunoSpace.s12),
-                )
-            }
-        }
+        ZunoBackTitleTopBar(
+            title = "Topic",
+            onBack = onBack,
+            trailing = if (topic != null && menu.isNotEmpty()) {
+                { ZunoOverflowMenu(actions = menu, size = ZunoIconButtonSize.Large) }
+            } else {
+                null
+            },
+        )
         if (topic == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 ZunoLoadState(error = null, onRetry = onRetry)
@@ -243,13 +243,11 @@ fun CommunityTopicPreviewScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        Box {
-            ZunoBackTitleTopBar(
-                title = stringResource(R.string.topics_preview_title),
-                onBack = onBack,
-            )
-            if (item != null) {
-                Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = ZunoSpace.s12)) {
+        ZunoBackTitleTopBar(
+            title = stringResource(R.string.topics_preview_title),
+            onBack = onBack,
+            trailing = if (item != null) {
+                {
                     ZunoIconButton(
                         icon = R.drawable.zuno_ic_t_share,
                         onClick = { onShare(item) },
@@ -258,8 +256,10 @@ fun CommunityTopicPreviewScreen(
                         contentDescription = stringResource(R.string.share_action),
                     )
                 }
-            }
-        }
+            } else {
+                null
+            },
+        )
 
         if (item == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
