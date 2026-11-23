@@ -57,6 +57,7 @@
     <string name="report_submit">Meldung senden</string>
     <string name="report_sent_toast">Danke — wir prüfen diesen Chat</string>
     <string name="session_kind_free_talk">Freies Sprechen</string>
+    <string name="free_talk_composer_placeholder">Frag alles oder übe auf %1$s…</string>
     <string name="session_kind_roleplay">Rollenspiel</string>
     <string name="session_kind_lesson">Lektion</string>
     <string name="session_kind_level_check">Einstufungstest</string>

@@ -1229,6 +1229,7 @@ function fallbackCoachPrompts(targetLanguage: string, partnerName?: string | nul
 }
 
 export async function generateCoachPrompts(params: {
+  mode?: "freetalk" | "peer";
   targetLanguage: string;
   nativeLanguage: string;
   level: string;
@@ -1238,16 +1239,27 @@ export async function generateCoachPrompts(params: {
 }) {
   const target = languageName(params.targetLanguage as LanguageCode);
   const native = languageName(params.nativeLanguage as any) || "English";
+  const isFreeTalk = (params.mode ?? (params.partnerName ? "peer" : "freetalk")) === "freetalk" && !params.partnerName;
   try {
     return await generateJson({
-      system: [
-        `You generate live conversation coaching prompts for a learner speaking ${target} (CEFR ${params.level}).`,
-        `Return 2 concise, natural ${target} phrases for each tab: "answers" (ways to respond), "followUps" (natural follow-up lines), and "questions" (questions to ask the other speaker).`,
-        `Every "translation" must be a crisp ${native} translation.`,
-      ].join(" "),
+      system: isFreeTalk
+        ? [
+            `You generate live Free Talk coaching cards for a ${native} speaker learning ${target} (CEFR ${params.level}).`,
+            `In Free Talk, the learner chats freely in ${native} or ${target}, asks how to say or pronounce ${target} words, and tries out ${target} phrases.`,
+            `Return 2 concise, natural ${target} phrases (suited to ${params.level}) for each tab so tapping a card lets them hear and practice authentic ${target} pronunciation:`,
+            `"answers": 2 natural ${target} expressions they can try saying right now;`,
+            `"followUps": 2 fun everyday topic starters in ${target} (travel, food, hobbies, culture);`,
+            `"questions": 2 practical ${target} phrases for asking how to pronounce/say something or slowing down.`,
+            `Every "translation" must be a crisp ${native} translation.`,
+          ].join(" ")
+        : [
+            `You generate live conversation coaching prompts for a learner speaking ${target} (CEFR ${params.level}).`,
+            `Return 2 concise, natural ${target} phrases for each tab: "answers" (ways to respond), "followUps" (natural follow-up lines), and "questions" (questions to ask the other speaker).`,
+            `Every "translation" must be a crisp ${native} translation.`,
+          ].join(" "),
       contents: [
         params.contextLabel ? `Context: ${params.contextLabel}` : "",
-        params.partnerName ? `Speaking with: ${params.partnerName}` : "Speaking with: Sofía (AI Tutor)",
+        params.partnerName ? `Speaking with: ${params.partnerName}` : "Speaking with: Sofía (AI Personal Coach — Free Talk)",
         params.lastLine ? `Last line heard: "${params.lastLine}"` : "",
       ]
         .filter(Boolean)

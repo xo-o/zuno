@@ -48,6 +48,7 @@ const endCallSchema = z.object({
 });
 
 const coachPromptsSchema = z.object({
+  mode: z.enum(["freetalk", "peer"]).optional(),
   targetLanguage: z.string().trim().min(2).max(16).optional(),
   contextLabel: z.string().trim().max(160).optional(),
   partnerName: z.string().trim().max(80).optional(),
@@ -143,6 +144,7 @@ export const chatRoutes = new Hono<AuthEnv>()
     const profile = await getProfile(c.get("user").id);
     const body = await parseBody(c, coachPromptsSchema);
     const prompts = await generateCoachPrompts({
+      mode: body.mode,
       targetLanguage: body.targetLanguage ?? profile.targetLanguage,
       nativeLanguage: profile.nativeLanguage,
       level: profile.level,

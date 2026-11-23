@@ -134,3 +134,45 @@ test("bilingual-tts: buildWavFromPcmSegments generates valid 44-byte WAV header 
   assert.equal(view.getUint16(34, true), 16); // 16 bit
   assert.equal(view.getUint32(40, true), 4800 + 4800 + 4800); // data length
 });
+
+test("bilingual-tts: Free Talk user-language default + slow pronunciation tags", () => {
+  const tagged =
+    '<lang code="en">You pronounce it</lang> <lang code="es">ferrocarril.</lang> <lang code="en">Slowly:</lang> <lang code="es" speed="slow">fe, rro, ca, rril.</lang>';
+  assert.equal(stripLangTags(tagged), "You pronounce it ferrocarril. Slowly: fe, rro, ca, rril.");
+
+  const segs = segmentBilingualText(tagged, {
+    nativeLanguage: "en",
+    targetLanguage: "es",
+    defaultLanguage: "en",
+  });
+  assert.deepEqual(
+    segs.map((s) => ({ lang: s.language, speed: s.speed })),
+    [
+      { lang: "en", speed: 1.0 },
+      { lang: "es", speed: 1.0 },
+      { lang: "en", speed: 1.0 },
+      { lang: "es", speed: 0.76 },
+    ],
+  );
+
+  // Free Talk untagged English with overlapping loan/function words ("no", "a") stays in English
+  const englishTurn = segmentBilingualText("No problem, tell me about a movie!", {
+    nativeLanguage: "en",
+    targetLanguage: "es",
+    defaultLanguage: "en",
+  });
+  assert.equal(englishTurn.length, 1);
+  assert.equal(englishTurn[0].language, "en");
+
+  // Free Talk untagged English embedding a quoted Spanish word routes the word to Spanish
+  const mixedQuote = segmentBilingualText('In Spain people usually say "vale" to mean okay.', {
+    nativeLanguage: "en",
+    targetLanguage: "es",
+    defaultLanguage: "en",
+  });
+  assert.equal(mixedQuote.length, 3);
+  assert.equal(mixedQuote[0].language, "en");
+  assert.equal(mixedQuote[1].language, "es");
+  assert.equal(mixedQuote[1].text, "vale");
+  assert.equal(mixedQuote[2].language, "en");
+});

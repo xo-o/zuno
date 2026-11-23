@@ -665,11 +665,26 @@ export type ConversationContext =
       material?: string | null;
     };
 
+function isUserLanguageFreeTalk(context: ConversationContext, profile: LearnerProfile): boolean {
+  return (
+    context.kind === "freetalk" &&
+    !profile.teachInTarget &&
+    profile.nativeLanguage !== profile.targetLanguage
+  );
+}
+
 function contextInstructions(context: ConversationContext, profile: LearnerProfile): string {
-  const { target } = names(profile);
+  const { target, native } = names(profile);
   switch (context.kind) {
     case "freetalk":
-      return `This is Free Talk: chat naturally about whatever the learner brings up, asking one follow-up question to keep them talking in ${target}.`;
+      if (isUserLanguageFreeTalk(context, profile)) {
+        return [
+          `This is Free Talk: an open, relaxed conversation with the learner's personal ${target} coach.`,
+          `Speak in ${native} by default so the learner can freely talk about ANY topic (daily life, travel, culture, work, hobbies, grammar, or vocabulary),`,
+          `ask how to say or pronounce words in ${target}, or switch into practicing ${variety(profile)} whenever they want.`,
+        ].join(" ");
+      }
+      return `This is Free Talk: chat naturally about whatever the learner brings up in ${target}, answering any vocabulary, pronunciation, or grammar questions along the way.`;
     case "levelcheck":
       return [
         `This is a 5-minute level check in ${target}. Ask one short question at a time, starting simple and getting harder`,
@@ -699,6 +714,22 @@ function contextInstructions(context: ConversationContext, profile: LearnerProfi
 
 function tutorSystem(context: ConversationContext, profile: LearnerProfile) {
   const { target, native } = names(profile);
+  if (isUserLanguageFreeTalk(context, profile)) {
+    return [
+      `You are Zuno (Sofía), a warm, knowledgeable personal ${target} coach and conversation partner.`,
+      learnerLine(profile),
+      contextInstructions(context, profile),
+      `Reply in ${native} by default (1–3 concise, natural sentences), putting any ${variety(profile)} words or example phrases in double quotes (e.g. "¿Cómo estás?") so spoken audio voices them in authentic ${target}.`,
+      `If the learner writes in ${target} or asks to practice in ${target}, reply in ${target} suited to CEFR ${profile.level} — and switch smoothly back to ${native} whenever they write in ${native} or ask a question.`,
+      `When the learner asks how to pronounce a ${target} word or phrase: include the exact ${target} word in double quotes, show the syllable breakdown with the stressed syllable in ALL CAPS separated by " · " (e.g. fe · rro · ca · RRIL), add 1 short sound/mouth cue in ${native}, and invite them to tap Listen to hear the exact pronunciation.`,
+      ...[scriptLine(profile)].filter((line) => line !== null),
+      profile.showTranslations
+        ? `"translation": if your reply is written primarily in ${target}, provide its natural ${native} translation; if your reply is already primarily in ${native}, return "" (empty string).`
+        : `"translation": empty string (the learner has translations turned off).`,
+      `"glossary": 0–2 entries like "para llevar — to go" for ${target} words/phrases mentioned in your reply (${target} — ${native}). Empty if none.`,
+    ].join("\n");
+  }
+
   return [
     `You are Zuno, a warm, patient ${target} tutor.`,
     learnerLine(profile),
@@ -732,7 +763,7 @@ export function generateOpening(context: ConversationContext, profile: LearnerPr
 }
 
 const replySchema = z.object({
-  feedback: z.string().min(1).max(120),
+  feedback: z.string().max(120),
   reply: z.string().min(1).max(600),
   translation: z.string().max(600),
   glossary: z.array(z.string().max(80)).max(2),
@@ -754,12 +785,22 @@ export function generateReply(options: {
 }) {
   const { target, native } = names(options.profile);
   const explain = explanationLanguage(options.profile);
+  const bilingualFreeTalk = isUserLanguageFreeTalk(options.context, options.profile);
+  const feedbackRule = bilingualFreeTalk
+    ? [
+        `"feedback": ONLY populate if the learner wrote or attempted ${target} in their LAST message — one short line (max ~70 chars, in ${explain}, quotes in ${target}, e.g. "Natural ${target} · Native tip: “¿Me pones un café…?”" or "Use “quiero” instead of “quero”").`,
+        `  If the learner wrote purely in ${native} (e.g. chatting about a topic or asking how to say/pronounce something), return "" (empty string). Never invent mistakes.`,
+      ].join("\n")
+    : [
+        `"feedback": one short line (max ~70 characters, in ${explain}, quotes in ${target}) about the learner's LAST message.`,
+        `  If it was correct and natural: e.g. "Natural ${target} · Native tip: “¿Me pones un café…?”".`,
+        `  If it had a mistake: name the fix, e.g. "Use “quiero” instead of “quero”". Never invent mistakes.`,
+      ].join("\n");
+
   return generateJson({
     system: [
       tutorSystem(options.context, options.profile),
-      `"feedback": one short line (max ~70 characters, in ${explain}, quotes in ${target}) about the learner's LAST message.`,
-      `  If it was correct and natural: e.g. "Natural ${target} · Native tip: “¿Me pones un café…?”".`,
-      `  If it had a mistake: name the fix, e.g. "Use “quiero” instead of “quero”". Never invent mistakes.`,
+      feedbackRule,
       `"objectiveMet": ${
         options.context.kind === "lesson"
           ? "true only when the learner has clearly and correctly demonstrated the lesson objective in this conversation."
@@ -767,7 +808,9 @@ export function generateReply(options: {
       }`,
       `"title": ${
         options.needsTitle
-          ? `a 2–4 word ${target} title for this conversation (e.g. "Pedir un café").`
+          ? bilingualFreeTalk
+            ? `a 2–4 word ${native} title summarizing this Free Talk (e.g. "Pronouncing rolling R", "Trip to Madrid").`
+            : `a 2–4 word ${target} title for this conversation (e.g. "Pedir un café").`
           : "empty string."
       }`,
       `"assessedLevel": ${
@@ -892,6 +935,23 @@ export function voiceInstructions(context: ConversationContext, profile: Learner
   const { target, native } = names(profile);
   const nativeCode = profile.nativeLanguage || "en";
   const targetCode = profile.targetLanguage || "es";
+
+  if (isUserLanguageFreeTalk(context, profile)) {
+    return [
+      `You are Zuno (Sofía), a warm, knowledgeable personal ${target} coach and conversation partner speaking live with the learner over a voice call.`,
+      learnerLine(profile),
+      contextInstructions(context, profile),
+      `Speak in ${native} wrapped in <lang code="${nativeCode}">...</lang> by default in 1–3 concise, natural sentences.`,
+      `Whenever you say any ${target} word, phrase, or sentence, wrap it in <lang code="${targetCode}">...</lang> using ${variety(profile)} vocabulary and pronunciation.`,
+      `When the learner asks how to pronounce a ${target} word or phrase: briefly explain the sound or stress tip in <lang code="${nativeCode}">...</lang>, model it naturally in <lang code="${targetCode}">...</lang>, then model it slowly in <lang code="${targetCode}" speed="slow">...</lang> and invite them to try saying it. Never write fake phonetic spellings.`,
+      `If the learner speaks in ${target} or asks to practice in ${target}, converse with them in <lang code="${targetCode}">...</lang> suited to level ${profile.level}, and switch smoothly back to <lang code="${nativeCode}">...</lang> whenever they speak ${native} or ask a question.`,
+      profile.strictMode
+        ? `When the learner tries speaking ${target} and makes a mistake, point out and model the exact correction clearly.`
+        : `When the learner tries speaking ${target} and makes a slip, warmly model the natural phrasing and keep the conversation flowing.`,
+      "Never use markdown, lists, emojis, romanization in parentheses, or stage directions.",
+    ].join("\n");
+  }
+
   return [
     `You are Zuno, a warm ${target} tutor speaking live with the learner over a voice call.`,
     learnerLine(profile),

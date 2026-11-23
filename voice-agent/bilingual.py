@@ -15,36 +15,66 @@ class SpeechSegment:
 SpeechClause = SpeechSegment
 
 _XML_LANG_TAG_RE = re.compile(
-    r'<lang(?:\s+code)?\s*=\s*["\']?([a-zA-Z_-]+)["\']?\s*>([\s\S]*?)</lang>',
+    r"<lang\b([^>]*)>([\s\S]*?)</lang>",
     re.IGNORECASE,
 )
 _BRACKET_LANG_TAG_RE = re.compile(
-    r'\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[/\1\]',
+    r"\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[/\1\]",
     re.IGNORECASE,
 )
 _COMBINED_LANG_TAG_RE = re.compile(
-    r'(?:<lang(?:\s+code)?\s*=\s*["\']?([a-zA-Z_-]+)["\']?\s*>([\s\S]*?)</lang>'
-    r'|\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[/\3\])',
+    r"(?:<lang\b([^>]*)>([\s\S]*?)</lang>"
+    r"|\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[/\3\])",
     re.IGNORECASE,
 )
 _STRAY_TAG_TOKEN_RE = re.compile(
-    r'(?:</?lang(?:\s+code\s*=\s*["\']?[a-zA-Z_-]*["\']?|\s*=\s*["\']?[a-zA-Z_-]*["\']?)?\s*>'
-    r'|\[/?[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])',
+    r"(?:</?lang\b[^>]*>|\[/?[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])",
+    re.IGNORECASE,
+)
+_ATTR_CODE_RE = re.compile(
+    r"""(?:code\s*=\s*|^=\s*)["']?([a-zA-Z]{2,3}(?:-[a-zA-Z0-9_-]+)?)["']?""",
+    re.IGNORECASE,
+)
+_ATTR_SPEED_RE = re.compile(
+    r"""speed\s*=\s*["']?([a-zA-Z0-9._-]+)["']?""",
     re.IGNORECASE,
 )
 _NON_LATIN_CHAR_RE = re.compile(
-    r'[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F'
-    r'\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]'
+    r"[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F"
+    r"\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]"
 )
 _STAGE_DIRECTION_RE = re.compile(
-    r'\[(?:pause|laughs?|sighs?|smiles?|chuckles?|clears throat|nods?)\]'
-    r'|\((?:pause|laughs?|sighs?|smiles?|chuckles?|clears throat|nods?)\)',
+    r"\[(?:pause|laughs?|sighs?|smiles?|chuckles?|clears throat|nods?)\]"
+    r"|\((?:pause|laughs?|sighs?|smiles?|chuckles?|clears throat|nods?)\)",
     re.IGNORECASE,
 )
 
 
+def _parse_xml_lang_attrs(attrs: str, default_lang: str, base_speed: float) -> tuple[str, float]:
+    attr_str = (attrs or "").strip()
+    m_code = _ATTR_CODE_RE.search(attr_str)
+    lang = (m_code.group(1) if m_code else default_lang).lower().split("-")[0]
+
+    speed = base_speed
+    m_speed = _ATTR_SPEED_RE.search(attr_str)
+    if m_speed:
+        raw_speed = m_speed.group(1).strip().lower()
+        if raw_speed in ("slow", "slower"):
+            speed = 0.76
+        elif raw_speed in ("fast", "faster"):
+            speed = 1.12
+        elif raw_speed == "normal":
+            speed = base_speed
+        else:
+            try:
+                speed = round(max(0.6, min(1.5, float(raw_speed))), 2)
+            except ValueError:
+                speed = base_speed
+    return lang, speed
+
+
 def strip_lang_tags(text: str) -> str:
-    """Strips `<lang code="en">...</lang>`, `<lang="en">...</lang>`, and `[en]...[/en]` tags."""
+    """Strips `<lang code="en" speed="slow">...</lang>`, `<lang="en">...</lang>`, and `[en]...[/en]` tags."""
     if not text:
         return ""
     cleaned = _XML_LANG_TAG_RE.sub(r"\2", text)
@@ -54,9 +84,9 @@ def strip_lang_tags(text: str) -> str:
 
 
 async def strip_lang_tags_stream(text_stream: AsyncIterable) -> AsyncIterator:
-    """Strips `<lang...>` and `[xx]` tags cleanly across arbitrary streaming LLM token boundaries."""
+    """Strips `<lang...>` (including attributes like `speed="slow"`) and `[xx]` tags across streaming chunks."""
     buf = ""
-    partial_re = re.compile(r"(?:<[^>]{0,40}|\[/?[a-zA-Z0-9_-]{0,8})$")
+    partial_re = re.compile(r"(?:<[^>]{0,64}|\[/?[a-zA-Z0-9_-]{0,8})$")
     async for delta in text_stream:
         if not isinstance(delta, str):
             if buf:
@@ -102,8 +132,8 @@ def strip_romanization(text: str) -> str:
     if not text:
         return ""
     non_latin_pattern = (
-        r'([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF])'
-        r'\s*\([A-Za-z0-9\s,.\'’\-–—]+\)'
+        r"([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF])"
+        r"\s*\([A-Za-z0-9\s,.\'’\-–—]+\)"
     )
     return re.sub(non_latin_pattern, r"\1", text).strip()
 
@@ -131,7 +161,11 @@ def ensure_terminal_punct(text: str, default_punct: str = ".") -> str:
 
 LEAD_IN_REGEX = re.compile(
     r"^(repeat after me|say after me|listen and repeat|to say this|to say|you can say|"
-    r"try saying|try asking|in english|that means|it means|say|listen|ask):?\s+",
+    r"try saying|try asking|in english|that means|it means|you pronounce it|pronounce it|say|listen|ask):?\s+",
+    re.IGNORECASE,
+)
+_NATIVE_GLOSS_PREFIX_RE = re.compile(
+    r"(?:means|literally|translates\s+to|meaning|as\s+in\s+english)\s*:?\s*$",
     re.IGNORECASE,
 )
 
@@ -141,6 +175,7 @@ FUNCTION_WORDS: dict[str, set[str]] = {
         "say", "after", "repeat", "me", "listen", "this", "that", "you", "your", "with",
         "now", "ask", "if", "please", "means", "mean", "word", "phrase", "try", "can",
         "how", "what", "when", "where", "why", "here", "sure", "let's", "lets", "don't", "dont",
+        "pronounce", "sound", "sounds", "talk", "about", "anything", "today", "would", "like",
     },
     "es": {
         "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "en", "por", "para",
@@ -227,8 +262,9 @@ def detect_clause_language(
 ) -> str:
     """Determines whether an untagged single-sentence clause is in `target_lang` or `native_lang`.
 
-    Conservative by design: defaults strictly to `default_lang` (`target_lang`), only switching
-    to `native_lang` when clear script or lexical evidence shows a user-language explanation.
+    Symmetric & conservative: stays in `default_lang` (`target_lang` in Roleplay/Lessons,
+    `native_lang` in Free Talk) unless clear script, diacritic, or lexical dominance proves
+    the clause is in the other language.
     """
     norm_native = (native_lang or "en").lower().split("-")[0]
     norm_target = (target_lang or default_lang or "es").lower().split("-")[0]
@@ -246,19 +282,31 @@ def detect_clause_language(
     if native_is_non_latin and not target_is_non_latin:
         return norm_native if has_non_latin else norm_target
 
-    if _has_distinct_markers(clause_text, norm_target):
+    target_markers = _has_distinct_markers(clause_text, norm_target)
+    native_markers = _has_distinct_markers(clause_text, norm_native)
+    if target_markers and not native_markers:
         return norm_target
-    if _has_distinct_markers(clause_text, norm_native) and not _has_distinct_markers(clause_text, norm_target):
+    if native_markers and not target_markers:
         return norm_native
 
-    if LEAD_IN_REGEX.match(clause_text.strip()):
+    if norm_native == "en" and LEAD_IN_REGEX.match(clause_text.strip()):
         return norm_native
 
     words = clause_text.split()
     native_score = _score_language(words, norm_native)
     target_score = _score_language(words, norm_target)
 
-    # Require unmistakable native function-word dominance with zero target markers
+    if norm_default == norm_native:
+        # Free Talk (user-language default): require clear target-language dominance to switch
+        if target_score >= 2 and native_score == 0:
+            return norm_target
+        if target_score >= 3 and target_score >= native_score * 3:
+            return norm_target
+        if native_score >= 1:
+            return norm_native
+        return norm_default
+
+    # Roleplay / Lesson (target-language default): require clear native-language dominance to switch
     if native_score >= 2 and target_score == 0:
         return norm_native
     if native_score >= 3 and native_score >= target_score * 3:
@@ -299,6 +347,7 @@ def _segment_single_untagged_sentence(
         parts = re.split(r'(["“][^"”]{2,}?["”])', text)
         if len(parts) > 1:
             segments: list[SpeechSegment] = []
+            prev_outer = ""
             for p in parts:
                 p_trimmed = p.strip()
                 if not p_trimmed:
@@ -310,9 +359,11 @@ def _segment_single_untagged_sentence(
                 if is_double_quoted:
                     clean = re.sub(r'^[“"]|[”"]$', "", p_trimmed).strip()
                     if clean:
-                        q_lang = detect_clause_language(clean, norm_native, norm_target, norm_target)
+                        quote_default = norm_native if _NATIVE_GLOSS_PREFIX_RE.search(prev_outer) else norm_target
+                        q_lang = detect_clause_language(clean, norm_native, norm_target, quote_default)
                         segments.append(SpeechSegment(text=clean, language=q_lang, speed=speed))
                 else:
+                    prev_outer = p_trimmed
                     clean = re.sub(r":\s*$", "", p_trimmed).strip()
                     if clean:
                         outer_lang = detect_clause_language(clean, norm_native, norm_target, norm_native)
@@ -338,9 +389,9 @@ def _segment_single_untagged_sentence(
     is_non_latin = bool(_NON_LATIN_CHAR_RE.search(text))
     if is_non_latin and (norm_native not in _NON_LATIN_LANGS) != (norm_target not in _NON_LATIN_LANGS):
         script_pattern = re.compile(
-            r'([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+'
-            r'(?:[\s\u3000-\u303F\uFF00-\uFFEF\W]*'
-            r'[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+)*)'
+            r"([\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+"
+            r"(?:[\s\u3000-\u303F\uFF00-\uFFEF\W]*"
+            r"[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+)*)"
         )
         pieces = script_pattern.split(text)
         if len(pieces) > 1:
@@ -373,7 +424,7 @@ def segment_bilingual_text(
     default_lang: Optional[str] = None,
     speed: float = 1.0,
 ) -> list[SpeechSegment]:
-    """Splits a tagged or untagged utterance into SpeechSegments tagged with their Cartesia language."""
+    """Splits a tagged or untagged utterance into SpeechSegments tagged with their Cartesia language and speed."""
     text = strip_speech_artifacts(strip_romanization(raw_text)).strip()
     if not text:
         return []
@@ -382,7 +433,7 @@ def segment_bilingual_text(
     norm_target = (target_lang or default_lang or "es").lower().split("-")[0]
     norm_default = (default_lang or target_lang or native_lang or "es").lower().split("-")[0]
 
-    # 1. Explicit tags: <lang code="en">...</lang>, <lang="en">...</lang>, or [en]...[/en]
+    # 1. Explicit tags: <lang code="es" speed="slow">...</lang>, <lang="en">...</lang>, or [en]...[/en]
     matches = list(_COMBINED_LANG_TAG_RE.finditer(text))
     if matches:
         segments: list[SpeechSegment] = []
@@ -394,10 +445,16 @@ def segment_bilingual_text(
                     segments.extend(
                         segment_bilingual_text(prefix, norm_native, norm_target, norm_default, speed)
                     )
-            tag_lang = (m.group(1) or m.group(3)).lower().split("-")[0]
-            tag_content = _STRAY_TAG_TOKEN_RE.sub("", (m.group(2) or m.group(4))).strip()
+            if m.group(1) is not None:
+                tag_lang, tag_speed = _parse_xml_lang_attrs(m.group(1), norm_default, speed)
+                raw_body = m.group(2)
+            else:
+                tag_lang = m.group(3).lower().split("-")[0]
+                tag_speed = speed
+                raw_body = m.group(4)
+            tag_content = _STRAY_TAG_TOKEN_RE.sub("", raw_body).strip()
             if tag_content:
-                segments.append(SpeechSegment(text=tag_content, language=tag_lang, speed=speed))
+                segments.append(SpeechSegment(text=tag_content, language=tag_lang, speed=tag_speed))
             last_idx = m.end()
         if last_idx < len(text):
             suffix = _STRAY_TAG_TOKEN_RE.sub("", text[last_idx:]).strip()
@@ -427,7 +484,7 @@ def segment_bilingual_text(
 
 _SENTENCE_END_RE = re.compile(r"([.?!。？！]+)(?:\s+|$)")
 _OPEN_TAG_RE = re.compile(
-    r"(?:<lang(?:\s+code)?\s*=\s*[\"']?[a-zA-Z_-]+[\"']?\s*>|\[[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])",
+    r"(?:<lang\b[^>]*>|\[[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])",
     re.IGNORECASE,
 )
 
@@ -450,7 +507,7 @@ async def iter_streaming_clauses(
     norm_default = (default_lang or target_lang or "es").lower().split("-")[0]
 
     buf = ""
-    partial_tag_tail_re = re.compile(r"(?:<[^>]{0,40}|\[/?[a-zA-Z0-9_-]{0,8})$")
+    partial_tag_tail_re = re.compile(r"(?:<[^>]{0,64}|\[/?[a-zA-Z0-9_-]{0,8})$")
 
     async for delta in text_stream:
         if not isinstance(delta, str) or not delta:
@@ -458,7 +515,7 @@ async def iter_streaming_clauses(
         buf += delta
 
         while buf:
-            # 1. If there is a complete `<lang>...</lang>` or `[xx]...[/xx]` block in `buf`, emit everything up to its end
+            # 1. If there is a complete `<lang ...>...</lang>` or `[xx]...[/xx]` block in `buf`, emit everything up to its end
             m_tag = _COMBINED_LANG_TAG_RE.search(buf)
             if m_tag:
                 if m_tag.start() > 0:
@@ -466,14 +523,20 @@ async def iter_streaming_clauses(
                     if prefix:
                         for seg in segment_bilingual_text(prefix, norm_native, norm_target, norm_default, speed):
                             yield seg
-                tag_lang = (m_tag.group(1) or m_tag.group(3)).lower().split("-")[0]
-                tag_body = strip_speech_artifacts(strip_romanization(m_tag.group(2) or m_tag.group(4))).strip()
+                if m_tag.group(1) is not None:
+                    tag_lang, tag_speed = _parse_xml_lang_attrs(m_tag.group(1), norm_default, speed)
+                    raw_body = m_tag.group(2)
+                else:
+                    tag_lang = m_tag.group(3).lower().split("-")[0]
+                    tag_speed = speed
+                    raw_body = m_tag.group(4)
+                tag_body = strip_speech_artifacts(strip_romanization(raw_body)).strip()
                 tag_body = _STRAY_TAG_TOKEN_RE.sub("", tag_body).strip()
                 if tag_body:
                     # Split long tagged paragraphs by sentence so first sentence plays immediately
                     sub_sents = [s.strip() for s in re.split(r"(?<=[.?!。？！])\s+", tag_body) if s.strip()]
                     for sub in sub_sents:
-                        yield SpeechSegment(text=sub, language=tag_lang, speed=speed)
+                        yield SpeechSegment(text=sub, language=tag_lang, speed=tag_speed)
                 buf = buf[m_tag.end() :]
                 continue
 

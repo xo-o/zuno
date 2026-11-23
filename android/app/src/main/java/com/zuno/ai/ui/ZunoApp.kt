@@ -543,6 +543,7 @@ fun ZunoApp(
             callStartedAt = null
             callUsedVideo = false
             zunoViewModel.loadCoachPrompts(
+                mode = "freetalk",
                 targetLanguage = language.code,
                 contextLabel = chats[conversationId]?.conversation?.title,
             )
@@ -903,6 +904,7 @@ fun ZunoApp(
                     callStartedAt = System.currentTimeMillis()
                     callUsedVideo = false
                     zunoViewModel.loadCoachPrompts(
+                        mode = "peer",
                         targetLanguage = language.code,
                         partnerName = peerChats[peerConversationId]?.partner?.name,
                     )
@@ -1701,6 +1703,7 @@ fun ZunoApp(
                                             callStartedAt = System.currentTimeMillis()
                                             callUsedVideo = false
                                             zunoViewModel.loadCoachPrompts(
+                                                mode = "peer",
                                                 targetLanguage = language.code,
                                                 partnerName = partner.name,
                                             )
@@ -1760,6 +1763,7 @@ fun ZunoApp(
                                         callStartedAt = System.currentTimeMillis()
                                         callUsedVideo = false
                                         zunoViewModel.loadCoachPrompts(
+                                            mode = "peer",
                                             targetLanguage = language.code,
                                             partnerName = thread?.partner?.name,
                                         )
@@ -2209,6 +2213,14 @@ fun ZunoApp(
                         zunoViewModel.restoreDraft(screen.conversationId)
                     }
                     val conversation = chat?.conversation
+                    val isBilingualFreeTalk = conversation?.kind == ConversationKind.FreeTalk &&
+                        !conversation.levelCheck &&
+                        preferences?.teachInTarget != true
+                    val composerPlaceholder = if (isBilingualFreeTalk) {
+                        stringResource(R.string.free_talk_composer_placeholder, language.displayName(appLanguage))
+                    } else {
+                        language.placeholder
+                    }
                     ChatScreen(
                         title = conversation?.title.orEmpty(),
                         sessionLabel = conversation?.let { sessionLabel(localizedContext, it) }.orEmpty(),
@@ -2217,7 +2229,7 @@ fun ZunoApp(
                         pendingAttachments = chat?.pendingAttachments.orEmpty(),
                         drafts = drafts[screen.conversationId].orEmpty(),
                         error = chat?.error,
-                        placeholder = language.placeholder,
+                        placeholder = composerPlaceholder,
                         typingHint = typingHint,
                         menu = conversationMenu(screen.conversationId),
                         onBack = ::pop,
@@ -2235,6 +2247,7 @@ fun ZunoApp(
                                 text = text,
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
+                                defaultLanguage = appLanguage.code.takeIf { isBilingualFreeTalk },
                                 voiceKey = preferences?.tutorVoice ?: "warm",
                             )
                         },
@@ -2322,13 +2335,20 @@ fun ZunoApp(
                         },
                         onTranslate = { line -> viewModel.sendLessonAction("translate", line) },
                         onSlowReplay = { line ->
-                            tts.speak(
-                                text = line,
-                                language = language.code,
-                                nativeLanguage = appLanguage.code,
-                                voiceKey = preferences?.tutorVoice ?: "warm",
-                                slow = true,
-                            )
+                            if (inVoice) {
+                                viewModel.sendLessonAction("listen_slow", line)
+                            } else {
+                                val isFreeTalkVoice = (convKind == null || convKind == ConversationKind.FreeTalk) &&
+                                    preferences?.teachInTarget != true
+                                tts.speak(
+                                    text = line,
+                                    language = language.code,
+                                    nativeLanguage = appLanguage.code,
+                                    defaultLanguage = appLanguage.code.takeIf { isFreeTalkVoice },
+                                    voiceKey = preferences?.tutorVoice ?: "warm",
+                                    slow = true,
+                                )
+                            }
                         },
                         onSwitchTopic = {
                             if (inVoice) endVoice()

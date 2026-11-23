@@ -28,7 +28,13 @@ import java.security.MessageDigest
  */
 class CartesiaAudioPlayer(
     context: Context,
-    private val fetchAudio: suspend (text: String, language: String?, nativeLanguage: String?, slow: Boolean) -> ByteArray,
+    private val fetchAudio: suspend (
+        text: String,
+        language: String?,
+        nativeLanguage: String?,
+        defaultLanguage: String?,
+        slow: Boolean,
+    ) -> ByteArray,
 ) {
     private val cacheRoot = File(context.applicationContext.cacheDir, "cartesia_tts_v2").apply { mkdirs() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -50,6 +56,7 @@ class CartesiaAudioPlayer(
         text: String,
         language: String? = null,
         nativeLanguage: String? = null,
+        defaultLanguage: String? = null,
         voiceKey: String = "warm",
         slow: Boolean = false,
         onFinished: (() -> Unit)? = null,
@@ -63,10 +70,10 @@ class CartesiaAudioPlayer(
         playJob = scope.launch {
             try {
                 val file = withContext(Dispatchers.IO) {
-                    val hash = sha256("$voiceKey|${language.orEmpty()}|${nativeLanguage.orEmpty()}|$slow|$trimmed")
+                    val hash = sha256("$voiceKey|${language.orEmpty()}|${nativeLanguage.orEmpty()}|${defaultLanguage.orEmpty()}|$slow|$trimmed")
                     val cached = File(cacheRoot, "$hash.wav")
                     if (!cached.exists() || cached.length() == 0L) {
-                        val bytes = fetchAudio(trimmed, language, nativeLanguage, slow)
+                        val bytes = fetchAudio(trimmed, language, nativeLanguage, defaultLanguage, slow)
                         if (bytes.isEmpty()) {
                             cached.delete()
                             return@withContext null
@@ -146,7 +153,13 @@ class CartesiaAudioPlayer(
 
 @Composable
 fun rememberCartesiaAudioPlayer(
-    fetchAudio: suspend (text: String, language: String?, nativeLanguage: String?, slow: Boolean) -> ByteArray,
+    fetchAudio: suspend (
+        text: String,
+        language: String?,
+        nativeLanguage: String?,
+        defaultLanguage: String?,
+        slow: Boolean,
+    ) -> ByteArray,
 ): CartesiaAudioPlayer {
     val context = LocalContext.current
     val player = remember(context) { CartesiaAudioPlayer(context, fetchAudio) }

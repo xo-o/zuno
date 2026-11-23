@@ -716,9 +716,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
 
         private fun stripVoiceTags(text: String): String {
             return text
-                .replace(Regex("<lang(?:\\s+code)?\\s*=\\s*[\"']?[a-zA-Z_-]+[\"']?\\s*>([\\s\\S]*?)</lang>", RegexOption.IGNORE_CASE), "$1")
+                .replace(Regex("<lang\\b[^>]*>([\\s\\S]*?)</lang>", RegexOption.IGNORE_CASE), "$1")
                 .replace(Regex("\\[[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\\]([\\s\\S]*?)\\[/[^\\]]+\\]", RegexOption.IGNORE_CASE), "$1")
-                .replace(Regex("</?lang[^>]*>", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("</?lang\\b[^>]*>", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("\\s{2,}"), " ")
                 .trim()
         }

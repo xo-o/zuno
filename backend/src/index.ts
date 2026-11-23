@@ -415,6 +415,7 @@ app.post("/api/livekit/token", async (c) => {
     ttl: TOKEN_TTL,
     metadata: JSON.stringify({
       mode: "conversation",
+      conversationKind: context.kind,
       provider: "cartesia",
       voice,
       language: targetLanguage,

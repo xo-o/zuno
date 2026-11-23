@@ -240,12 +240,14 @@ class ZunoApi(
         text: String,
         language: String? = null,
         nativeLanguage: String? = null,
+        defaultLanguage: String? = null,
         slow: Boolean = false,
     ): ByteArray =
         withContext(Dispatchers.IO) {
             val body = JSONObject().put("text", text).put("slow", slow)
             language?.takeIf { it.isNotBlank() }?.let { body.put("language", it) }
             nativeLanguage?.takeIf { it.isNotBlank() }?.let { body.put("nativeLanguage", it) }
+            defaultLanguage?.takeIf { it.isNotBlank() }?.let { body.put("defaultLanguage", it) }
             val req = request("/tts/preview").post(body.toString().toRequestBody(JSON)).build()
             val response = try {
                 client.newCall(req).execute()
@@ -572,12 +574,14 @@ class ZunoApi(
         ).getJSONObject("summaryMessage").toPeerMessage()
 
     suspend fun coachPrompts(
+        mode: String? = null,
         targetLanguage: String? = null,
         contextLabel: String? = null,
         partnerName: String? = null,
         lastLine: String? = null,
     ): CoachPrompts {
         val body = JSONObject()
+        mode?.takeIf { it.isNotBlank() }?.let { body.put("mode", it) }
         targetLanguage?.takeIf { it.isNotBlank() }?.let { body.put("targetLanguage", it) }
         contextLabel?.takeIf { it.isNotBlank() }?.let { body.put("contextLabel", it) }
         partnerName?.takeIf { it.isNotBlank() }?.let { body.put("partnerName", it) }

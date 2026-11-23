@@ -57,6 +57,7 @@
     <string name="report_submit">Wyślij zgłoszenie</string>
     <string name="report_sent_toast">Dzięki — sprawdzimy ten czat</string>
     <string name="session_kind_free_talk">Swobodna rozmowa</string>
+    <string name="free_talk_composer_placeholder">Zapytaj o cokolwiek lub poćwicz po %1$s…</string>
     <string name="session_kind_roleplay">Scenka</string>
     <string name="session_kind_lesson">Lekcja</string>
     <string name="session_kind_level_check">Test poziomu</string>

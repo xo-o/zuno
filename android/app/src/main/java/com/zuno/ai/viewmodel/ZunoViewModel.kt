@@ -916,9 +916,16 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         text: String,
         language: String? = null,
         nativeLanguage: String? = null,
+        defaultLanguage: String? = null,
         slow: Boolean = false,
     ): ByteArray =
-        api.ttsPreview(text = text, language = language, nativeLanguage = nativeLanguage, slow = slow)
+        api.ttsPreview(
+            text = text,
+            language = language,
+            nativeLanguage = nativeLanguage,
+            defaultLanguage = defaultLanguage,
+            slow = slow,
+        )
 
     private fun cacheTopic(topic: TopicDetail) {
         _topicDetails.update { it + (topic.summary.id to topic) }
@@ -1770,6 +1777,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadCoachPrompts(
+        mode: String? = null,
         targetLanguage: String? = null,
         contextLabel: String? = null,
         partnerName: String? = null,
@@ -1777,7 +1785,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             try {
-                _coachPrompts.value = api.coachPrompts(targetLanguage, contextLabel, partnerName, lastLine)
+                _coachPrompts.value = api.coachPrompts(mode, targetLanguage, contextLabel, partnerName, lastLine)
             } catch (_: ApiException) {
                 // Keep existing/default prompts silently
             }

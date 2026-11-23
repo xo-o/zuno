@@ -199,6 +199,73 @@ class BilingualAndRoleplayTest(unittest.TestCase):
         self.assertIn("hint", actions)
         self.assertIn("translate", actions)
 
+    def test_free_talk_user_language_default_and_slow_pronunciation_tags(self):
+        from agent import ConversationalAgent, can_use_multi_stt
+
+        # 1. Strip `<lang code="es" speed="slow">...</lang>` cleanly across chunks
+        tagged_pron = (
+            '<lang code="en">You pronounce it</lang> '
+            '<lang code="es">ferrocarril.</lang> '
+            '<lang code="en">Slowly:</lang> '
+            '<lang code="es" speed="slow">fe, rro, ca, rril.</lang>'
+        )
+        self.assertEqual(
+            strip_lang_tags(tagged_pron),
+            "You pronounce it ferrocarril. Slowly: fe, rro, ca, rril.",
+        )
+
+        segs = segment_bilingual_text(
+            tagged_pron,
+            native_lang="en",
+            target_lang="es",
+            default_lang="en",
+        )
+        self.assertEqual([(s.language, s.speed) for s in segs], [
+            ("en", 1.0),
+            ("es", 1.0),
+            ("en", 1.0),
+            ("es", 0.76),
+        ])
+
+        # 2. Symmetric `detect_clause_language`: English sentence with shared words ("a", "no") stays "en" when default_lang="en"
+        self.assertEqual(
+            detect_clause_language("No problem, tell me about a trip!", "en", "es", "en"),
+            "en",
+        )
+        # While Spanish sentence still flips to "es" even when default_lang="en"
+        self.assertEqual(
+            detect_clause_language("¡Claro! ¿Cómo estás hoy?", "en", "es", "en"),
+            "es",
+        )
+        # And English gloss quote after "means" stays "en"
+        gloss_segs = segment_bilingual_text(
+            'That word literally means "little coffee" in everyday conversation.',
+            native_lang="en",
+            target_lang="es",
+            default_lang="en",
+        )
+        self.assertTrue(all(s.language == "en" for s in gloss_segs))
+
+        # 3. ConversationalAgent Free Talk defaults to user language & supports non-multi STT switching
+        self.assertTrue(can_use_multi_stt("es", "en"))
+        self.assertFalse(can_use_multi_stt("ko", "en"))
+
+        fake_stt = unittest.mock.MagicMock()
+        agent = ConversationalAgent(
+            stt=fake_stt,
+            language="ko",
+            target_language_name="Korean",
+            native_language="en",
+            native_language_name="English",
+            conversation_kind="freetalk",
+            teach_in_target=False,
+            multi_stt_active=False,
+        )
+        self.assertTrue(agent.is_free_talk)
+        self.assertEqual(agent.default_spoken_lang, "en")
+        asyncio.run(agent.set_listening_language("ko"))
+        fake_stt.update_options.assert_called_with(language="ko")
+
 
 if __name__ == "__main__":
     unittest.main()

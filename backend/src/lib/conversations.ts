@@ -10,6 +10,7 @@ import {
   type AttachmentRow,
 } from "./attachments.js";
 import type { GeminiTurn } from "./gemini.js";
+import { stripLangTags } from "./bilingual-tts.js";
 import { updateProfile, type LearnerProfile } from "./profile.js";
 import { generateOpening, generateReply, LESSONS_PER_TOPIC, type ConversationContext } from "./tutor.js";
 
@@ -149,7 +150,7 @@ export async function sendUserMessage(
           conversationId: row.id,
           role: "user",
           text,
-          feedback: reply.feedback,
+          feedback: reply.feedback.trim() || null,
           viaVoice,
           createdAt: sql`now()`,
         },
@@ -157,8 +158,8 @@ export async function sendUserMessage(
           id: randomUUID(),
           conversationId: row.id,
           role: "assistant",
-          text: reply.reply,
-          translation: reply.translation.trim() || null,
+          text: stripLangTags(reply.reply) || reply.reply,
+          translation: stripLangTags(reply.translation).trim() || null,
           glossary: reply.glossary,
           contextNote: attachments.length ? reply.contextNote.trim() || null : null,
           createdAt: sql`now() + interval '1 millisecond'`,

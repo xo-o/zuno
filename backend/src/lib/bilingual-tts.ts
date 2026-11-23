@@ -6,12 +6,13 @@ export type SpeechSegment = {
   speed?: number;
 };
 
-const XML_LANG_TAG_RE = /<lang(?:\s+code)?\s*=\s*["']?([a-zA-Z_-]+)["']?\s*>([\s\S]*?)<\/lang>/gi;
+const XML_LANG_TAG_RE = /<lang\b([^>]*)>([\s\S]*?)<\/lang>/gi;
 const BRACKET_LANG_TAG_RE = /\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\1\]/gi;
 const COMBINED_LANG_TAG_RE =
-  /(?:<lang(?:\s+code)?\s*=\s*["']?([a-zA-Z_-]+)["']?\s*>([\s\S]*?)<\/lang>|\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\3\])/gi;
-const STRAY_TAG_TOKEN_RE =
-  /(?:<\/?lang(?:\s+code\s*=\s*["']?[a-zA-Z_-]*["']?|\s*=\s*["']?[a-zA-Z_-]*["']?)?\s*>|\[\/?[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])/gi;
+  /(?:<lang\b([^>]*)>([\s\S]*?)<\/lang>|\[([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?)\]([\s\S]*?)\[\/\3\])/gi;
+const STRAY_TAG_TOKEN_RE = /(?:<\/?lang\b[^>]*>|\[\/?[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)?\])/gi;
+const ATTR_CODE_RE = /(?:code\s*=\s*|^=\s*)["']?([a-zA-Z]{2,3}(?:-[a-zA-Z0-9_-]+)?)["']?/i;
+const ATTR_SPEED_RE = /speed\s*=\s*["']?([a-zA-Z0-9._-]+)["']?/i;
 
 const NON_LATIN_CHAR_RE =
   /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/;
@@ -21,8 +22,33 @@ const NON_LATIN_LANGS = new Set([
   "mr", "or", "pa", "ru", "ta", "te", "th", "uk", "ur", "fa", "zh",
 ]);
 
+function parseXmlLangAttrs(attrs: string, defaultLang: string, baseSpeed: number): { lang: string; speed: number } {
+  const trimmed = (attrs || "").trim();
+  const codeMatch = ATTR_CODE_RE.exec(trimmed);
+  const lang = (codeMatch ? codeMatch[1] : defaultLang).toLowerCase().split("-")[0];
+
+  let speed = baseSpeed;
+  const speedMatch = ATTR_SPEED_RE.exec(trimmed);
+  if (speedMatch) {
+    const rawSpeed = speedMatch[1].trim().toLowerCase();
+    if (rawSpeed === "slow" || rawSpeed === "slower") {
+      speed = 0.76;
+    } else if (rawSpeed === "fast" || rawSpeed === "faster") {
+      speed = 1.12;
+    } else if (rawSpeed === "normal") {
+      speed = baseSpeed;
+    } else {
+      const parsed = Number(rawSpeed);
+      if (Number.isFinite(parsed)) {
+        speed = Math.round(Math.max(0.6, Math.min(1.5, parsed)) * 100) / 100;
+      }
+    }
+  }
+  return { lang, speed };
+}
+
 /**
- * Strips `<lang code="en">...</lang>`, `<lang="en">...</lang>`, and `[en]...[/en]` tags for UI display.
+ * Strips `<lang code="en" speed="slow">...</lang>`, `<lang="en">...</lang>`, and `[en]...[/en]` tags for UI display.
  */
 export function stripLangTags(text: string): string {
   return text
@@ -112,14 +138,16 @@ export function resolveCartesiaLocale(
 }
 
 const LEAD_IN_REGEX =
-  /^(repeat after me|say after me|listen and repeat|to say this|to say|you can say|try saying|try asking|in english|that means|it means|say|listen|ask):?\s+/i;
+  /^(repeat after me|say after me|listen and repeat|to say this|to say|you can say|try saying|try asking|in english|that means|it means|you pronounce it|pronounce it|say|listen|ask):?\s+/i;
+const NATIVE_GLOSS_PREFIX_RE = /(?:means|literally|translates\s+to|meaning|as\s+in\s+english)\s*:?\s*$/i;
 
 const FUNCTION_WORDS: Record<string, Set<string>> = {
   en: new Set([
     "the", "a", "an", "to", "in", "for", "of", "and", "or", "is", "are", "was", "were",
     "say", "after", "repeat", "me", "listen", "this", "that", "you", "your", "with",
     "now", "ask", "if", "please", "means", "mean", "word", "phrase", "try", "can",
-    "how", "what", "when", "where", "why", "here", "sure",
+    "how", "what", "when", "where", "why", "here", "sure", "pronounce", "sound", "sounds",
+    "talk", "about", "anything", "today", "would", "like",
   ]),
   es: new Set([
     "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "en", "por", "para",
@@ -193,13 +221,22 @@ export function detectClauseLanguage(
   if (targetNonLatin && !nativeNonLatin) return hasNonLatin ? target : native;
   if (nativeNonLatin && !targetNonLatin) return hasNonLatin ? native : target;
 
-  if (hasDistinctMarkers(clauseText, target)) return target;
-  if (hasDistinctMarkers(clauseText, native) && !hasDistinctMarkers(clauseText, target)) return native;
-  if (LEAD_IN_REGEX.test(clauseText.trim())) return native;
+  const targetMarkers = hasDistinctMarkers(clauseText, target);
+  const nativeMarkers = hasDistinctMarkers(clauseText, native);
+  if (targetMarkers && !nativeMarkers) return target;
+  if (nativeMarkers && !targetMarkers) return native;
+  if (native === "en" && LEAD_IN_REGEX.test(clauseText.trim())) return native;
 
   const words = clauseText.split(/\s+/);
   const nativeScore = scoreLanguageMatch(words, native);
   const targetScore = scoreLanguageMatch(words, target);
+
+  if (def === native) {
+    if (targetScore >= 2 && nativeScore === 0) return target;
+    if (targetScore >= 3 && targetScore >= nativeScore * 3) return target;
+    if (nativeScore >= 1) return native;
+    return def;
+  }
 
   if (nativeScore >= 2 && targetScore === 0) return native;
   if (nativeScore >= 3 && nativeScore >= targetScore * 3) return native;
@@ -224,6 +261,7 @@ function segmentSingleUntaggedSentence(
     const parts = text.split(/(["“][^"”]{2,}?["”])/).filter(Boolean);
     if (parts.length > 1) {
       const segments: SpeechSegment[] = [];
+      let prevOuter = "";
       for (const part of parts) {
         const trimmed = part.trim();
         if (!trimmed) continue;
@@ -233,13 +271,15 @@ function segmentSingleUntaggedSentence(
         if (isDoubleQuoted) {
           const cleanText = trimmed.replace(/^[“"]|[”"]$/g, "").trim();
           if (cleanText) {
+            const quoteDefault = NATIVE_GLOSS_PREFIX_RE.test(prevOuter) ? native : target;
             segments.push({
               text: cleanText,
-              language: detectClauseLanguage(cleanText, native, target, target),
+              language: detectClauseLanguage(cleanText, native, target, quoteDefault),
               speed,
             });
           }
         } else {
+          prevOuter = trimmed;
           const cleanLeadIn = trimmed.replace(/:\s*$/, "").trim();
           if (cleanLeadIn) {
             segments.push({
@@ -265,7 +305,7 @@ function segmentSingleUntaggedSentence(
       const leftNativeScore = scoreLanguageMatch(leftWords, native);
       const rightTargetScore = scoreLanguageMatch(rightWords, target);
 
-      if (LEAD_IN_REGEX.test(left + ": ") || leftNativeScore > 0 || rightTargetScore > 0) {
+      if (LEAD_IN_REGEX.test(left + ": ") || (leftNativeScore > 0 && rightTargetScore > 0)) {
         return [
           { text: left, language: native, speed },
           { text: right, language: target, speed },
@@ -302,7 +342,7 @@ function segmentSingleUntaggedSentence(
 }
 
 /**
- * Splits text into SpeechSegments, each with the proper language code.
+ * Splits text into SpeechSegments, each with the proper language code and speed.
  */
 export function segmentBilingualText(
   rawText: string,
@@ -324,7 +364,7 @@ export function segmentBilingualText(
   const defaultLang = options.defaultLanguage?.toLowerCase().split("-")[0] ?? target;
   const speed = options.speed ?? 1.0;
 
-  // 1. Explicit `<lang code="xx">`, `<lang="xx">`, or `[xx]` tags
+  // 1. Explicit `<lang code="xx" speed="slow">`, `<lang="xx">`, or `[xx]` tags
   COMBINED_LANG_TAG_RE.lastIndex = 0;
   if (COMBINED_LANG_TAG_RE.test(text)) {
     COMBINED_LANG_TAG_RE.lastIndex = 0;
@@ -346,10 +386,21 @@ export function segmentBilingualText(
           );
         }
       }
-      const lang = (match[1] || match[3]).toLowerCase().split("-")[0];
-      const content = (match[2] || match[4]).replace(STRAY_TAG_TOKEN_RE, "").trim();
+      let segLang = defaultLang;
+      let segSpeed = speed;
+      let rawBody = "";
+      if (match[1] !== undefined) {
+        const parsed = parseXmlLangAttrs(match[1], defaultLang, speed);
+        segLang = parsed.lang;
+        segSpeed = parsed.speed;
+        rawBody = match[2] || "";
+      } else {
+        segLang = (match[3] || defaultLang).toLowerCase().split("-")[0];
+        rawBody = match[4] || "";
+      }
+      const content = rawBody.replace(STRAY_TAG_TOKEN_RE, "").trim();
       if (content) {
-        segments.push({ text: content, language: lang, speed });
+        segments.push({ text: content, language: segLang, speed: segSpeed });
       }
       lastIdx = COMBINED_LANG_TAG_RE.lastIndex;
     }

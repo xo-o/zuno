@@ -57,6 +57,7 @@
     <string name="report_submit">Envoyer le signalement</string>
     <string name="report_sent_toast">Merci — nous allons examiner ce chat</string>
     <string name="session_kind_free_talk">Discussion libre</string>
+    <string name="free_talk_composer_placeholder">Posez une question ou pratiquez en %1$s…</string>
     <string name="session_kind_roleplay">Jeu de rôle</string>
     <string name="session_kind_lesson">Leçon</string>
     <string name="session_kind_level_check">Test de niveau</string>

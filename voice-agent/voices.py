@@ -407,7 +407,7 @@ async def stream_bilingual_tts(
             if pcm_bytes:
                 if next_item is not _QUEUE_UNSET and next_item is not None:
                     next_seg = next_item[0]
-                    pause_ms = 180 if next_seg.language != seg.language else 80
+                    pause_ms = 200 if (next_seg.language != seg.language or next_seg.speed != seg.speed) else 80
                 else:
                     pause_ms = 0
                 for frame in _pcm_to_audio_frames(pcm_bytes, pause_after_ms=pause_ms):

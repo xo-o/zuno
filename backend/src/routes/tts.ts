@@ -15,6 +15,7 @@ const previewSchema = z.object({
   text: z.string().trim().min(1).max(600),
   language: z.string().trim().max(16).optional(),
   nativeLanguage: z.string().trim().max(16).optional(),
+  defaultLanguage: z.string().trim().max(16).optional(),
   slow: z.boolean().optional(),
 });
 
@@ -106,7 +107,7 @@ export const ttsRoutes = new Hono<AuthEnv>()
     const segments = segmentBilingualText(body.text, {
       nativeLanguage,
       targetLanguage,
-      defaultLanguage: targetLanguage,
+      defaultLanguage: body.defaultLanguage ?? targetLanguage,
       speed,
     });
 

@@ -57,6 +57,7 @@
     <string name="report_submit">Melding versturen</string>
     <string name="report_sent_toast">Bedankt — we bekijken deze chat</string>
     <string name="session_kind_free_talk">Vrij spreken</string>
+    <string name="free_talk_composer_placeholder">Vraag wat je wilt of oefen in het %1$s…</string>
     <string name="session_kind_roleplay">Rollenspel</string>
     <string name="session_kind_lesson">Les</string>
     <string name="session_kind_level_check">Niveautest</string>
