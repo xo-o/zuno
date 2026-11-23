@@ -41,11 +41,18 @@
     <string name="settings_sign_out">Se déconnecter</string>
     <string name="settings_delete_account">Supprimer le compte</string>
 
-    <!-- Settings · 3 · Preferences -->
-    <string name="settings_pref_voice">Voix de Zuno</string>
+    <!-- Settings · 3 · Preferences & 3a · AI Tutor -->
+    <string name="settings_ai_tutor">Tuteur IA</string>
+    <string name="settings_ai_tutor_intro">Choisissez votre tuteur IA. Chaque tuteur a sa propre voix naturelle dans toutes les langues.</string>
+    <string name="settings_ai_tutor_active">Actif</string>
+    <string name="settings_ai_tutor_preview_sample">Salut, c\'est %1$s ! On pratique le %2$s ensemble ?</string>
+    <string name="settings_pref_voice">Tuteur IA</string>
     <string name="settings_pref_voice_warm">Chaleureuse et amicale</string>
-    <string name="settings_pref_voice_calm">Calme et claire</string>
+    <string name="settings_pref_voice_calm">Calme et patiente</string>
+    <string name="settings_pref_voice_crisp">Nette et claire</string>
     <string name="settings_pref_voice_energetic">Énergique</string>
+    <string name="settings_pref_voice_steady">Posé et clair</string>
+    <string name="settings_pref_voice_casual">Décontracté</string>
     <string name="settings_pref_teaching_style">Style d\'enseignement</string>
     <string name="settings_pref_style_balanced">Équilibré</string>
     <string name="settings_pref_style_gentle">Doux</string>

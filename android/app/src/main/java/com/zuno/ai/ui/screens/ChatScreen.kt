@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.Message
+import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.ui.components.ZunoAiTutorAvatar
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoChip
@@ -157,7 +158,7 @@ fun ChatScreen(
                                 message = message.text,
                                 translation = message.translation.takeIf { showTranslations },
                                 glossary = message.glossary,
-                                senderLabel = stringResource(R.string.onboarding_sender_sofia),
+                                senderLabel = LocalActiveTutor.current.displayName,
                                 onListen = { onListen(message.text) },
                                 onExplain = { onExplain(message) },
                                 contextNote = message.contextNote,
@@ -232,10 +233,11 @@ private fun AiTutorTopBar(
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ZunoAiTutorAvatar(size = 36.dp)
+            val tutor = LocalActiveTutor.current
+            ZunoAiTutorAvatar(size = 36.dp, tutor = tutor)
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
-                    text = stringResource(R.string.onboarding_sender_sofia),
+                    text = tutor.displayName,
                     style = ZunoType.BodyMediumStrong,
                     color = ZunoColors.TextPrimary,
                     maxLines = 1,

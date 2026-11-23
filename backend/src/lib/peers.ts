@@ -20,7 +20,7 @@ import { languageName, type LanguageCode } from "./languages.js";
 import { displayLanguage } from "./notifications.js";
 import { getProfile, type LearnerProfile } from "./profile.js";
 import { sendToUser } from "./push.js";
-import { cartesiaVoiceFor } from "./voices.js";
+import { cartesiaVoiceFor, resolveTutor } from "./voices.js";
 
 const SEED_PREFIX = "seed:";
 
@@ -454,6 +454,7 @@ export async function getChatsOverview(userId: string) {
     .orderBy(desc(peerConversation.lastMessageAt))
     .limit(30);
 
+  const activeTutor = resolveTutor(profile.tutorId, profile.tutorVoice);
   const aiItems = aiConvs
     .filter((row) => row.messages.length > 0 || row.kind === "freetalk")
     .map((row) => {
@@ -462,7 +463,7 @@ export async function getChatsOverview(userId: string) {
       const snippet = lastMsg
         ? lastMsg.kind === "call_summary"
           ? lastMsg.text
-          : `${lastMsg.role === "assistant" ? "Sofía · " : "You · "}${lastMsg.text}`
+          : `${lastMsg.role === "assistant" ? `${activeTutor.name} · ` : "You · "}${lastMsg.text}`
         : "Message or call anytime";
       return {
         id: row.id,
@@ -1233,6 +1234,7 @@ export async function generateCoachPrompts(params: {
   targetLanguage: string;
   nativeLanguage: string;
   level: string;
+  tutorName?: string;
   contextLabel?: string;
   partnerName?: string | null;
   lastLine?: string | null;
@@ -1259,7 +1261,7 @@ export async function generateCoachPrompts(params: {
           ].join(" "),
       contents: [
         params.contextLabel ? `Context: ${params.contextLabel}` : "",
-        params.partnerName ? `Speaking with: ${params.partnerName}` : "Speaking with: Sofía (AI Personal Coach — Free Talk)",
+        params.partnerName ? `Speaking with: ${params.partnerName}` : `Speaking with: ${params.tutorName || "Sofía"} (AI Personal Coach — Free Talk)`,
         params.lastLine ? `Last line heard: "${params.lastLine}"` : "",
       ]
         .filter(Boolean)

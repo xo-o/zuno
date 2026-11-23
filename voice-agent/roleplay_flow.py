@@ -18,6 +18,7 @@ from bilingual import (
 )
 from voices import (
     BilingualCartesiaSynthesizer,
+    resolve_tutor_name,
     stream_bilingual_tts,
     synthesize_bilingual_segments,
 )
@@ -79,6 +80,7 @@ class RoleplayOrchestrator:
         self.scenario: str = str(rp_meta.get("scenario") or self.title)
         self.user_role: str = str(rp_meta.get("userRole") or "Learner")
         self.ai_role: str = str(rp_meta.get("aiRole") or "Conversation partner")
+        self.tutor_name: str = str(meta.get("tutorName") or resolve_tutor_name(meta.get("tutorId"), meta.get("tutorVoice")))
         self.setting: str = str(rp_meta.get("setting") or self.scenario)
         self.opening_line: str = str(meta.get("opening") or rp_meta.get("openingLine") or "").strip()
 
@@ -137,7 +139,7 @@ class RoleplayOrchestrator:
 
     @property
     def sender_role_label(self) -> str:
-        return f"{self.ai_role} · Sofía" if "sofía" not in self.ai_role.lower() else self.ai_role
+        return f"{self.ai_role} · {self.tutor_name}" if self.tutor_name.lower() not in self.ai_role.lower() else self.ai_role
 
     def _next_turn_id(self, prefix: str = "rp") -> str:
         self._turn_seq += 1

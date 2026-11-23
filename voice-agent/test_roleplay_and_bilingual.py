@@ -266,6 +266,21 @@ class BilingualAndRoleplayTest(unittest.TestCase):
         asyncio.run(agent.set_listening_language("ko"))
         fake_stt.update_options.assert_called_with(language="ko")
 
+    def test_tutor_catalog_six_tutors_1_to_1_mapping(self):
+        from voices import TUTOR_CATALOG, resolve_cartesia_voice, resolve_tutor_name
+
+        self.assertEqual(len(TUTOR_CATALOG), 6)
+        voice_ids = {spec["voice_id"] for spec in TUTOR_CATALOG.values()}
+        self.assertEqual(len(voice_ids), 6)
+        self.assertEqual(resolve_tutor_name("lucas"), "Lucas")
+        self.assertEqual(resolve_tutor_name("ethan"), "Ethan")
+        self.assertEqual(resolve_tutor_name("claire"), "Claire")
+        self.assertEqual(resolve_tutor_name("elena"), "Sofía")
+        self.assertEqual(
+            resolve_cartesia_voice(tutor_id="lucas"),
+            "8c254787-4eb4-4577-bd3d-fb3c273baea2",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

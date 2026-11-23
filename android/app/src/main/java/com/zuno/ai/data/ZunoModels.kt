@@ -36,7 +36,8 @@ enum class AppLanguage(
 
 val Levels = listOf("A1", "A2", "B1", "B2", "C1", "C2")
 
-val TutorVoices = listOf("warm", "calm", "energetic")
+val TutorIds = listOf("sofia", "valeria", "claire", "mateo", "lucas", "ethan")
+val TutorVoices = listOf("warm", "calm", "crisp", "energetic", "steady", "casual")
 val TeachingStyles = listOf("balanced", "gentle", "immersive")
 val Focuses = listOf("conversation", "travel", "work", "exams", "culture")
 val DailyGoals = listOf(5, 10, 15, 20, 30)
@@ -51,6 +52,7 @@ data class RecommendedTopic(
 
 /** Settings · Preferences and learning goals; read by the tutor on the server. */
 data class Preferences(
+    val tutorId: String = "sofia",
     val tutorVoice: String = "warm",
     val teachingStyle: String = "balanced",
     val strictMode: Boolean = false,
@@ -686,17 +688,30 @@ internal fun JSONObject.toProfile(): Profile {
         interests = profile.optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
         goalNote = profile.optStringOrNull("goalNote"),
         recommendedTopics = profile.optJSONArray("recommendedTopics")?.objects()?.map { it.toRecommendedTopic() }.orEmpty(),
-        preferences = Preferences(
-            tutorVoice = profile.optString("tutorVoice", "warm"),
-            teachingStyle = profile.optString("teachingStyle", "balanced"),
-            strictMode = profile.optBoolean("strictMode", false),
-            handsFree = profile.optBoolean("handsFree", true),
-            suggestReplies = profile.optBoolean("suggestReplies", true),
-            showTranslations = profile.optBoolean("showTranslations", true),
-            teachInTarget = profile.optBoolean("teachInTarget", false),
-            dailyGoalMin = profile.optInt("dailyGoalMin", 15),
-            focus = profile.optString("focus", "conversation"),
-        ),
+        preferences = run {
+            val rawVoice = profile.optString("tutorVoice", "warm")
+            val fallbackId = when (rawVoice) {
+                "calm" -> "valeria"
+                "crisp" -> "claire"
+                "energetic" -> "mateo"
+                "steady" -> "lucas"
+                "casual" -> "ethan"
+                else -> "sofia"
+            }
+            val rawId = profile.optString("tutorId", fallbackId).ifBlank { fallbackId }
+            Preferences(
+                tutorId = if (rawId == "elena") "sofia" else rawId,
+                tutorVoice = rawVoice,
+                teachingStyle = profile.optString("teachingStyle", "balanced"),
+                strictMode = profile.optBoolean("strictMode", false),
+                handsFree = profile.optBoolean("handsFree", true),
+                suggestReplies = profile.optBoolean("suggestReplies", true),
+                showTranslations = profile.optBoolean("showTranslations", true),
+                teachInTarget = profile.optBoolean("teachInTarget", false),
+                dailyGoalMin = profile.optInt("dailyGoalMin", 15),
+                focus = profile.optString("focus", "conversation"),
+            )
+        },
         plan = profile.optString("plan", "free"),
         imageUrl = user.optStringOrNull("image"),
         providers = optJSONArray("providers")?.let { array -> List(array.length()) { array.getString(it) } }.orEmpty(),

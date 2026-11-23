@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
-import { cartesiaLanguage, cartesiaVoiceFor } from "../lib/voices.js";
+import { cartesiaLanguage, resolveTutor } from "../lib/voices.js";
 import {
   buildWavFromPcmSegments,
   ensureTerminalPunct,
@@ -16,6 +16,8 @@ const previewSchema = z.object({
   language: z.string().trim().max(16).optional(),
   nativeLanguage: z.string().trim().max(16).optional(),
   defaultLanguage: z.string().trim().max(16).optional(),
+  tutorId: z.string().trim().max(32).optional(),
+  tutorVoice: z.string().trim().max(32).optional(),
   slow: z.boolean().optional(),
 });
 
@@ -98,7 +100,11 @@ export const ttsRoutes = new Hono<AuthEnv>()
     const userId = c.get("user").id;
     const body = await parseBody(c, previewSchema);
     const profile = await getProfile(userId);
-    const voiceId = cartesiaVoiceFor(profile.tutorVoice);
+    const chosenTutor = resolveTutor(
+      body.tutorId ?? profile.tutorId,
+      body.tutorVoice ?? profile.tutorVoice,
+    );
+    const voiceId = chosenTutor.voiceId;
     const targetLanguage = body.language ?? profile.targetLanguage;
     const nativeLanguage = body.nativeLanguage ?? profile.nativeLanguage;
     const speed = body.slow ? 0.75 : 1.0;
@@ -118,7 +124,7 @@ export const ttsRoutes = new Hono<AuthEnv>()
           apiKey,
           voiceId,
           text: seg.text,
-          locale: resolveCartesiaLocale(seg.language, profile.accent, profile.tutorVoice),
+          locale: resolveCartesiaLocale(seg.language, profile.accent, chosenTutor.voicePreset),
           fallbackLanguage: cartesiaLanguage(seg.language),
           speed: seg.speed ?? speed,
         }),

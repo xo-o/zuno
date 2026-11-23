@@ -11,17 +11,18 @@ import {
   type LanguageCode,
   type Level,
 } from "./languages.js";
+import { resolveTutor, TUTOR_IDS, TUTOR_VOICES, type TutorId, type TutorVoice } from "./voices.js";
 
-export const TUTOR_VOICES = ["warm", "calm", "energetic"] as const;
+export { TUTOR_IDS, TUTOR_VOICES, type TutorId, type TutorVoice };
 export const TEACHING_STYLES = ["balanced", "gentle", "immersive"] as const;
 export const FOCUSES = ["conversation", "travel", "work", "exams", "culture"] as const;
 export const DAILY_GOALS = [5, 10, 15, 20, 30] as const;
 
-export type TutorVoice = (typeof TUTOR_VOICES)[number];
 export type TeachingStyle = (typeof TEACHING_STYLES)[number];
 export type Focus = (typeof FOCUSES)[number];
 
 export type Preferences = {
+  tutorId: TutorId;
   tutorVoice: TutorVoice;
   teachingStyle: TeachingStyle;
   strictMode: boolean;
@@ -57,13 +58,15 @@ function oneOf<T extends string>(values: readonly T[], value: string, fallback: 
 
 function normalize(row: ProfileRow, levelChecked: boolean): LearnerProfile {
   const targetLanguage = isLanguageCode(row.targetLanguage) ? row.targetLanguage : "es";
+  const resolvedTutor = resolveTutor(row.tutorId, row.tutorVoice);
   return {
     targetLanguage,
     nativeLanguage: isAppLanguageCode(row.nativeLanguage) ? row.nativeLanguage : "en",
     level: oneOf(LEVELS, row.level, "B1"),
     accent: row.accent && isAccentOf(targetLanguage, row.accent) ? row.accent : defaultAccent(targetLanguage),
     levelChecked,
-    tutorVoice: oneOf(TUTOR_VOICES, row.tutorVoice, "warm"),
+    tutorId: resolvedTutor.id,
+    tutorVoice: resolvedTutor.voicePreset,
     teachingStyle: oneOf(TEACHING_STYLES, row.teachingStyle, "balanced"),
     strictMode: row.strictMode,
     handsFree: row.handsFree,
@@ -171,6 +174,11 @@ export async function updateProfile(userId: string, patch: ProfilePatch): Promis
   if (accent !== undefined && !isAccentOf(language, accent)) throw new InvalidAccentError("Unknown accent for this language");
 
   const values: Partial<typeof userProfile.$inferInsert> = { ...rest };
+  if (patch.tutorId !== undefined || patch.tutorVoice !== undefined) {
+    const nextTutor = resolveTutor(patch.tutorId, patch.tutorVoice);
+    values.tutorId = nextTutor.id;
+    values.tutorVoice = nextTutor.voicePreset;
+  }
   if (interests !== undefined) values.interests = interests;
   if (goalNote !== undefined) values.goalNote = goalNote;
   if (onboardingCompletedAt !== undefined) values.onboardingCompletedAt = onboardingCompletedAt;

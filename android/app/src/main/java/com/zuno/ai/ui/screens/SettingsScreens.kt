@@ -6,6 +6,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,11 +51,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -68,6 +71,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import com.zuno.ai.R
+import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
+import com.zuno.ai.avatar.model.TutorAvatarProfile
+import com.zuno.ai.avatar.model.TutorPosterSource
 import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.DailyGoals
 import com.zuno.ai.data.Focuses
@@ -288,6 +294,7 @@ fun SettingsOverviewScreen(
     onUpgrade: () -> Unit,
     onAccount: () -> Unit,
     onLearning: () -> Unit,
+    onTutor: () -> Unit = {},
     onAppLanguage: () -> Unit,
     onPreferences: () -> Unit,
     onNotifications: () -> Unit,
@@ -355,7 +362,11 @@ fun SettingsOverviewScreen(
                 )
             }
 
-            // Account · Learning
+            // Account · Learning · AI tutor
+            val activeTutor = TutorAvatarCatalog.resolve(
+                tutorId = profile?.preferences?.tutorId,
+                voicePreset = profile?.preferences?.tutorVoice,
+            )
             ZunoSettingsGroup {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_account),
@@ -370,6 +381,14 @@ fun SettingsOverviewScreen(
                     showChevron = true,
                     showDivider = true,
                     onClick = onLearning,
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_ai_tutor),
+                    icon = R.drawable.zuno_ic_volume_secondary,
+                    value = activeTutor.displayName,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = onTutor,
                 )
             }
 
@@ -630,7 +649,10 @@ fun <T> ZunoOptionSheet(
 private fun voiceLabel(id: String) = stringResource(
     when (id) {
         "calm" -> R.string.settings_pref_voice_calm
+        "crisp" -> R.string.settings_pref_voice_crisp
         "energetic" -> R.string.settings_pref_voice_energetic
+        "steady" -> R.string.settings_pref_voice_steady
+        "casual" -> R.string.settings_pref_voice_casual
         else -> R.string.settings_pref_voice_warm
     },
 )
@@ -663,11 +685,16 @@ fun SettingsPreferencesScreen(
     targetLanguage: LearningLanguage,
     appLanguage: AppLanguage,
     onChange: ((Preferences) -> Preferences) -> Unit,
+    onOpenTutor: () -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
     val targetLangName = targetLanguage.displayName(appLanguage)
+    val activeTutor = TutorAvatarCatalog.resolve(
+        tutorId = preferences.tutorId,
+        voicePreset = preferences.tutorVoice,
+    )
 
     Column(
         modifier = modifier
@@ -688,9 +715,9 @@ fun SettingsPreferencesScreen(
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_voice),
                     icon = R.drawable.zuno_ic_volume_secondary,
-                    value = voiceLabel(preferences.tutorVoice),
+                    value = "${activeTutor.displayName} · ${voiceLabel(activeTutor.voicePreset)}",
                     showChevron = true,
-                    onClick = { picker = "voice" },
+                    onClick = onOpenTutor,
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_teaching_style),
@@ -748,14 +775,6 @@ fun SettingsPreferencesScreen(
     }
 
     when (picker) {
-        "voice" -> ZunoOptionSheet(
-            title = stringResource(R.string.settings_pref_voice),
-            options = TutorVoices,
-            selected = preferences.tutorVoice,
-            label = { voiceLabel(it) },
-            onSelect = { voice -> picker = null; onChange { it.copy(tutorVoice = voice) } },
-            onDismiss = { picker = null },
-        )
         "style" -> ZunoOptionSheet(
             title = stringResource(R.string.settings_pref_teaching_style),
             options = TeachingStyles,
@@ -773,6 +792,213 @@ fun SettingsPreferencesScreen(
             onSelect = { style -> picker = null; onChange { it.copy(teachingStyle = style) } },
             onDismiss = { picker = null },
         )
+    }
+}
+
+// ── 3a · Settings · AI Tutor (7167:12110) ────────────────────────────────────
+
+@Composable
+fun SettingsTutorScreen(
+    selectedTutorId: String,
+    targetLanguage: LearningLanguage,
+    appLanguage: AppLanguage,
+    isSpeaking: Boolean,
+    onSelectTutor: (TutorAvatarProfile) -> Unit,
+    onPreviewTutor: (TutorAvatarProfile, String) -> Unit,
+    onStopPreview: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tutors = TutorAvatarCatalog.ORDERED_TUTORS
+    val resolvedActive = TutorAvatarCatalog.resolve(tutorId = selectedTutorId)
+    val targetLangName = targetLanguage.displayName(appLanguage)
+    var previewingId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isSpeaking) {
+        if (!isSpeaking) previewingId = null
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .zunoCanvasBackground()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        ZunoBackTitleTopBar(
+            title = stringResource(R.string.settings_ai_tutor),
+            onBack = {
+                onStopPreview()
+                onBack()
+            },
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_ai_tutor_intro),
+                style = ZunoType.BodySmall,
+                color = ZunoColors.TextSecondary,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            ) {
+                tutors.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                    ) {
+                        rowItems.forEach { tutor ->
+                            val isSelected = tutor.id == resolvedActive.id
+                            val isPlayingThis = isSpeaking && previewingId == tutor.id
+                            val sampleLine = stringResource(
+                                R.string.settings_ai_tutor_preview_sample,
+                                tutor.displayName,
+                                targetLangName,
+                            )
+                            TutorSelectionCard(
+                                tutor = tutor,
+                                selected = isSelected,
+                                isPlaying = isPlayingThis,
+                                onSelect = { onSelectTutor(tutor) },
+                                onPreview = {
+                                    if (isPlayingThis) {
+                                        previewingId = null
+                                        onStopPreview()
+                                    } else {
+                                        previewingId = tutor.id
+                                        onPreviewTutor(tutor, sampleLine)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (rowItems.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TutorSelectionCard(
+    tutor: TutorAvatarProfile,
+    selected: Boolean,
+    isPlaying: Boolean,
+    onSelect: () -> Unit,
+    onPreview: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardShape = RoundedCornerShape(ZunoRadius.xl)
+    val borderColor = if (selected) ZunoColors.SurfaceInverse else ZunoColors.BorderSubtle
+    val borderWidth = if (selected) 1.5.dp else 1.dp
+    val bgColor = if (selected) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault
+
+    Column(
+        modifier = modifier
+            .clip(cardShape)
+            .background(bgColor)
+            .border(borderWidth, borderColor, cardShape)
+            .clickable(role = Role.RadioButton, onClick = onSelect),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .background(Color(0xFF161618)),
+        ) {
+            val poster = tutor.stagePoster
+            if (poster is TutorPosterSource.DrawableRes) {
+                Image(
+                    painter = painterResource(poster.resId),
+                    contentDescription = tutor.displayName,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = ZunoSpace.s10, end = ZunoSpace.s10)
+                        .clip(CircleShape)
+                        .background(ZunoColors.SurfaceInverse)
+                        .padding(horizontal = ZunoSpace.s8, vertical = 3.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_ai_tutor_active),
+                        style = TextStyle(
+                            fontFamily = Lexend,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                        ),
+                        color = ZunoColors.TextOnInverse,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = ZunoSpace.s12, end = ZunoSpace.s10, top = ZunoSpace.s10, bottom = ZunoSpace.s10),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+            ) {
+                Text(
+                    text = tutor.displayName,
+                    style = ZunoType.BodyMediumStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(tutor.taglineRes),
+                    style = ZunoType.FootnoteRegular,
+                    color = ZunoColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (isPlaying) ZunoColors.SurfaceInverse else ZunoColors.SurfaceStrong)
+                    .border(
+                        width = 1.dp,
+                        color = if (isPlaying) ZunoColors.SurfaceInverse else ZunoColors.BorderDefault,
+                        shape = CircleShape,
+                    )
+                    .clickable(role = Role.Button, onClick = onPreview),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(
+                    icon = R.drawable.zuno_ic_volume_secondary,
+                    size = 16.dp,
+                    tint = if (isPlaying) ZunoColors.TextOnInverse else ZunoColors.IconPrimary,
+                )
+            }
+        }
     }
 }
 

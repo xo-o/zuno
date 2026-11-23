@@ -1,6 +1,6 @@
 package com.zuno.ai.avatar.model
 
-import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import java.io.File
 
 /**
@@ -28,15 +28,15 @@ sealed interface AvatarBundleSource {
 }
 
 /**
- * Domain descriptor for an AI tutor avatar.
- * Screens depend on [TutorAvatarProfile] rather than hardcoding drawable/asset paths,
- * allowing new tutors to be added from bundled assets or remote catalogs.
+ * Domain descriptor for an AI tutor avatar (strict 1:1 avatar + Cartesia Sonic-3.6 voice).
  */
 data class TutorAvatarProfile(
     val id: String,
     val displayName: String,
     val roleLabel: String,
     val voicePreset: String,
+    val voiceId: String,
+    @param:StringRes val taglineRes: Int,
     val thumbPoster: TutorPosterSource,
     val stagePoster: TutorPosterSource,
     val bundleSource: AvatarBundleSource?,

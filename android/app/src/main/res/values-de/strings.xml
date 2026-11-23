@@ -41,11 +41,18 @@
     <string name="settings_sign_out">Abmelden</string>
     <string name="settings_delete_account">Konto löschen</string>
 
-    <!-- Settings · 3 · Preferences -->
-    <string name="settings_pref_voice">Zunos Stimme</string>
+    <!-- Settings · 3 · Preferences & 3a · AI Tutor -->
+    <string name="settings_ai_tutor">KI-Tutor</string>
+    <string name="settings_ai_tutor_intro">Wähle deinen KI-Tutor. Jeder Tutor hat seine eigene natürliche Stimme in jeder Sprache.</string>
+    <string name="settings_ai_tutor_active">Aktiv</string>
+    <string name="settings_ai_tutor_preview_sample">Hallo, ich bin %1$s! Wollen wir zusammen %2$s üben?</string>
+    <string name="settings_pref_voice">KI-Tutor</string>
     <string name="settings_pref_voice_warm">Warm &amp; freundlich</string>
-    <string name="settings_pref_voice_calm">Ruhig &amp; klar</string>
+    <string name="settings_pref_voice_calm">Ruhig &amp; geduldig</string>
+    <string name="settings_pref_voice_crisp">Klar &amp; deutlich</string>
     <string name="settings_pref_voice_energetic">Energiegeladen</string>
+    <string name="settings_pref_voice_steady">Besonnen &amp; klar</string>
+    <string name="settings_pref_voice_casual">Locker &amp; entspannt</string>
     <string name="settings_pref_teaching_style">Unterrichtsstil</string>
     <string name="settings_pref_style_balanced">Ausgewogen</string>
     <string name="settings_pref_style_gentle">Sanft</string>

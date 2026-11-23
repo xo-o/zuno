@@ -41,11 +41,18 @@
     <string name="settings_sign_out">Uitloggen</string>
     <string name="settings_delete_account">Account verwijderen</string>
 
-    <!-- Settings · 3 · Preferences -->
-    <string name="settings_pref_voice">Stem van Zuno</string>
+    <!-- Settings · 3 · Preferences & 3a · AI Tutor -->
+    <string name="settings_ai_tutor">AI-tutor</string>
+    <string name="settings_ai_tutor_intro">Kies je AI-tutor. Elke tutor heeft een eigen natuurlijke stem in elke taal.</string>
+    <string name="settings_ai_tutor_active">Actief</string>
+    <string name="settings_ai_tutor_preview_sample">Hoi, ik ben %1$s! Zullen we samen %2$s oefenen?</string>
+    <string name="settings_pref_voice">AI-tutor</string>
     <string name="settings_pref_voice_warm">Warm &amp; vriendelijk</string>
-    <string name="settings_pref_voice_calm">Kalm &amp; helder</string>
+    <string name="settings_pref_voice_calm">Kalm &amp; geduldig</string>
+    <string name="settings_pref_voice_crisp">Helder &amp; duidelijk</string>
     <string name="settings_pref_voice_energetic">Energiek</string>
+    <string name="settings_pref_voice_steady">Rustig &amp; helder</string>
+    <string name="settings_pref_voice_casual">Ontspannen</string>
     <string name="settings_pref_teaching_style">Lesstijl</string>
     <string name="settings_pref_style_balanced">Gebalanceerd</string>
     <string name="settings_pref_style_gentle">Zachtaardig</string>

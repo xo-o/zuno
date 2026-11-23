@@ -17,12 +17,42 @@ from bilingual import (
 
 logger = logging.getLogger("voice-agent.voices")
 
-# Curated Cartesia Sonic-3.6 multilingual voices.
-# Ariana (en-US native, speaks es-MX/es-ES natively), Mariana (es-CO native, speaks en natively), Carson (en-US native).
+# Curated AI Tutors with strict 1:1 avatar-to-voice mapping (Cartesia Sonic-3.6 multilingual).
+TUTOR_CATALOG: dict[str, dict[str, str]] = {
+    "sofia": {
+        "name": "Sofía",
+        "voice_preset": "warm",
+        "voice_id": "ec1e269e-9ca0-402f-8a18-58e0e022355a",  # Ariana - Kind Friend
+    },
+    "valeria": {
+        "name": "Valeria",
+        "voice_preset": "calm",
+        "voice_id": "ae823354-f9be-4aef-8543-f569644136b4",  # Mariana - Nurturing Guide
+    },
+    "claire": {
+        "name": "Claire",
+        "voice_preset": "crisp",
+        "voice_id": "f786b574-daa5-4673-aa0c-cbe3e8534c02",  # Katie - Friendly Fixer
+    },
+    "mateo": {
+        "name": "Mateo",
+        "voice_preset": "energetic",
+        "voice_id": "4df027cb-2920-4a1f-8c34-f21529d5c3fe",  # Carson - Friendly Support
+    },
+    "lucas": {
+        "name": "Lucas",
+        "voice_preset": "steady",
+        "voice_id": "8c254787-4eb4-4577-bd3d-fb3c273baea2",  # Rowan - Steady Guide
+    },
+    "ethan": {
+        "name": "Ethan",
+        "voice_preset": "casual",
+        "voice_id": "30894953-bcce-41fe-892c-15ce19c843ff",  # Parker - Supportive Pal
+    },
+}
+
 CARTESIA_MULTILINGUAL_VOICES: dict[str, str] = {
-    "warm": "ec1e269e-9ca0-402f-8a18-58e0e022355a",       # Ariana - Kind Friend
-    "calm": "ae823354-f9be-4aef-8543-f569644136b4",       # Mariana - Nurturing Guide
-    "energetic": "4df027cb-2920-4a1f-8c34-f21529d5c3fe",  # Carson - Friendly Support
+    spec["voice_preset"]: spec["voice_id"] for spec in TUTOR_CATALOG.values()
 }
 
 DEFAULT_CARTESIA_VOICE = CARTESIA_MULTILINGUAL_VOICES["warm"]
@@ -38,8 +68,33 @@ CARTESIA_LANGS = {
 ALLOWED_MULTILINGUAL_VOICE_IDS = set(CARTESIA_MULTILINGUAL_VOICES.values())
 
 
-def resolve_cartesia_voice(voice_id: str | None = None, tutor_voice: str | None = None) -> str:
+def resolve_tutor_name(tutor_id: str | None = None, tutor_voice: str | None = None) -> str:
+    if tutor_id:
+        norm = tutor_id.strip().lower()
+        if norm == "elena":
+            return "Sofía"
+        if norm in TUTOR_CATALOG:
+            return TUTOR_CATALOG[norm]["name"]
+    if tutor_voice:
+        norm_v = tutor_voice.strip().lower()
+        for spec in TUTOR_CATALOG.values():
+            if spec["voice_preset"] == norm_v:
+                return spec["name"]
+    return "Sofía"
+
+
+def resolve_cartesia_voice(
+    voice_id: str | None = None,
+    tutor_voice: str | None = None,
+    tutor_id: str | None = None,
+) -> str:
     """Always resolves to one of Zuno's verified Cartesia multilingual voices."""
+    if tutor_id:
+        norm_id = tutor_id.strip().lower()
+        if norm_id == "elena":
+            return TUTOR_CATALOG["sofia"]["voice_id"]
+        if norm_id in TUTOR_CATALOG:
+            return TUTOR_CATALOG[norm_id]["voice_id"]
     if tutor_voice and tutor_voice in CARTESIA_MULTILINGUAL_VOICES:
         return CARTESIA_MULTILINGUAL_VOICES[tutor_voice]
     if voice_id and voice_id in ALLOWED_MULTILINGUAL_VOICE_IDS:
@@ -119,10 +174,11 @@ def resolve_cartesia_locale(
 def create_cartesia_tts(
     voice_id: str | None = None,
     tutor_voice: str | None = None,
+    tutor_id: str | None = None,
     language: str | None = "en",
     speed: float = 1.0,
 ) -> cartesia.TTS:
-    resolved_voice = resolve_cartesia_voice(voice_id, tutor_voice)
+    resolved_voice = resolve_cartesia_voice(voice_id, tutor_voice, tutor_id)
     resolved_lang = cartesia_language(language)
     word_timestamps = resolved_lang in ("en", "de", "es", "fr")
     return cartesia.TTS(
@@ -160,10 +216,12 @@ class BilingualCartesiaSynthesizer:
         self,
         voice_id: str | None = None,
         tutor_voice: str | None = None,
+        tutor_id: str | None = None,
         accent: str | None = None,
     ) -> None:
-        self.voice_id = resolve_cartesia_voice(voice_id, tutor_voice)
+        self.voice_id = resolve_cartesia_voice(voice_id, tutor_voice, tutor_id)
         self.tutor_voice = tutor_voice
+        self.tutor_id = tutor_id
         self.accent = accent
         self.api_key = os.environ.get("CARTESIA_API_KEY")
         self._engines: dict[str, cartesia.TTS] = {}

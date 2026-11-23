@@ -31,7 +31,7 @@ import { completeFlow, consumeFlow, getFlow } from "./lib/magic-link-flows.js";
 import { renderVerifyLandingPage, renderVerifyResultPage } from "./lib/verify-page.js";
 import { getProfile, type LearnerProfile } from "./lib/profile.js";
 import { variety, voiceInstructions } from "./lib/tutor.js";
-import { cartesiaVoiceFor } from "./lib/voices.js";
+import { resolveTutor, TUTOR_CATALOG } from "./lib/voices.js";
 import { accountDeletionRoutes } from "./routes/account.js";
 import { attachmentRoutes } from "./routes/attachments.js";
 import { chatRoutes } from "./routes/chats.js";
@@ -284,13 +284,15 @@ app.post("/api/livekit/token", async (c) => {
   const room = `zuno-${randomUUID().slice(0, 8)}`;
 
   const profile = await getProfile(user.id);
-  const voice = cartesiaVoiceFor(profile.tutorVoice);
+  const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
+  const voice = tutor.voiceId;
 
   if (body.mode === "onboarding") {
     const ob = body.onboarding ?? {};
     const nativeLanguage = ob.nativeLanguage || profile.nativeLanguage || "en";
     const targetLanguage = ob.targetLanguage || body.language || profile.targetLanguage;
     const accent = ob.accent || profile.accent;
+    const onboardingTutor = TUTOR_CATALOG.sofia;
     const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity: user.id,
       name: ob.name || user.name || user.email,
@@ -298,13 +300,15 @@ app.post("/api/livekit/token", async (c) => {
       metadata: JSON.stringify({
         mode: "onboarding",
         provider: "cartesia",
-        voice,
+        voice: onboardingTutor.voiceId,
+        tutorId: onboardingTutor.id,
+        tutorName: onboardingTutor.name,
         // Onboarding conducts STT + TTS in the learner's native/app language.
         language: nativeLanguage,
         targetLanguage,
         nativeLanguage,
         accent,
-        tutorVoice: profile.tutorVoice,
+        tutorVoice: onboardingTutor.voicePreset,
         handsFree: true,
         onboarding: {
           step: ob.step ?? "name",
@@ -360,7 +364,9 @@ app.post("/api/livekit/token", async (c) => {
           mode: "roleplay",
           provider: "cartesia",
           voice,
-          tutorVoice: profile.tutorVoice,
+          tutorId: tutor.id,
+          tutorName: tutor.name,
+          tutorVoice: tutor.voicePreset,
           roleplayId: rpRow.id,
           conversationId: thread.id,
           language: targetLanguage,
@@ -418,6 +424,8 @@ app.post("/api/livekit/token", async (c) => {
       conversationKind: context.kind,
       provider: "cartesia",
       voice,
+      tutorId: tutor.id,
+      tutorName: tutor.name,
       language: targetLanguage,
       targetLanguage,
       targetLanguageName: languageName(targetLanguage),
@@ -427,7 +435,7 @@ app.post("/api/livekit/token", async (c) => {
       accent: effectiveProfile.accent,
       level: effectiveProfile.level,
       teachInTarget: effectiveProfile.teachInTarget,
-      tutorVoice: profile.tutorVoice,
+      tutorVoice: tutor.voicePreset,
       handsFree: profile.handsFree,
       instructions,
       resume: history.length > 0,

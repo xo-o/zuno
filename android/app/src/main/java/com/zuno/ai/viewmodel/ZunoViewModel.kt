@@ -547,6 +547,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _profile.value = previous.copy(preferences = next)
         val fields = buildMap<String, Any> {
             val old = previous.preferences
+            if (next.tutorId != old.tutorId) put("tutorId", next.tutorId)
             if (next.tutorVoice != old.tutorVoice) put("tutorVoice", next.tutorVoice)
             if (next.teachingStyle != old.teachingStyle) put("teachingStyle", next.teachingStyle)
             if (next.strictMode != old.strictMode) put("strictMode", next.strictMode)
@@ -917,6 +918,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         language: String? = null,
         nativeLanguage: String? = null,
         defaultLanguage: String? = null,
+        voiceKey: String? = null,
         slow: Boolean = false,
     ): ByteArray =
         api.ttsPreview(
@@ -924,6 +926,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             language = language,
             nativeLanguage = nativeLanguage,
             defaultLanguage = defaultLanguage,
+            voiceKey = voiceKey,
             slow = slow,
         )
 

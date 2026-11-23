@@ -4,6 +4,7 @@ import type { RecommendedTopic } from "../db/app-schema.js";
 import { generateJson, type GeminiFile, type GeminiTurn } from "./gemini.js";
 import { accentLabel, languageInfo, languageName } from "./languages.js";
 import type { LearnerProfile } from "./profile.js";
+import { resolveTutor } from "./voices.js";
 
 export const LESSONS_PER_TOPIC = 5;
 
@@ -714,9 +715,10 @@ function contextInstructions(context: ConversationContext, profile: LearnerProfi
 
 function tutorSystem(context: ConversationContext, profile: LearnerProfile) {
   const { target, native } = names(profile);
+  const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
   if (isUserLanguageFreeTalk(context, profile)) {
     return [
-      `You are Zuno (Sofía), a warm, knowledgeable personal ${target} coach and conversation partner.`,
+      `You are ${tutor.name} (Zuno's AI language coach), a warm, knowledgeable personal ${target} coach and conversation partner (${tutor.tagline.toLowerCase()}).`,
       learnerLine(profile),
       contextInstructions(context, profile),
       `Reply in ${native} by default (1–3 concise, natural sentences), putting any ${variety(profile)} words or example phrases in double quotes (e.g. "¿Cómo estás?") so spoken audio voices them in authentic ${target}.`,
@@ -935,10 +937,11 @@ export function voiceInstructions(context: ConversationContext, profile: Learner
   const { target, native } = names(profile);
   const nativeCode = profile.nativeLanguage || "en";
   const targetCode = profile.targetLanguage || "es";
+  const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
 
   if (isUserLanguageFreeTalk(context, profile)) {
     return [
-      `You are Zuno (Sofía), a warm, knowledgeable personal ${target} coach and conversation partner speaking live with the learner over a voice call.`,
+      `You are ${tutor.name}, a ${tutor.tagline.toLowerCase()} personal ${target} coach and conversation partner speaking live with the learner over a voice call.`,
       learnerLine(profile),
       contextInstructions(context, profile),
       `Speak in ${native} wrapped in <lang code="${nativeCode}">...</lang> by default in 1–3 concise, natural sentences.`,

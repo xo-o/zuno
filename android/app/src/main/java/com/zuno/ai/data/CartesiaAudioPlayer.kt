@@ -33,6 +33,7 @@ class CartesiaAudioPlayer(
         language: String?,
         nativeLanguage: String?,
         defaultLanguage: String?,
+        voiceKey: String?,
         slow: Boolean,
     ) -> ByteArray,
 ) {
@@ -73,7 +74,7 @@ class CartesiaAudioPlayer(
                     val hash = sha256("$voiceKey|${language.orEmpty()}|${nativeLanguage.orEmpty()}|${defaultLanguage.orEmpty()}|$slow|$trimmed")
                     val cached = File(cacheRoot, "$hash.wav")
                     if (!cached.exists() || cached.length() == 0L) {
-                        val bytes = fetchAudio(trimmed, language, nativeLanguage, defaultLanguage, slow)
+                        val bytes = fetchAudio(trimmed, language, nativeLanguage, defaultLanguage, voiceKey, slow)
                         if (bytes.isEmpty()) {
                             cached.delete()
                             return@withContext null
@@ -158,6 +159,7 @@ fun rememberCartesiaAudioPlayer(
         language: String?,
         nativeLanguage: String?,
         defaultLanguage: String?,
+        voiceKey: String?,
         slow: Boolean,
     ) -> ByteArray,
 ): CartesiaAudioPlayer {

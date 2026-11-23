@@ -23,6 +23,7 @@ export const userProfile = pgTable("user_profile", {
   level: text("level").default("B1").notNull(),
   accent: text("accent"),
   // Preferences & learning goals (Settings · Preferences / Learning)
+  tutorId: text("tutor_id").default("sofia").notNull(),
   tutorVoice: text("tutor_voice").default("warm").notNull(),
   teachingStyle: text("teaching_style").default("balanced").notNull(),
   strictMode: boolean("strict_mode").default(false).notNull(),

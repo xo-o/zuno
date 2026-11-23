@@ -40,6 +40,7 @@ from voices import (
     BilingualCartesiaSynthesizer,
     create_cartesia_tts,
     resolve_cartesia_voice,
+    resolve_tutor_name,
     stream_bilingual_tts,
     synthesize_bilingual_segments,
     update_cartesia_tts,
@@ -182,6 +183,7 @@ class ConversationalAgent(Agent):
         conversation_kind: str = "freetalk",
         teach_in_target: bool = False,
         multi_stt_active: bool = True,
+        tutor_name: str = "Sofía",
         tutor_instructions: str | None = None,
         resume: bool = False,
         opening: str | None = None,
@@ -200,6 +202,7 @@ class ConversationalAgent(Agent):
         self._stt_engine = stt
         self.synthesizer = synthesizer or BilingualCartesiaSynthesizer()
         self.broadcast = broadcast
+        self.tutor_name = tutor_name or "Sofía"
         self.tutor_instructions = tutor_instructions
         self.resume = resume
         self.opening = opening
@@ -225,7 +228,7 @@ class ConversationalAgent(Agent):
             multi_stt_active=multi_stt_active,
         )
         base_intro = (
-            f"You are Zuno (Sofía), a warm, knowledgeable personal {target_language_name} coach and conversation partner "
+            f"You are {self.tutor_name} (Zuno's AI language coach), a warm, knowledgeable personal {target_language_name} coach and conversation partner "
             "speaking live with the learner over a real-time voice call."
         )
         instructions = (
@@ -435,8 +438,13 @@ async def entrypoint(ctx: JobContext) -> None:
         logger.info(f"Peer human-only room {ctx.room.name}; agent stepping out.")
         return
 
+    tutor_id = str(meta.get("tutorId") or "") or None
     tutor_voice = meta.get("tutorVoice")
-    current_voice = resolve_cartesia_voice(meta.get("voice"), tutor_voice)
+    if mode == "onboarding":
+        tutor_id = "sofia"
+        tutor_voice = "warm"
+    current_voice = resolve_cartesia_voice(meta.get("voice"), tutor_voice, tutor_id)
+    tutor_name = str(meta.get("tutorName") or resolve_tutor_name(tutor_id, tutor_voice))
     current_language = str(meta.get("targetLanguage") or meta.get("language") or "en")
     target_language_name = str(meta.get("targetLanguageName") or current_language.upper())
     variety_name = str(meta.get("varietyName") or target_language_name)
@@ -535,11 +543,13 @@ async def entrypoint(ctx: JobContext) -> None:
     tts = create_cartesia_tts(
         voice_id=current_voice,
         tutor_voice=tutor_voice,
+        tutor_id=tutor_id,
         language=tts_default_lang,
     )
     session_synthesizer = BilingualCartesiaSynthesizer(
         voice_id=current_voice,
         tutor_voice=tutor_voice,
+        tutor_id=tutor_id,
         accent=current_accent,
     )
 
@@ -608,6 +618,7 @@ async def entrypoint(ctx: JobContext) -> None:
             conversation_kind=conversation_kind,
             teach_in_target=teach_in_target,
             multi_stt_active=(use_multilingual_stt and multi_stt_supported),
+            tutor_name=tutor_name,
             tutor_instructions=tutor_instructions,
             resume=resume,
             opening=opening,
@@ -615,7 +626,7 @@ async def entrypoint(ctx: JobContext) -> None:
         agent = conversational_agent
         initial_endpointing = 0.55 if hands_free else 1.6
 
-    avatar_id_meta = meta.get("avatarId") or ("elena" if meta.get("videoAvatar") else None)
+    avatar_id_meta = meta.get("avatarId") or ((tutor_id or "sofia") if meta.get("videoAvatar") else None)
     render_mode = str(meta.get("renderMode") or "server").lower()
     use_video_avatar = bool(avatar_id_meta) and render_mode != "client"
 
@@ -716,8 +727,9 @@ async def entrypoint(ctx: JobContext) -> None:
 
             if lesson_orchestrator is not None and lesson_orchestrator.stage == "roleplay":
                 lesson_orchestrator.last_tutor_line = clean_text
-                ai_role = lesson_orchestrator.roleplay_cfg.get("aiRole") or "Sofía"
-                role_label = f"{ai_role} · Sofía" if "sofía" not in ai_role.lower() else ai_role
+                tname = lesson_orchestrator.tutor_name
+                ai_role = lesson_orchestrator.roleplay_cfg.get("aiRole") or tname
+                role_label = f"{ai_role} · {tname}" if tname.lower() not in ai_role.lower() else ai_role
                 turn_id = f"rp-agent-{int(time.time() * 1000)}"
                 lesson_orchestrator.last_tutor_turn_id = turn_id
                 asyncio.create_task(

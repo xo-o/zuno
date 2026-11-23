@@ -63,6 +63,7 @@ import com.zuno.ai.BuildConfig
 import com.zuno.ai.R
 import com.zuno.ai.auth.AuthState
 import com.zuno.ai.auth.AuthViewModel
+import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
 import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.Attachment
@@ -135,6 +136,7 @@ import com.zuno.ai.ui.screens.SettingsLearningScreen
 import com.zuno.ai.ui.screens.SettingsNotificationsScreen
 import com.zuno.ai.ui.screens.SettingsOverviewScreen
 import com.zuno.ai.ui.screens.SettingsPreferencesScreen
+import com.zuno.ai.ui.screens.SettingsTutorScreen
 import com.zuno.ai.ui.screens.SplashScreen
 import com.zuno.ai.ui.screens.TopicScreen
 import com.zuno.ai.ui.screens.TopicSettingsScreen
@@ -204,6 +206,7 @@ sealed interface ZunoRoute {
     data class LessonEvaluation(val topicId: String, val lessonId: String) : ZunoRoute
     data object Settings : ZunoRoute
     data object SettingsPreferences : ZunoRoute
+    data object SettingsTutor : ZunoRoute
     data object SettingsAppLanguage : ZunoRoute
     data object SettingsLearning : ZunoRoute
     data object SettingsLearningLanguage : ZunoRoute
@@ -247,6 +250,7 @@ private fun ZunoRoute.encode(): String = when (this) {
     is ZunoRoute.LessonEvaluation -> "lesson-eval:$topicId:$lessonId"
     ZunoRoute.Settings -> "settings"
     ZunoRoute.SettingsPreferences -> "settings:preferences"
+    ZunoRoute.SettingsTutor -> "settings:tutor"
     ZunoRoute.SettingsAppLanguage -> "settings:app-language"
     ZunoRoute.SettingsLearning -> "settings:learning"
     ZunoRoute.SettingsLearningLanguage -> "settings:learning-language"
@@ -318,6 +322,7 @@ private fun decodeRoute(value: String): ZunoRoute = when {
     value.startsWith("voice:") -> ZunoRoute.Voice(value.removePrefix("voice:"))
     value == "settings" -> ZunoRoute.Settings
     value == "settings:preferences" -> ZunoRoute.SettingsPreferences
+    value == "settings:tutor" -> ZunoRoute.SettingsTutor
     value == "settings:app-language" -> ZunoRoute.SettingsAppLanguage
     value == "settings:learning" -> ZunoRoute.SettingsLearning
     value == "settings:learning-language" -> ZunoRoute.SettingsLearningLanguage
@@ -403,9 +408,13 @@ fun ZunoApp(
 
     val language: LearningLanguage = profile?.language ?: LearningLanguages.Spanish
     val tts = rememberCartesiaAudioPlayer(zunoViewModel::fetchTtsPreview)
+    val ttsSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
     val preferences = profile?.preferences
-    val activeTutor = remember(preferences?.tutorVoice) {
-        TutorAvatarCatalog.resolve(voicePreset = preferences?.tutorVoice)
+    val activeTutor = remember(preferences?.tutorId, preferences?.tutorVoice) {
+        TutorAvatarCatalog.resolve(
+            tutorId = preferences?.tutorId,
+            voicePreset = preferences?.tutorVoice,
+        )
     }
     DisposableEffect(tts, viewModel) {
         tts.setAvatarSpeechSink(viewModel.avatarSpeechSink)
@@ -1466,6 +1475,7 @@ fun ZunoApp(
     CompositionLocalProvider(
         LocalContext provides localizedContext,
         LocalConfiguration provides localizedContext.resources.configuration,
+        LocalActiveTutor provides activeTutor,
     ) {
         AnimatedContent(
             targetState = route,
@@ -1543,7 +1553,7 @@ fun ZunoApp(
                         confirmSignOut = true
                     },
                     onError = { message -> toast(message) },
-                    tutor = activeTutor,
+                    tutor = TutorAvatarCatalog.SOFIA,
                     modifier = screenModifier,
                 )
 
@@ -1881,7 +1891,7 @@ fun ZunoApp(
                                 text = line,
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
-                                voiceKey = preferences?.tutorVoice ?: "warm",
+                                voiceKey = activeTutor.id,
                                 slow = true,
                             )
                         },
@@ -1890,7 +1900,7 @@ fun ZunoApp(
                                 text = phrase,
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
-                                voiceKey = preferences?.tutorVoice ?: "warm",
+                                voiceKey = activeTutor.id,
                             )
                         },
                         modifier = screenModifier,
@@ -2248,7 +2258,7 @@ fun ZunoApp(
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
                                 defaultLanguage = appLanguage.code.takeIf { isBilingualFreeTalk },
-                                voiceKey = preferences?.tutorVoice ?: "warm",
+                                voiceKey = activeTutor.id,
                             )
                         },
                         onExplain = ::explain,
@@ -2330,7 +2340,7 @@ fun ZunoApp(
                                 text = phrase,
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
-                                voiceKey = preferences?.tutorVoice ?: "warm",
+                                voiceKey = activeTutor.id,
                             )
                         },
                         onTranslate = { line -> viewModel.sendLessonAction("translate", line) },
@@ -2345,7 +2355,7 @@ fun ZunoApp(
                                     language = language.code,
                                     nativeLanguage = appLanguage.code,
                                     defaultLanguage = appLanguage.code.takeIf { isFreeTalkVoice },
-                                    voiceKey = preferences?.tutorVoice ?: "warm",
+                                    voiceKey = activeTutor.id,
                                     slow = true,
                                 )
                             }
@@ -2506,7 +2516,7 @@ fun ZunoApp(
                                 text = sample,
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
-                                voiceKey = preferences?.tutorVoice ?: "warm",
+                                voiceKey = activeTutor.id,
                             )
                         },
                         onNextLesson = { nextLessonId ->
@@ -2537,6 +2547,7 @@ fun ZunoApp(
                     onUpgrade = { navigate(ZunoRoute.Paywall) },
                     onAccount = { navigate(ZunoRoute.SettingsAccount) },
                     onLearning = { navigate(ZunoRoute.SettingsLearning) },
+                    onTutor = { navigate(ZunoRoute.SettingsTutor) },
                     onAppLanguage = { navigate(ZunoRoute.SettingsAppLanguage) },
                     onPreferences = { navigate(ZunoRoute.SettingsPreferences) },
                     onNotifications = { navigate(ZunoRoute.SettingsNotifications) },
@@ -2552,6 +2563,31 @@ fun ZunoApp(
                     targetLanguage = language,
                     appLanguage = appLanguage,
                     onChange = zunoViewModel::updatePreferences,
+                    onOpenTutor = { navigate(ZunoRoute.SettingsTutor) },
+                    onBack = ::pop,
+                    modifier = screenModifier,
+                )
+
+                ZunoRoute.SettingsTutor -> SettingsTutorScreen(
+                    selectedTutorId = activeTutor.id,
+                    targetLanguage = language,
+                    appLanguage = appLanguage,
+                    isSpeaking = ttsSpeaking,
+                    onSelectTutor = { chosen ->
+                        zunoViewModel.updatePreferences {
+                            it.copy(tutorId = chosen.id, tutorVoice = chosen.voicePreset)
+                        }
+                    },
+                    onPreviewTutor = { chosen, sampleText ->
+                        tts.speak(
+                            text = sampleText,
+                            language = language.code,
+                            nativeLanguage = appLanguage.code,
+                            defaultLanguage = appLanguage.code,
+                            voiceKey = chosen.id,
+                        )
+                    },
+                    onStopPreview = { tts.stop() },
                     onBack = ::pop,
                     modifier = screenModifier,
                 )
@@ -2656,7 +2692,7 @@ fun ZunoApp(
                             text = phrase,
                             language = language.code,
                             nativeLanguage = appLanguage.code,
-                            voiceKey = preferences?.tutorVoice ?: "warm",
+                            voiceKey = activeTutor.id,
                         )
                     },
                     extraSavedPhrases = savedVocabPhrases,

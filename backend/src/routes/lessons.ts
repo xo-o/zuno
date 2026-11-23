@@ -18,7 +18,7 @@ import { languageName } from "../lib/languages.js";
 import { getProfile } from "../lib/profile.js";
 import { serializeLessonEvaluation, serializeTopicDetail } from "../lib/serializers.js";
 import { generateLessonCurriculum } from "../lib/tutor.js";
-import { cartesiaVoiceFor } from "../lib/voices.js";
+import { resolveTutor } from "../lib/voices.js";
 import { checkTopicCompleted } from "./conversations.js";
 
 const TOKEN_TTL = "6h";
@@ -164,7 +164,8 @@ export const lessonRoutes = new Hono<AuthEnv>()
     }
 
     const room = `zuno-les-${randomUUID().slice(0, 8)}`;
-    const voice = cartesiaVoiceFor(profile.tutorVoice);
+    const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
+    const voice = tutor.voiceId;
     const targetLanguage = parent.language || profile.targetLanguage;
 
     const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
@@ -175,7 +176,9 @@ export const lessonRoutes = new Hono<AuthEnv>()
         mode: "lesson",
         provider: "cartesia",
         voice,
-        tutorVoice: profile.tutorVoice,
+        tutorId: tutor.id,
+        tutorName: tutor.name,
+        tutorVoice: tutor.voicePreset,
         lessonId: lesson.id,
         topicId: parent.id,
         conversationId: thread.id,

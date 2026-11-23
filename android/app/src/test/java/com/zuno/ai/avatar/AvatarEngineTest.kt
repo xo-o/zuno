@@ -2,6 +2,7 @@ package com.zuno.ai.avatar
 
 import com.zuno.ai.avatar.audio.AvatarSpeechSink
 import com.zuno.ai.avatar.audio.WavPcmFeeder
+import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
 import com.zuno.ai.avatar.dsp.AvatarFrameExpression
 import com.zuno.ai.avatar.dsp.SyllableClipSpeechDriver
 import com.zuno.ai.avatar.model.AvatarBundleManifestParser
@@ -162,6 +163,36 @@ class AvatarEngineTest {
             assertEquals(dataSize, parsed.pcmBytes.size)
         } finally {
             tmp.delete()
+        }
+    }
+
+    @Test
+    fun tutorCatalog_sixTutorsHaveUniqueVoicesAndValidBundledManifests() {
+        val tutors = TutorAvatarCatalog.ORDERED_TUTORS
+        assertEquals(6, tutors.size)
+        assertEquals("sofia", TutorAvatarCatalog.DEFAULT_TUTOR.id)
+        assertEquals(6, tutors.map { it.voiceId }.toSet().size)
+        assertEquals(6, tutors.map { it.voicePreset }.toSet().size)
+
+        val assetsRoot = listOf(
+            File("src/main/assets/avatars"),
+            File("app/src/main/assets/avatars"),
+            File("android/app/src/main/assets/avatars"),
+        ).firstOrNull { it.isDirectory }
+        assertNotNull("Expected bundled avatars asset directory", assetsRoot)
+
+        for (tutor in tutors) {
+            val dir = File(assetsRoot!!, tutor.id)
+            assertTrue("Missing bundle dir for ${tutor.id}", dir.isDirectory)
+            assertTrue("Missing idle.mp4 for ${tutor.id}", File(dir, "idle.mp4").length() > 10_000L)
+            assertTrue("Missing mouth_strip.webp for ${tutor.id}", File(dir, "mouth_strip.webp").length() > 10_000L)
+            assertTrue("Missing mask.png for ${tutor.id}", File(dir, "mask.png").length() > 500L)
+            val metaFile = File(dir, "meta.json")
+            val manifest = AvatarBundleManifestParser.parse(metaFile.readText())
+            assertEquals(tutor.id, manifest.avatarId)
+            assertEquals(1280, manifest.width)
+            assertEquals(720, manifest.height)
+            assertTrue("Expected >= 10 speech clips for ${tutor.id}", manifest.clips.size >= 10)
         }
     }
 }

@@ -59,6 +59,7 @@ import com.zuno.ai.data.PeerLearner
 import com.zuno.ai.data.UnifiedChatItem
 import com.zuno.ai.data.UnifiedChatKind
 import com.zuno.ai.ui.components.HomeNavTab
+import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.ui.components.ZunoAiTutorAvatar
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
@@ -1139,10 +1140,11 @@ private fun NewChatSheet(
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ZunoAiTutorAvatar(size = 42.dp)
+                val activeTutor = LocalActiveTutor.current
+                ZunoAiTutorAvatar(size = 42.dp, tutor = activeTutor)
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
                     Text(
-                        text = stringResource(R.string.chats_sofia_ai_tutor),
+                        text = "${activeTutor.displayName} · ${stringResource(R.string.chats_filter_ai_tutor)}",
                         style = ZunoType.BodyMediumStrong,
                         color = ZunoColors.TextPrimary,
                         maxLines = 1,

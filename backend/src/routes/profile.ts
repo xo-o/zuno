@@ -18,6 +18,7 @@ import {
   InvalidAccentError,
   languageProgress,
   TEACHING_STYLES,
+  TUTOR_IDS,
   TUTOR_VOICES,
   updateProfile,
 } from "../lib/profile.js";
@@ -33,6 +34,7 @@ const updateSchema = z.object({
   nativeLanguage: z.enum(APP_LANGUAGE_CODES).optional(),
   level: z.enum(LEVELS).optional(),
   accent: z.string().trim().min(1).max(40).optional(),
+  tutorId: z.enum(TUTOR_IDS).optional(),
   tutorVoice: z.enum(TUTOR_VOICES).optional(),
   teachingStyle: z.enum(TEACHING_STYLES).optional(),
   strictMode: z.boolean().optional(),

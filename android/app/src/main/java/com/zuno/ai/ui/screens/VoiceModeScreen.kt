@@ -424,7 +424,7 @@ private fun PortraitVoiceCallBody(
                                     Speaker.AGENT -> {
                                         ZunoAssistantBubble(
                                             message = turn.text,
-                                            senderLabel = stringResource(R.string.onboarding_sender_sofia),
+                                            senderLabel = tutor.displayName,
                                             onListen = { onTranslate?.invoke(turn.text) },
                                             listenLabel = stringResource(R.string.voice_chip_translate),
                                             listenIcon = R.drawable.zuno_ic_languages,
@@ -516,7 +516,7 @@ private fun PortraitVoiceCallBody(
                                             Speaker.AGENT -> {
                                                 ZunoAssistantBubble(
                                                     message = turn.text,
-                                                    senderLabel = "${stringResource(R.string.onboarding_sender_sofia)} · $sessionKindLabel",
+                                                    senderLabel = "${tutor.displayName} · $sessionKindLabel",
                                                     onListen = { onTranslate?.invoke(turn.text) },
                                                     listenLabel = stringResource(R.string.voice_chip_translate),
                                                     listenIcon = R.drawable.zuno_ic_languages,
@@ -620,12 +620,12 @@ private fun AiVideoParticipantsRow(
                     role = Role.Button,
                     onClick = onInterrupt,
                 )
-                .semantics { contentDescription = "Sofía AI tutor — tap to interrupt" },
+                .semantics { contentDescription = "${tutor.displayName} AI tutor — tap to interrupt" },
         ) {
             TutorStageAvatar(
                 tutor = tutor,
                 speechSink = avatarSpeechSink,
-                contentDescription = stringResource(R.string.onboarding_sender_sofia),
+                contentDescription = tutor.displayName,
                 modifier = Modifier.fillMaxSize(),
             )
             Box(
@@ -683,7 +683,7 @@ private fun AiVideoParticipantsRow(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
                     Text(
-                        text = stringResource(R.string.onboarding_sender_sofia),
+                        text = tutor.displayName,
                         style = ZunoType.BodyMediumStrong,
                         color = Color.White,
                         maxLines = 1,
@@ -810,12 +810,12 @@ private fun PortraitStageCard(
                 role = Role.Button,
                 onClick = onInterrupt,
             )
-            .semantics { contentDescription = "Sofía AI tutor — tap to interrupt" },
+            .semantics { contentDescription = "${tutor.displayName} AI tutor — tap to interrupt" },
     ) {
         TutorStageAvatar(
             tutor = tutor,
             speechSink = avatarSpeechSink,
-            contentDescription = stringResource(R.string.onboarding_sender_sofia),
+            contentDescription = tutor.displayName,
             modifier = Modifier.fillMaxSize(),
         )
         Box(
@@ -1092,7 +1092,8 @@ private fun LessonAvatarVoiceBody(
     val tutorSpeaking = status == VoiceCallStatus.Speaking
     val stageKind = lessonStage?.stage
 
-    val displayTurns = remember(lessonTurns, lessonStage, tutorLine) {
+    val tutorName = tutor.displayName
+    val displayTurns = remember(lessonTurns, lessonStage, tutorLine, tutorName) {
         if (lessonTurns.isNotEmpty()) {
             lessonTurns
         } else {
@@ -1102,7 +1103,7 @@ private fun LessonAvatarVoiceBody(
                         LessonTurnUi(
                             id = "stage-teach",
                             isUser = false,
-                            senderLabel = if (tutorSpeaking) "Sofía · Speaking" else "Sofía",
+                            senderLabel = if (tutorSpeaking) "$tutorName · Speaking" else tutorName,
                             text = card.phrase,
                             translation = card.translation.takeIf { it.isNotBlank() },
                             actions = listOf("listen_normal", "listen_slow"),
@@ -1112,7 +1113,7 @@ private fun LessonAvatarVoiceBody(
                         LessonTurnUi(
                             id = "stage-build",
                             isUser = false,
-                            senderLabel = "Sofía",
+                            senderLabel = tutorName,
                             text = card.prompt,
                             actions = listOf("hint", "reveal"),
                         ),
@@ -1124,13 +1125,13 @@ private fun LessonAvatarVoiceBody(
                                 LessonTurnUi(
                                     id = "stage-recall",
                                     isUser = false,
-                                    senderLabel = "Sofía",
+                                    senderLabel = tutorName,
                                     text = recall.cue,
                                     actions = listOf("first_word", "reveal"),
                                 ),
                             )
                         } else if (!tutorLine.isNullOrBlank()) {
-                            val roleLabel = lessonStage?.pill?.role?.takeIf { it.isNotBlank() }?.let { "$it · Sofía" } ?: "Sofía"
+                            val roleLabel = lessonStage?.pill?.role?.takeIf { it.isNotBlank() }?.let { "$it · $tutorName" } ?: tutorName
                             add(
                                 LessonTurnUi(
                                     id = "stage-tutor",

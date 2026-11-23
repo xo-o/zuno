@@ -43,6 +43,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.zuno.ai.R
+import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
 import com.zuno.ai.avatar.model.TutorAvatarProfile
 import com.zuno.ai.avatar.ui.TutorStaticAvatar
@@ -121,12 +122,12 @@ fun ZunoOpenToSpeakAvatar(
 fun ZunoAiTutorAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
-    tutor: TutorAvatarProfile = TutorAvatarCatalog.DEFAULT_TUTOR,
+    tutor: TutorAvatarProfile = LocalActiveTutor.current,
 ) {
     TutorStaticAvatar(
         tutor = tutor,
         size = size,
-        contentDescription = stringResource(R.string.onboarding_sender_sofia),
+        contentDescription = tutor.displayName,
         modifier = modifier,
     )
 }

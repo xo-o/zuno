@@ -23,6 +23,7 @@ from bilingual import (
 )
 from voices import (
     BilingualCartesiaSynthesizer,
+    resolve_tutor_name,
     stream_bilingual_tts,
     synthesize_bilingual_segments,
     update_cartesia_tts,
@@ -165,6 +166,7 @@ class LessonOrchestrator:
 
         self.lesson_id: str = meta.get("lessonId", "")
         self.lesson_title: str = meta.get("lessonTitle", "")
+        self.tutor_name: str = str(meta.get("tutorName") or resolve_tutor_name(meta.get("tutorId"), meta.get("tutorVoice")))
         self.native_lang: str = meta.get("nativeLanguage") or "en"
         self.target_lang: str = meta.get("targetLanguage") or meta.get("language") or "es"
         self.target_lang_name: str = meta.get("targetLanguageName") or self.target_lang.upper()
@@ -209,6 +211,7 @@ class LessonOrchestrator:
         self.synthesizer = BilingualCartesiaSynthesizer(
             voice_id=meta.get("voice"),
             tutor_voice=meta.get("tutorVoice"),
+            tutor_id=meta.get("tutorId"),
             accent=meta.get("accent"),
         )
         self._speech_lock = asyncio.Lock()
@@ -465,7 +468,7 @@ class LessonOrchestrator:
         })
         await self._emit_lesson_turn(
             speaker="agent",
-            sender_label="Sofía · Speaking",
+            sender_label=f"{self.tutor_name} · Speaking",
             text=phrase,
             translation=None if self.teach_in_target else translation,
             actions=["listen_normal", "listen_slow"],
@@ -511,7 +514,7 @@ class LessonOrchestrator:
             await self.broadcast({
                 "type": "lesson_turn_update",
                 "id": self.last_tutor_turn_id,
-                "senderLabel": "Sofía",
+                "senderLabel": self.tutor_name,
             })
 
     async def _advance_after_phrase(self) -> None:
@@ -560,7 +563,7 @@ class LessonOrchestrator:
         })
         await self._emit_lesson_turn(
             speaker="agent",
-            sender_label="Sofía",
+            sender_label=self.tutor_name,
             text=prompt_native,
             actions=["hint", "reveal"],
         )
@@ -614,7 +617,7 @@ class LessonOrchestrator:
         })
         await self._emit_lesson_turn(
             speaker="agent",
-            sender_label="Sofía",
+            sender_label=self.tutor_name,
             text=cue,
             actions=["first_word", "reveal"],
         )
@@ -703,7 +706,7 @@ class LessonOrchestrator:
         )
         current_target = self._current_target_phrase()
         res = await self._quick_llm_json(
-            f"You are Sofía, a warm bilingual {self.target_lang_name} tutor speaking with a {self.native_lang_name} learner "
+            f"You are {self.tutor_name}, a warm bilingual {self.target_lang_name} tutor speaking with a {self.native_lang_name} learner "
             f"(level {self.level}). Current lesson prompt/phrase: '{current_target}'. "
             f"Learner asked: '{question_text}'. "
             f"Answer concisely in 1–2 short spoken sentences: explain in {self.native_lang_name} and pronounce any "
@@ -731,7 +734,7 @@ class LessonOrchestrator:
         display = " ".join(c.text for c in clauses)
         await self._emit_lesson_turn(
             speaker="agent",
-            sender_label="Sofía",
+            sender_label=self.tutor_name,
             text=display,
             actions=["listen_normal", "listen_slow"] if current_target else [],
         )

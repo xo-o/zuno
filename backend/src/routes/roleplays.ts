@@ -33,7 +33,7 @@ import {
   variety,
   type GeneratedRoleplay,
 } from "../lib/tutor.js";
-import { cartesiaVoiceFor } from "../lib/voices.js";
+import { resolveTutor } from "../lib/voices.js";
 import { authorHandleFor } from "./topics.js";
 
 const TOKEN_TTL = "6h";
@@ -657,7 +657,8 @@ export const roleplayRoutes = new Hono<AuthEnv>()
       .join("\n");
 
     const room = `zuno-rp-${randomUUID().slice(0, 8)}`;
-    const voice = cartesiaVoiceFor(profile.tutorVoice);
+    const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
+    const voice = tutor.voiceId;
 
     const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity: user.id,
@@ -667,7 +668,9 @@ export const roleplayRoutes = new Hono<AuthEnv>()
         mode: "roleplay",
         provider: "cartesia",
         voice,
-        tutorVoice: profile.tutorVoice,
+        tutorId: tutor.id,
+        tutorName: tutor.name,
+        tutorVoice: tutor.voicePreset,
         roleplayId: row.id,
         conversationId: thread.id,
         language: targetLanguage,

@@ -19,6 +19,7 @@ import {
   startPeerCall,
   updatePeerConversation,
 } from "../lib/peers.js";
+import { resolveTutor } from "../lib/voices.js";
 import { getProfile } from "../lib/profile.js";
 
 const openToSpeakSchema = z.object({
@@ -143,11 +144,13 @@ export const chatRoutes = new Hono<AuthEnv>()
   .post("/coach-prompts", async (c) => {
     const profile = await getProfile(c.get("user").id);
     const body = await parseBody(c, coachPromptsSchema);
+    const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
     const prompts = await generateCoachPrompts({
       mode: body.mode,
       targetLanguage: body.targetLanguage ?? profile.targetLanguage,
       nativeLanguage: profile.nativeLanguage,
       level: profile.level,
+      tutorName: tutor.name,
       contextLabel: body.contextLabel,
       partnerName: body.partnerName,
       lastLine: body.lastLine,

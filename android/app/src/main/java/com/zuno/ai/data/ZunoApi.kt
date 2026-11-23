@@ -241,6 +241,7 @@ class ZunoApi(
         language: String? = null,
         nativeLanguage: String? = null,
         defaultLanguage: String? = null,
+        voiceKey: String? = null,
         slow: Boolean = false,
     ): ByteArray =
         withContext(Dispatchers.IO) {
@@ -248,6 +249,9 @@ class ZunoApi(
             language?.takeIf { it.isNotBlank() }?.let { body.put("language", it) }
             nativeLanguage?.takeIf { it.isNotBlank() }?.let { body.put("nativeLanguage", it) }
             defaultLanguage?.takeIf { it.isNotBlank() }?.let { body.put("defaultLanguage", it) }
+            voiceKey?.takeIf { it.isNotBlank() }?.let { vk ->
+                if (vk in TutorIds) body.put("tutorId", vk) else body.put("tutorVoice", vk)
+            }
             val req = request("/tts/preview").post(body.toString().toRequestBody(JSON)).build()
             val response = try {
                 client.newCall(req).execute()

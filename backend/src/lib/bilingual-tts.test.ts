@@ -6,6 +6,7 @@ import {
   stripLangTags,
   stripRomanization,
 } from "./bilingual-tts.js";
+import { resolveTutor, TUTOR_IDS } from "./voices.js";
 
 test("bilingual-tts: stripLangTags removes bracket and xml tags", () => {
   const tagged1 = "[en]Repeat after me:[/en] [es]Un elefante[/es]";
@@ -175,4 +176,16 @@ test("bilingual-tts: Free Talk user-language default + slow pronunciation tags",
   assert.equal(mixedQuote[1].language, "es");
   assert.equal(mixedQuote[1].text, "vale");
   assert.equal(mixedQuote[2].language, "en");
+});
+
+test("voices: strict 1:1 tutor-to-voice catalog covers 6 distinct tutors and legacy presets", () => {
+  assert.equal(TUTOR_IDS.length, 6);
+  const voiceIds = new Set(TUTOR_IDS.map((id) => resolveTutor(id).voiceId));
+  assert.equal(voiceIds.size, 6);
+  assert.equal(resolveTutor(undefined, "warm").id, "sofia");
+  assert.equal(resolveTutor(undefined, "calm").id, "valeria");
+  assert.equal(resolveTutor(undefined, "energetic").id, "mateo");
+  assert.equal(resolveTutor("lucas").voicePreset, "steady");
+  assert.equal(resolveTutor("ethan").voicePreset, "casual");
+  assert.equal(resolveTutor("claire").voicePreset, "crisp");
 });
