@@ -13,17 +13,20 @@ export type TutorSpec = {
   tagline: string;
 };
 
+export const DEFAULT_ELEVENLABS_MODEL = "eleven_v4_turbo";
+export const FALLBACK_PREMADE_VOICE_ID = "hpp4J3VqNfWAUOO0d1Us"; // Bella
+
 /**
  * Curated AI Tutors with strict 1:1 avatar-to-voice mapping.
- * Every Cartesia Sonic-3.6 voice below speaks natively across 23+ locales so each tutor
- * keeps their exact vocal identity across `nativeLanguage` and `targetLanguage`.
+ * Powered by ElevenLabs `eleven_v4_turbo` (90+ languages with automatic code-switching) so each tutor
+ * speaks both `nativeLanguage` and `targetLanguage` naturally in a single pass.
  */
 export const TUTOR_CATALOG: Record<TutorId, TutorSpec> = {
   sofia: {
     id: "sofia",
     name: "Sofía",
     voicePreset: "warm",
-    voiceId: "ec1e269e-9ca0-402f-8a18-58e0e022355a", // Ariana - Kind Friend
+    voiceId: "DODLEQrClDo8wCz460ld", // Lauren - Friendly, Comforting and Soft
     gender: "female",
     tagline: "Warm & friendly",
   },
@@ -31,7 +34,7 @@ export const TUTOR_CATALOG: Record<TutorId, TutorSpec> = {
     id: "valeria",
     name: "Valeria",
     voicePreset: "calm",
-    voiceId: "ae823354-f9be-4aef-8543-f569644136b4", // Mariana - Nurturing Guide
+    voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah - Mature, Reassuring, Confident
     gender: "female",
     tagline: "Calm & patient",
   },
@@ -39,7 +42,7 @@ export const TUTOR_CATALOG: Record<TutorId, TutorSpec> = {
     id: "claire",
     name: "Claire",
     voicePreset: "crisp",
-    voiceId: "f786b574-daa5-4673-aa0c-cbe3e8534c02", // Katie - Friendly Fixer
+    voiceId: "Xb7hH8MSUJpSbSDYk0k2", // Alice - Clear, Engaging Educator
     gender: "female",
     tagline: "Crisp & clear",
   },
@@ -47,7 +50,7 @@ export const TUTOR_CATALOG: Record<TutorId, TutorSpec> = {
     id: "mateo",
     name: "Mateo",
     voicePreset: "energetic",
-    voiceId: "4df027cb-2920-4a1f-8c34-f21529d5c3fe", // Carson - Friendly Support
+    voiceId: "TX3LPaxmHKxFdv7VOQHJ", // Liam - Energetic
     gender: "male",
     tagline: "Energetic & upbeat",
   },
@@ -55,7 +58,7 @@ export const TUTOR_CATALOG: Record<TutorId, TutorSpec> = {
     id: "lucas",
     name: "Lucas",
     voicePreset: "steady",
-    voiceId: "8c254787-4eb4-4577-bd3d-fb3c273baea2", // Rowan - Steady Guide
+    voiceId: "cjVigY5qzO86Huf0OWal", // Eric - Smooth, Trustworthy
     gender: "male",
     tagline: "Steady & articulate",
   },
@@ -63,13 +66,13 @@ export const TUTOR_CATALOG: Record<TutorId, TutorSpec> = {
     id: "ethan",
     name: "Ethan",
     voicePreset: "casual",
-    voiceId: "30894953-bcce-41fe-892c-15ce19c843ff", // Parker - Supportive Pal
+    voiceId: "bIHbv24MWmeRgasZH58o", // Will - Relaxed Optimist
     gender: "male",
     tagline: "Casual & relaxed",
   },
 };
 
-export const CARTESIA_MULTILINGUAL_VOICES: Record<TutorVoice, string> = {
+export const ELEVENLABS_VOICES: Record<TutorVoice, string> = {
   warm: TUTOR_CATALOG.sofia.voiceId,
   calm: TUTOR_CATALOG.valeria.voiceId,
   crisp: TUTOR_CATALOG.claire.voiceId,
@@ -104,63 +107,6 @@ export function resolveTutor(tutorId?: string | null, tutorVoice?: string | null
   return TUTOR_CATALOG.sofia;
 }
 
-export function cartesiaVoiceFor(tutorVoiceOrId: string | null | undefined, tutorId?: string | null): string {
+export function elevenLabsVoiceFor(tutorVoiceOrId: string | null | undefined, tutorId?: string | null): string {
   return resolveTutor(tutorId ?? tutorVoiceOrId, tutorVoiceOrId).voiceId;
-}
-
-/** Explicit language codes accepted by Cartesia `sonic-3` / `sonic-3.6`. */
-export const CARTESIA_SONIC3_LANGS = new Set([
-  "ar",
-  "bg",
-  "bn",
-  "cs",
-  "da",
-  "de",
-  "el",
-  "en",
-  "es",
-  "fi",
-  "fr",
-  "gu",
-  "he",
-  "hi",
-  "hr",
-  "hu",
-  "id",
-  "it",
-  "ja",
-  "ka",
-  "kn",
-  "ko",
-  "ml",
-  "mr",
-  "ms",
-  "nl",
-  "no",
-  "or",
-  "pa",
-  "pl",
-  "pt",
-  "ro",
-  "ru",
-  "sk",
-  "sv",
-  "ta",
-  "te",
-  "th",
-  "tl",
-  "tr",
-  "uk",
-  "vi",
-  "zh",
-]);
-
-/**
- * Returns the explicit `sonic-3` language code when supported, or `undefined`
- * so Cartesia auto-detects scripts such as Persian (`fa`) or Urdu (`ur`).
- */
-export function cartesiaLanguage(code: string | null | undefined): string | undefined {
-  if (!code) return undefined;
-  const normalized = code.trim().toLowerCase().split("-")[0];
-  return CARTESIA_SONIC3_LANGS.has(normalized) ? normalized : undefined;
 }

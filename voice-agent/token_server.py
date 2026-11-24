@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from livekit import api
 
-from voices import resolve_cartesia_voice
+from voices import resolve_elevenlabs_voice
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
@@ -89,8 +89,8 @@ def create_token(req: TokenRequest):
     room = req.room_name or f"zuno-{str(uuid.uuid4())[:8]}"
     name = req.participant_name or f"user-{str(uuid.uuid4())[:4]}"
     metadata = json.dumps({
-        "provider": "cartesia",
-        "voice": resolve_cartesia_voice(req.voice, req.tutor_voice),
+        "provider": "elevenlabs",
+        "voice": resolve_elevenlabs_voice(req.voice, req.tutor_voice),
         "language": req.language or "en",
     })
     token = generate_token(room, name, metadata=metadata)

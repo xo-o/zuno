@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildWavFromPcmSegments,
-  segmentBilingualText,
+  buildWavFromPcm,
+  cleanTextForTts,
   stripLangTags,
   stripRomanization,
 } from "./bilingual-tts.js";
 import { resolveTutor, TUTOR_IDS } from "./voices.js";
 
-test("bilingual-tts: stripLangTags removes bracket and xml tags", () => {
+test("bilingual-tts: stripLangTags removes legacy bracket and xml tags", () => {
   const tagged1 = "[en]Repeat after me:[/en] [es]Un elefante[/es]";
   assert.equal(stripLangTags(tagged1), "Repeat after me: Un elefante");
 
@@ -26,103 +26,25 @@ test("bilingual-tts: stripRomanization strips parenthesized latin after non-lati
   const ru = "Привет (privet)";
   assert.equal(stripRomanization(ru), "Привет");
 
-  const normal = "Hola (amigo)"; // Both latin: unchanged
+  const normal = "Hola (amigo)";
   assert.equal(stripRomanization(normal), "Hola (amigo)");
 });
 
-test("bilingual-tts: segmentBilingualText handles explicit tags", () => {
-  const input = "[en]Repeat after me:[/en] [es]Un elefante[/es]";
-  const segments = segmentBilingualText(input, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-  });
-  assert.equal(segments.length, 2);
-  assert.equal(segments[0].language, "en");
-  assert.equal(segments[0].text, "Repeat after me:");
-  assert.equal(segments[1].language, "es");
-  assert.equal(segments[1].text, "Un elefante");
+test("bilingual-tts: cleanTextForTts keeps mixed-language text intact for single-pass ElevenLabs synthesis", () => {
+  const mixed = "Hola, how are you? Estoy bien";
+  assert.equal(cleanTextForTts(mixed), "Hola, how are you? Estoy bien.");
 
-  const xmlCodeInput = '<lang code="en">Sure, that means oat milk. Try asking:</lang> <lang code="es">¿Tienen leche de avena?</lang>';
-  const xmlSegs = segmentBilingualText(xmlCodeInput, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-  });
-  assert.equal(xmlSegs.length, 2);
-  assert.equal(xmlSegs[0].language, "en");
-  assert.equal(xmlSegs[1].language, "es");
+  const withMarkdown = "**Sure!** In Spain people say “vale” (smiles)";
+  assert.equal(cleanTextForTts(withMarkdown), "Sure! In Spain people say “vale”.");
 });
 
-test("bilingual-tts: segmentBilingualText detects untagged multi-sentence clarification + target follow-up", () => {
-  const input = "Sure, that word means receipt in English. ¿Quieres el recibo ahora?";
-  const segments = segmentBilingualText(input, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-  });
-  assert.equal(segments.length, 2);
-  assert.equal(segments[0].language, "en");
-  assert.equal(segments[1].language, "es");
-});
+test("bilingual-tts: buildWavFromPcm generates valid 44-byte RIFF/WAVE header and 24kHz PCM16 payload", () => {
+  const pcm = new Uint8Array(4800); // 100ms at 24kHz 16-bit mono
+  pcm.fill(0x2a);
 
-test("bilingual-tts: segmentBilingualText splits lead-in colon pattern", () => {
-  const input = "Repeat after me: Un elefante";
-  const segments = segmentBilingualText(input, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-  });
-  assert.equal(segments.length, 2);
-  assert.equal(segments[0].language, "en");
-  assert.equal(segments[0].text, "Repeat after me");
-  assert.equal(segments[1].language, "es");
-  assert.equal(segments[1].text, "Un elefante");
-});
+  const wav = buildWavFromPcm(pcm, 24000);
+  assert.equal(wav.byteLength, 44 + 4800);
 
-test("bilingual-tts: segmentBilingualText splits quotes with target phrases", () => {
-  const input = 'Try saying: "Disculpe, ¿este autobús va al centro?"';
-  const segments = segmentBilingualText(input, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-  });
-  assert.equal(segments.length, 2);
-  assert.equal(segments[0].language, "en");
-  assert.equal(segments[0].text, "Try saying:");
-  assert.equal(segments[1].language, "es");
-  assert.equal(segments[1].text, "Disculpe, ¿este autobús va al centro?");
-});
-
-test("bilingual-tts: segmentBilingualText handles non-latin target script with latin native lead-in", () => {
-  const input = "To greet someone in the morning, say: こんにちは";
-  const segments = segmentBilingualText(input, {
-    nativeLanguage: "en",
-    targetLanguage: "ja",
-  });
-  assert.equal(segments.length, 2);
-  assert.equal(segments[0].language, "en");
-  assert.equal(segments[1].language, "ja");
-  assert.equal(segments[1].text, "こんにちは");
-});
-
-test("bilingual-tts: segmentBilingualText preserves pure single-language text", () => {
-  const input = "¿Dónde está la estación de tren?";
-  const segments = segmentBilingualText(input, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-  });
-  assert.equal(segments.length, 1);
-  assert.equal(segments[0].language, "es");
-  assert.equal(segments[0].text, input);
-});
-
-test("bilingual-tts: buildWavFromPcmSegments generates valid 44-byte WAV header and PCM audio", () => {
-  const pcm1 = new Uint8Array(4800); // 100ms at 24kHz 16-bit mono
-  pcm1.fill(0x12);
-  const pcm2 = new Uint8Array(4800);
-  pcm2.fill(0x34);
-
-  const wav = buildWavFromPcmSegments([pcm1, pcm2], 24000, 100);
-  // 44 header + 4800 + (24000 * 0.1 * 2 = 4800 silence) + 4800 = 14444 bytes
-  assert.equal(wav.byteLength, 44 + 4800 + 4800 + 4800);
-
-  // Check RIFF header
   assert.equal(String.fromCharCode(wav[0], wav[1], wav[2], wav[3]), "RIFF");
   assert.equal(String.fromCharCode(wav[8], wav[9], wav[10], wav[11]), "WAVE");
   assert.equal(String.fromCharCode(wav[12], wav[13], wav[14], wav[15]), "fmt ");
@@ -133,55 +55,14 @@ test("bilingual-tts: buildWavFromPcmSegments generates valid 44-byte WAV header 
   assert.equal(view.getUint16(22, true), 1); // 1 channel
   assert.equal(view.getUint32(24, true), 24000); // sample rate
   assert.equal(view.getUint16(34, true), 16); // 16 bit
-  assert.equal(view.getUint32(40, true), 4800 + 4800 + 4800); // data length
+  assert.equal(view.getUint32(40, true), 4800); // data length
 });
 
-test("bilingual-tts: Free Talk user-language default + slow pronunciation tags", () => {
-  const tagged =
-    '<lang code="en">You pronounce it</lang> <lang code="es">ferrocarril.</lang> <lang code="en">Slowly:</lang> <lang code="es" speed="slow">fe, rro, ca, rril.</lang>';
-  assert.equal(stripLangTags(tagged), "You pronounce it ferrocarril. Slowly: fe, rro, ca, rril.");
-
-  const segs = segmentBilingualText(tagged, {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-    defaultLanguage: "en",
-  });
-  assert.deepEqual(
-    segs.map((s) => ({ lang: s.language, speed: s.speed })),
-    [
-      { lang: "en", speed: 1.0 },
-      { lang: "es", speed: 1.0 },
-      { lang: "en", speed: 1.0 },
-      { lang: "es", speed: 0.76 },
-    ],
-  );
-
-  // Free Talk untagged English with overlapping loan/function words ("no", "a") stays in English
-  const englishTurn = segmentBilingualText("No problem, tell me about a movie!", {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-    defaultLanguage: "en",
-  });
-  assert.equal(englishTurn.length, 1);
-  assert.equal(englishTurn[0].language, "en");
-
-  // Free Talk untagged English embedding a quoted Spanish word routes the word to Spanish
-  const mixedQuote = segmentBilingualText('In Spain people usually say "vale" to mean okay.', {
-    nativeLanguage: "en",
-    targetLanguage: "es",
-    defaultLanguage: "en",
-  });
-  assert.equal(mixedQuote.length, 3);
-  assert.equal(mixedQuote[0].language, "en");
-  assert.equal(mixedQuote[1].language, "es");
-  assert.equal(mixedQuote[1].text, "vale");
-  assert.equal(mixedQuote[2].language, "en");
-});
-
-test("voices: strict 1:1 tutor-to-voice catalog covers 6 distinct tutors and legacy presets", () => {
+test("voices: strict 1:1 tutor-to-ElevenLabs-voice catalog covers 6 distinct tutors and presets", () => {
   assert.equal(TUTOR_IDS.length, 6);
   const voiceIds = new Set(TUTOR_IDS.map((id) => resolveTutor(id).voiceId));
   assert.equal(voiceIds.size, 6);
+  assert.equal(resolveTutor("sofia").voiceId, "DODLEQrClDo8wCz460ld");
   assert.equal(resolveTutor(undefined, "warm").id, "sofia");
   assert.equal(resolveTutor(undefined, "calm").id, "valeria");
   assert.equal(resolveTutor(undefined, "energetic").id, "mateo");

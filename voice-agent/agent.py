@@ -29,7 +29,6 @@ import livekit.plugins.silero as silero
 from avatar_session import MuseTalkAvatarSession
 from bilingual import (
     detect_clause_language,
-    segment_bilingual_text,
     strip_lang_tags,
     strip_lang_tags_stream,
 )
@@ -37,13 +36,12 @@ from lesson_flow import LessonAgent, LessonOrchestrator
 from onboarding_flow import OnboardingAgent, OnboardingOrchestrator
 from roleplay_flow import RoleplayAgent, RoleplayOrchestrator
 from voices import (
-    BilingualCartesiaSynthesizer,
-    create_cartesia_tts,
-    resolve_cartesia_voice,
+    ElevenLabsSynthesizer,
+    create_elevenlabs_tts,
+    resolve_elevenlabs_voice,
     resolve_tutor_name,
-    stream_bilingual_tts,
-    synthesize_bilingual_segments,
-    update_cartesia_tts,
+    stream_llm_tts,
+    synthesize_speech,
 )
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -138,29 +136,25 @@ def _build_voice_Guardrails(
         )
         return (
             "CRITICAL FREE TALK VOICE & BILINGUAL RULES:\n"
-            f"- USER-LANGUAGE DEFAULT: Speak in {native_name} wrapped in <lang code=\"{native_code}\">...</lang> by default. "
+            f"- USER-LANGUAGE DEFAULT: Speak in {native_name} by default. "
             "Chat warmly and naturally about ANY topic the learner brings up (daily life, travel, culture, work, hobbies, grammar, or vocabulary).\n"
-            f"- DYNAMIC TARGET-LANGUAGE SWITCHING: Whenever you say any {target_name} ({variety_name}) word, phrase, or sentence, "
-            f'wrap it in <lang code="{target_code}">...</lang> so it is voiced with authentic native phonetics. '
-            f"If the learner speaks in {target_name} or asks to practice in {target_name}, mirror and converse in "
-            f'<lang code="{target_code}">...</lang>, switching back smoothly to <lang code="{native_code}">...</lang> whenever they speak {native_name} or ask for help.\n'
+            f"- SEAMLESS BILINGUAL SWITCHING: Include {target_name} ({variety_name}) words, phrases, or examples directly and naturally in your speech. "
+            f"If the learner speaks in {target_name} or asks to practice in {target_name}, mirror and converse in {target_name}, "
+            f"switching back smoothly to {native_name} whenever they speak {native_name} or ask for help.\n"
             f"- PRONUNCIATION & 'HOW DO I SAY' COACHING: When the learner asks how to say or pronounce something in {target_name}, "
-            f'give a brief 1-sentence tip in <lang code="{native_code}">...</lang>, model it naturally in <lang code="{target_code}">...</lang>, '
-            f'model it slowly in <lang code="{target_code}" speed="slow">...</lang> when pronunciation is asked, and invite them to try it. '
+            f"give a brief 1-sentence tip in {native_name}, model the {target_name} phrase naturally, and invite them to try it. "
             "NEVER write fake English phonetic spellings (like 'reh-free-heh-rah-dor').\n"
             f"{stt_rule}"
             "- Keep responses concise and conversational: 1 to 3 short sentences.\n"
-            "- NEVER use markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists.\n"
+            "- NEVER output XML tags (<lang>), markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists.\n"
             "- NEVER output stage directions like (laughs), (sighs), or romanization in parentheses."
         )
 
     return (
         "CRITICAL VOICE FORMATTING RULES:\n"
-        f'- Speak primarily in {target_name} ({variety_name}) wrapped in <lang code="{target_code}">...</lang> unless clarification is needed.\n'
-        "- When switching between the learner's native language and target language in the same reply, "
-        'wrap each language span in <lang code="xx">...</lang> so each clause is voiced with authentic native phonetics.\n'
+        f"- Speak primarily in {target_name} ({variety_name}) unless clarification in {native_name} is needed.\n"
         "- Keep responses short, concise, and natural: 1 to 2 sentences typically (under 140 characters).\n"
-        "- NEVER use markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists.\n"
+        "- NEVER output XML tags (<lang>), markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists.\n"
         "- NEVER output stage directions like (laughs), (sighs), or romanization in parentheses.\n"
         "- Respond directly, warmly, and immediately."
     )
@@ -171,7 +165,7 @@ class ConversationalAgent(Agent):
         self,
         tts=None,
         stt=None,
-        synthesizer: BilingualCartesiaSynthesizer | None = None,
+        synthesizer: ElevenLabsSynthesizer | None = None,
         broadcast=None,
         language: str = "en",
         target_language_name: str = "Spanish",
@@ -200,7 +194,7 @@ class ConversationalAgent(Agent):
         self.teach_in_target = teach_in_target
         self.multi_stt_active = multi_stt_active
         self._stt_engine = stt
-        self.synthesizer = synthesizer or BilingualCartesiaSynthesizer()
+        self.synthesizer = synthesizer or ElevenLabsSynthesizer()
         self.broadcast = broadcast
         self.tutor_name = tutor_name or "Sofía"
         self.tutor_instructions = tutor_instructions
@@ -275,12 +269,9 @@ class ConversationalAgent(Agent):
             yield chunk
 
     async def tts_node(self, text, model_settings):
-        async for frame in stream_bilingual_tts(
+        async for frame in stream_llm_tts(
             self.synthesizer,
             text,
-            native_lang=self.native_language,
-            target_lang=self.language,
-            default_lang=self.default_spoken_lang,
             speed=self.base_speed,
         ):
             yield frame
@@ -291,14 +282,7 @@ class ConversationalAgent(Agent):
         if self.opening:
             clean_opening = strip_lang_tags(self.opening)
             self.last_tutor_line = clean_opening
-            clauses = segment_bilingual_text(
-                self.opening,
-                native_lang=self.native_language,
-                target_lang=self.language,
-                default_lang=self.default_spoken_lang,
-                speed=self.base_speed,
-            )
-            audio = synthesize_bilingual_segments(self.synthesizer, clauses)
+            audio = synthesize_speech(self.synthesizer, clean_opening, speed=self.base_speed)
             self.session.say(clean_opening, audio=audio, add_to_chat_ctx=False)
             return
         if self.resume:
@@ -307,8 +291,8 @@ class ConversationalAgent(Agent):
                     instructions=(
                         "The learner just switched to a live voice call in the middle of this Free Talk conversation. "
                         "If their last message has not been answered yet, answer it naturally. Otherwise, continue "
-                        f'warmly from where you left off in <lang code="{self.native_language}">...</lang> '
-                        f'(or <lang code="{self.language}">...</lang> if they were actively speaking {self.target_language_name}) '
+                        f"warmly from where you left off in {self.native_language_name} "
+                        f"(or {self.target_language_name} if they were actively speaking {self.target_language_name}) "
                         "in 1 short sentence."
                     )
                 )
@@ -317,7 +301,7 @@ class ConversationalAgent(Agent):
                     instructions=(
                         "The learner just switched to a live voice call in the middle of this conversation. "
                         "If their last message has not been answered yet, answer it. Otherwise, continue "
-                        f'naturally from where the conversation left off in <lang code="{self.language}">...</lang> '
+                        f"naturally from where the conversation left off in {self.target_language_name} "
                         "(one short sentence, in your role)."
                     )
                 )
@@ -325,7 +309,7 @@ class ConversationalAgent(Agent):
         if self.is_free_talk:
             self.session.generate_reply(
                 instructions=(
-                    f'Say a warm, friendly 1-sentence hello in <lang code="{self.native_language}">...</lang> '
+                    f"Say a warm, friendly 1-sentence hello in {self.native_language_name} "
                     f"and invite the learner to talk about any topic, practice {self.target_language_name}, "
                     "or ask how to say or pronounce anything."
                 )
@@ -333,14 +317,14 @@ class ConversationalAgent(Agent):
         elif self.tutor_instructions:
             self.session.generate_reply(
                 instructions=(
-                    f'Greet the learner in one short sentence wrapped in <lang code="{self.language}">...</lang> '
+                    f"Greet the learner in one short sentence in {self.target_language_name} "
                     "and invite them to start, following your role."
                 )
             )
         else:
             self.session.generate_reply(
                 instructions=(
-                    f'Say a warm, brief one-sentence hello to the learner in <lang code="{self.language}">...</lang> '
+                    f"Say a warm, brief one-sentence hello to the learner in {self.target_language_name} "
                     "and ask what they would like to talk about today."
                 )
             )
@@ -353,14 +337,7 @@ class ConversationalAgent(Agent):
                     self.session.interrupt()
                 except Exception:
                     pass
-                clauses = segment_bilingual_text(
-                    phrase,
-                    native_lang=self.native_language,
-                    target_lang=self.language,
-                    default_lang=self.default_spoken_lang,
-                    speed=0.76,
-                )
-                audio = synthesize_bilingual_segments(self.synthesizer, clauses)
+                audio = synthesize_speech(self.synthesizer, phrase, speed=0.75)
                 self.session.say(phrase, audio=audio, add_to_chat_ctx=False)
             return
 
@@ -443,7 +420,7 @@ async def entrypoint(ctx: JobContext) -> None:
     if mode == "onboarding":
         tutor_id = "sofia"
         tutor_voice = "warm"
-    current_voice = resolve_cartesia_voice(meta.get("voice"), tutor_voice, tutor_id)
+    current_voice = resolve_elevenlabs_voice(meta.get("voice"), tutor_voice, tutor_id)
     tutor_name = str(meta.get("tutorName") or resolve_tutor_name(tutor_id, tutor_voice))
     current_language = str(meta.get("targetLanguage") or meta.get("language") or "en")
     target_language_name = str(meta.get("targetLanguageName") or current_language.upper())
@@ -469,7 +446,7 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     logger.info(
-        f"Initialized session: mode={mode}, kind={conversation_kind}, provider=cartesia-sonic-3.6, "
+        f"Initialized session: mode={mode}, kind={conversation_kind}, provider=elevenlabs, "
         f"voice={current_voice}, target_lang={current_language}, native_lang={native_language}, accent={current_accent}"
     )
 
@@ -478,11 +455,11 @@ async def entrypoint(ctx: JobContext) -> None:
         partner_level = str(meta.get("partnerLevel") or "B1")
         partner_interests = ", ".join(meta.get("partnerInterests") or ["Travel", "Daily life"])
         tutor_instructions = (
-            f"You are {partner_name}, a friendly fellow language learner practicing {current_language} "
+            f"You are {partner_name}, a friendly fellow language learner practicing {target_language_name} "
             f"at CEFR level {partner_level}. Your interests include {partner_interests}. "
             f"You just joined a 1:1 peer practice voice call with another learner. "
             f"Talk naturally like a friendly practice partner (NOT as a teacher or AI assistant). "
-            f'Greet them warmly in <lang code="{current_language}">...</lang> and ask how their day is going or what they want to practice.'
+            f"Greet them warmly in {target_language_name} and ask how their day is going or what they want to practice."
         )
         ping_event = asyncio.Event()
 
@@ -535,23 +512,12 @@ async def entrypoint(ctx: JobContext) -> None:
         temperature=0.45 if is_bilingual_free_talk else 0.4,
         http_options=types.HttpOptions(api_version="v1beta"),
     )
-    tts_default_lang = (
-        native_language
-        if (mode == "onboarding" or is_bilingual_free_talk)
-        else current_language
-    )
-    tts = create_cartesia_tts(
+    session_synthesizer = ElevenLabsSynthesizer(
         voice_id=current_voice,
         tutor_voice=tutor_voice,
         tutor_id=tutor_id,
-        language=tts_default_lang,
     )
-    session_synthesizer = BilingualCartesiaSynthesizer(
-        voice_id=current_voice,
-        tutor_voice=tutor_voice,
-        tutor_id=tutor_id,
-        accent=current_accent,
-    )
+    tts = create_elevenlabs_tts(synthesizer=session_synthesizer)
 
     async def broadcast_event(data: dict) -> None:
         try:
@@ -569,6 +535,7 @@ async def entrypoint(ctx: JobContext) -> None:
         lesson_orchestrator = LessonOrchestrator(
             meta=meta,
             tts=tts,
+            synthesizer=session_synthesizer,
             broadcast=broadcast_event,
         )
         agent: Agent = LessonAgent(
@@ -594,6 +561,7 @@ async def entrypoint(ctx: JobContext) -> None:
         onboarding_orchestrator = OnboardingOrchestrator(
             meta=meta,
             tts=tts,
+            synthesizer=session_synthesizer,
             broadcast=broadcast_event,
         )
         agent = OnboardingAgent(
@@ -690,7 +658,7 @@ async def entrypoint(ctx: JobContext) -> None:
                     "type": "metrics",
                     "total_ms": round(total_latency_ms),
                     "voice": current_voice,
-                    "provider": "cartesia",
+                    "provider": "elevenlabs",
                 })
             )
 
@@ -809,7 +777,6 @@ async def entrypoint(ctx: JobContext) -> None:
             if msg_type == "change_language":
                 lang = str(data.get("language") or current_language)
                 current_language = lang
-                update_cartesia_tts(tts, language=current_language, speed=1.0)
                 if conversational_agent is not None:
                     conversational_agent.language = current_language
         except Exception as e:

@@ -315,13 +315,37 @@ export async function parseOnboardingTurn(input: OnboardingTurnInput) {
 
   if (input.step === "level") {
     const normalized = raw.toLowerCase();
-    if (normalized === "beginner" || normalized === "principiante" || normalized === "débutant" || normalized === "anfänger") {
+    if (
+      normalized === "beginner" ||
+      normalized === "principiante" ||
+      normalized === "débutant" ||
+      normalized === "anfänger" ||
+      normalized === "iniciante" ||
+      normalized === "początkujący"
+    ) {
       return { step: "level" as const, valid: true, level: "A1" as const };
     }
-    if (normalized === "intermediate" || normalized === "intermedio" || normalized === "intermédiaire" || normalized === "mittelstufe") {
+    if (
+      normalized === "intermediate" ||
+      normalized === "intermedio" ||
+      normalized === "intermédiaire" ||
+      normalized === "mittelstufe" ||
+      normalized === "intermediário" ||
+      normalized === "gemiddeld" ||
+      normalized === "średnio zaawansowany"
+    ) {
       return { step: "level" as const, valid: true, level: "B1" as const };
     }
-    if (normalized === "advanced" || normalized === "avanzado" || normalized === "avancé" || normalized === "fortgeschritten") {
+    if (
+      normalized === "advanced" ||
+      normalized === "avanzado" ||
+      normalized === "avancé" ||
+      normalized === "fortgeschritten" ||
+      normalized === "avanzato" ||
+      normalized === "avançado" ||
+      normalized === "gevorderd" ||
+      normalized === "zaawansowany"
+    ) {
       return { step: "level" as const, valid: true, level: "C1" as const };
     }
     if (!raw) {
@@ -944,14 +968,14 @@ export function voiceInstructions(context: ConversationContext, profile: Learner
       `You are ${tutor.name}, a ${tutor.tagline.toLowerCase()} personal ${target} coach and conversation partner speaking live with the learner over a voice call.`,
       learnerLine(profile),
       contextInstructions(context, profile),
-      `Speak in ${native} wrapped in <lang code="${nativeCode}">...</lang> by default in 1–3 concise, natural sentences.`,
-      `Whenever you say any ${target} word, phrase, or sentence, wrap it in <lang code="${targetCode}">...</lang> using ${variety(profile)} vocabulary and pronunciation.`,
-      `When the learner asks how to pronounce a ${target} word or phrase: briefly explain the sound or stress tip in <lang code="${nativeCode}">...</lang>, model it naturally in <lang code="${targetCode}">...</lang>, then model it slowly in <lang code="${targetCode}" speed="slow">...</lang> and invite them to try saying it. Never write fake phonetic spellings.`,
-      `If the learner speaks in ${target} or asks to practice in ${target}, converse with them in <lang code="${targetCode}">...</lang> suited to level ${profile.level}, and switch smoothly back to <lang code="${nativeCode}">...</lang> whenever they speak ${native} or ask a question.`,
+      `Speak in ${native} by default in 1–3 concise, natural sentences.`,
+      `Include ${target} (${variety(profile)}) words, phrases, or sentences naturally whenever teaching or giving examples.`,
+      `When the learner asks how to pronounce a ${target} word or phrase: briefly explain the sound or stress tip in ${native}, model the ${target} phrase naturally, and invite them to try saying it. Never write fake phonetic spellings.`,
+      `If the learner speaks in ${target} or asks to practice in ${target}, converse with them in ${target} suited to level ${profile.level}, and switch smoothly back to ${native} whenever they speak ${native} or ask a question.`,
       profile.strictMode
         ? `When the learner tries speaking ${target} and makes a mistake, point out and model the exact correction clearly.`
         : `When the learner tries speaking ${target} and makes a slip, warmly model the natural phrasing and keep the conversation flowing.`,
-      "Never use markdown, lists, emojis, romanization in parentheses, or stage directions.",
+      "Never use XML tags (<lang>), markdown, lists, emojis, romanization in parentheses, or stage directions.",
     ].join("\n");
   }
 
@@ -960,13 +984,13 @@ export function voiceInstructions(context: ConversationContext, profile: Learner
     learnerLine(profile),
     ...styleLines(profile),
     contextInstructions(context, profile),
-    `Speak ${target} with a ${variety(profile)} accent and vocabulary, wrapped in <lang code="${targetCode}">...</lang>, in 1–2 short natural sentences suited to level ${profile.level}.`,
+    `Speak ${target} with ${variety(profile)} vocabulary and expressions in 1–2 short natural sentences suited to level ${profile.level}.`,
     profile.teachInTarget || nativeCode === targetCode
-      ? `Keep all explanations and clarifications in simple ${target} wrapped in <lang code="${targetCode}">...</lang>.`
-      : `Keep 90%+ of the conversation in ${target}. ONLY when the learner explicitly asks for clarification, translation, or "how do I say...", give a 1-sentence explanation in <lang code="${nativeCode}">...</lang>, model the phrase in <lang code="${targetCode}">...</lang>, and continue in ${target}.`,
+      ? `Keep all explanations and clarifications in simple ${target}.`
+      : `Keep 90%+ of the conversation in ${target}. ONLY when the learner explicitly asks for clarification, translation, or "how do I say...", give a 1-sentence explanation in ${native}, model the phrase in ${target}, and continue in ${target}.`,
     profile.strictMode
       ? "When the learner makes a mistake, say the correct phrasing explicitly, then keep the conversation going."
       : "If the learner makes a mistake, briefly model the correct phrasing, then keep the conversation going.",
-    "Never use markdown, lists, emojis, romanization in parentheses, or stage directions.",
+    "Never use XML tags (<lang>), markdown, lists, emojis, romanization in parentheses, or stage directions.",
   ].join("\n");
 }

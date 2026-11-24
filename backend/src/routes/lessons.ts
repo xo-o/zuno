@@ -174,7 +174,7 @@ export const lessonRoutes = new Hono<AuthEnv>()
       ttl: TOKEN_TTL,
       metadata: JSON.stringify({
         mode: "lesson",
-        provider: "cartesia",
+        provider: "elevenlabs",
         voice,
         tutorId: tutor.id,
         tutorName: tutor.name,

@@ -78,6 +78,9 @@ const builderTurnSchema = z.object({
 const updateRoleplaySchema = z.object({
   pinned: z.boolean().optional(),
   category: roleplayCategoryEnum.optional(),
+  title: z.string().trim().min(1).max(60).optional(),
+  userRole: z.string().trim().min(1).max(40).optional(),
+  aiRole: z.string().trim().min(1).max(40).optional(),
 });
 
 const shareSchema = z.object({
@@ -185,6 +188,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     const userId = c.get("user").id;
     const { targetLanguage, level } = await getProfile(userId);
     const category = (c.req.query("category") ?? "all").toLowerCase();
+    const levelFilter = (c.req.query("level") ?? "all").toUpperCase();
     const rawQ = c.req.query("q") ?? "";
     const q = normalizeSearch(rawQ);
 
@@ -240,6 +244,8 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     const combined = [...seeds, ...community].filter((item) => {
       const catOk = category === "all" || item.category === category;
       if (!catOk) return false;
+      const lvlOk = levelFilter === "ALL" || item.level.toUpperCase() === levelFilter;
+      if (!lvlOk) return false;
       if (!q) return true;
       const hay = normalizeSearch(
         `${item.title} ${item.scenario} ${item.userRole} ${item.aiRole} ${item.setting} ${item.authorHandle ?? ""} ${item.category}`,
@@ -447,7 +453,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     const row = await loadRoleplay(c.get("user").id, c.req.param("id"));
     return c.json({ roleplay: serializeRoleplay(row) });
   })
-  /** Pin / unpin or update category (Roleplays are immutable in content after creation). */
+  /** Pin / unpin, rename, or update category / roles. */
   .patch("/:id", async (c) => {
     const row = await loadRoleplay(c.get("user").id, c.req.param("id"));
     const body = await parseBody(c, updateRoleplaySchema);
@@ -456,6 +462,9 @@ export const roleplayRoutes = new Hono<AuthEnv>()
       .set({
         ...(body.pinned !== undefined && { pinnedAt: body.pinned ? new Date() : null }),
         ...(body.category !== undefined && { category: body.category }),
+        ...(body.title !== undefined && { title: body.title }),
+        ...(body.userRole !== undefined && { userRole: body.userRole }),
+        ...(body.aiRole !== undefined && { aiRole: body.aiRole }),
       })
       .where(eq(roleplay.id, row.id))
       .returning();
@@ -538,7 +547,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     const row = await loadRoleplay(c.get("user").id, c.req.param("id"));
     return c.json(await startRun(row), 201);
   })
-  /** Starts a live dynamic voice Roleplay session (`mode = "roleplay"`) with Cartesia `sonic-3.6` locale conditioning. */
+  /** Starts a live dynamic voice Roleplay session (`mode = "roleplay"`) with ElevenLabs multilingual synthesis. */
   .post("/:id/session", aiLimit, async (c) => {
     const { LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
     if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
@@ -666,7 +675,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
       ttl: TOKEN_TTL,
       metadata: JSON.stringify({
         mode: "roleplay",
-        provider: "cartesia",
+        provider: "elevenlabs",
         voice,
         tutorId: tutor.id,
         tutorName: tutor.name,

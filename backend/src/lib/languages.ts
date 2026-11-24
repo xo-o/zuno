@@ -13,7 +13,7 @@ const STANDARD: Accent[] = [{ id: "standard", label: "Standard" }];
 
 /**
  * Languages a learner can study (Settings · Learning language). Only languages supported by Zuno's
- * speech pipeline — Deepgram Nova-3 speech-to-text and Cartesia Sonic-3 multilingual TTS — are listed.
+ * speech pipeline — Deepgram Nova-3 speech-to-text and ElevenLabs Eleven v4 multilingual TTS — are listed.
  * The first accent is the default.
  */
 export const LANGUAGES = {

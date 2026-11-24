@@ -6,8 +6,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-import livekit.plugins.cartesia as cartesia
 from lesson_flow import LessonOrchestrator, _compute_blank_lengths
+from voices import ElevenLabsSynthesizer, create_elevenlabs_tts
 
 
 class LessonFlowTest(unittest.TestCase):
@@ -17,7 +17,8 @@ class LessonFlowTest(unittest.TestCase):
         async def _broadcast(ev):
             events.append(ev)
 
-        tts = cartesia.TTS(api_key="test-key", voice="ec1e269e-9ca0-402f-8a18-58e0e022355a", language="es")
+        synth = ElevenLabsSynthesizer(api_key="test-key", tutor_id="sofia")
+        tts = create_elevenlabs_tts(synthesizer=synth)
         meta = {
             "lessonId": "les_1",
             "lessonTitle": "Elige el autobús adecuado",
@@ -65,7 +66,7 @@ class LessonFlowTest(unittest.TestCase):
                 },
             },
         }
-        return LessonOrchestrator(meta=meta, tts=tts, broadcast=_broadcast), events
+        return LessonOrchestrator(meta=meta, tts=tts, synthesizer=synth, broadcast=_broadcast), events
 
     def test_compute_blank_lengths(self):
         lengths = _compute_blank_lengths("Disculpe, ¿este autobús va al centro?")
@@ -85,19 +86,28 @@ class LessonFlowTest(unittest.TestCase):
         self.assertFalse(after[0]["current"])
         self.assertTrue(after[1]["current"])
 
-    def test_intent_classification_and_question_reply(self):
+    def test_teach_model_speaks_bilingual_prompt_in_single_call(self):
+        orch, _ = self._make_orch()
+        orch._speak = AsyncMock()
+
+        async def _run():
+            await orch.start()
+
+        asyncio.run(_run())
+        orch._speak.assert_awaited_once()
+        spoken_arg = orch._speak.call_args.args[0]
+        self.assertIn("To politely ask if this bus goes downtown, say:", spoken_arg)
+        self.assertIn("Disculpe, ¿este autobús va al centro?", spoken_arg)
+        self.assertEqual(orch.stage, "shadow_drill")
+
+    def test_intent_classification_and_unified_question_reply(self):
         orch, events = self._make_orch()
         orch.stage = "shadow_drill"
         orch._quick_llm_json = AsyncMock(side_effect=[
             {"intent": "question"},
-            {
-                "clauses": [
-                    {"text": "‘Centro’ means downtown, as in:", "lang": "native"},
-                    {"text": "va al centro.", "lang": "target"},
-                ]
-            },
+            {"answer": "‘Centro’ means downtown, as in va al centro."},
         ])
-        orch._speak_clauses = AsyncMock()
+        orch._speak = AsyncMock()
 
         async def _run():
             await orch.handle_structured_user_turn("What does centro mean?", 0.95)
@@ -105,6 +115,7 @@ class LessonFlowTest(unittest.TestCase):
         asyncio.run(_run())
         self.assertEqual(orch.phrase_retries, 0)
         self.assertEqual(len(orch.pronunciation_scores), 0)
+        orch._speak.assert_awaited_once()
         turn_events = [e for e in events if e.get("type") == "lesson_turn"]
         self.assertEqual(len(turn_events), 2)
         self.assertEqual(turn_events[0]["speaker"], "user")

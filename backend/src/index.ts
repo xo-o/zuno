@@ -299,7 +299,7 @@ app.post("/api/livekit/token", async (c) => {
       ttl: TOKEN_TTL,
       metadata: JSON.stringify({
         mode: "onboarding",
-        provider: "cartesia",
+        provider: "elevenlabs",
         voice: onboardingTutor.voiceId,
         tutorId: onboardingTutor.id,
         tutorName: onboardingTutor.name,
@@ -362,7 +362,7 @@ app.post("/api/livekit/token", async (c) => {
         ttl: TOKEN_TTL,
         metadata: JSON.stringify({
           mode: "roleplay",
-          provider: "cartesia",
+          provider: "elevenlabs",
           voice,
           tutorId: tutor.id,
           tutorName: tutor.name,
@@ -422,7 +422,7 @@ app.post("/api/livekit/token", async (c) => {
     metadata: JSON.stringify({
       mode: "conversation",
       conversationKind: context.kind,
-      provider: "cartesia",
+      provider: "elevenlabs",
       voice,
       tutorId: tutor.id,
       tutorName: tutor.name,

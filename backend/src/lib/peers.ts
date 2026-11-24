@@ -20,7 +20,7 @@ import { languageName, type LanguageCode } from "./languages.js";
 import { displayLanguage } from "./notifications.js";
 import { getProfile, type LearnerProfile } from "./profile.js";
 import { sendToUser } from "./push.js";
-import { cartesiaVoiceFor, resolveTutor } from "./voices.js";
+import { elevenLabsVoiceFor, resolveTutor } from "./voices.js";
 
 const SEED_PREFIX = "seed:";
 
@@ -877,8 +877,8 @@ async function mintPeerCallToken(params: {
   const metadata = seed
     ? {
         mode: "peer_partner",
-        provider: "cartesia",
-        voice: cartesiaVoiceFor(seed.tutorVoice),
+        provider: "elevenlabs",
+        voice: elevenLabsVoiceFor(seed.tutorVoice),
         tutorVoice: seed.tutorVoice,
         language: params.callerProfile.targetLanguage,
         targetLanguage: params.callerProfile.targetLanguage,

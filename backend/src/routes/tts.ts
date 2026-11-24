@@ -3,13 +3,12 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { getProfile } from "../lib/profile.js";
-import { cartesiaLanguage, resolveTutor } from "../lib/voices.js";
 import {
-  buildWavFromPcmSegments,
-  ensureTerminalPunct,
-  resolveCartesiaLocale,
-  segmentBilingualText,
-} from "../lib/bilingual-tts.js";
+  DEFAULT_ELEVENLABS_MODEL,
+  FALLBACK_PREMADE_VOICE_ID,
+  resolveTutor,
+} from "../lib/voices.js";
+import { buildWavFromPcm, cleanTextForTts } from "../lib/bilingual-tts.js";
 
 const previewSchema = z.object({
   text: z.string().trim().min(1).max(600),
@@ -23,68 +22,57 @@ const previewSchema = z.object({
 
 const ttsLimit = rateLimit({ windowMs: 60_000, max: 60 });
 
-async function fetchCartesiaPcm(options: {
+function clampSpeed(speed: number): number {
+  return Math.round(Math.max(0.7, Math.min(1.2, speed)) * 100) / 100;
+}
+
+async function fetchElevenLabsPcm(options: {
   apiKey: string;
   voiceId: string;
+  modelId: string;
   text: string;
-  locale: string;
-  fallbackLanguage?: string;
   speed: number;
 }): Promise<Uint8Array> {
-  const punctText = ensureTerminalPunct(options.text);
-  if (!punctText) return new Uint8Array(0);
+  const cleanedText = cleanTextForTts(options.text);
+  if (!cleanedText) return new Uint8Array(0);
 
+  const clampedSpeed = clampSpeed(options.speed);
   const payload: Record<string, unknown> = {
-    model_id: "sonic-3.6",
-    transcript: punctText,
-    voice: { mode: "id", id: options.voiceId },
-    locale: options.locale,
-    output_format: {
-      container: "raw",
-      encoding: "pcm_s16le",
-      sample_rate: 24000,
-    },
-    generation_config: { speed: options.speed },
+    text: cleanedText,
+    model_id: options.modelId,
+    apply_text_normalization: "auto",
   };
+  if (clampedSpeed !== 1.0) {
+    payload.voice_settings = { speed: clampedSpeed };
+  }
 
+  let activeVoiceId = options.voiceId;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch("https://api.cartesia.ai/tts/bytes", {
-      method: "POST",
-      headers: {
-        "X-API-Key": options.apiKey,
-        "Cartesia-Version": "2026-03-01",
-        "Content-Type": "application/json",
+    const res = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(activeVoiceId)}?output_format=pcm_24000`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": options.apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+    );
     if (res.ok) {
       return new Uint8Array(await res.arrayBuffer());
+    }
+    if (res.status === 402 && activeVoiceId !== FALLBACK_PREMADE_VOICE_ID && attempt === 0) {
+      activeVoiceId = FALLBACK_PREMADE_VOICE_ID;
+      continue;
     }
     if (res.status === 429 && attempt === 0) {
       await new Promise((resolve) => setTimeout(resolve, 300));
       continue;
     }
 
-    // Fallback to sonic-3 with base language if sonic-3.6/locale fails
-    payload.model_id = "sonic-3";
-    delete payload.locale;
-    if (options.fallbackLanguage) {
-      payload.language = options.fallbackLanguage;
-    }
-    const resFallback = await fetch("https://api.cartesia.ai/tts/bytes", {
-      method: "POST",
-      headers: {
-        "X-API-Key": options.apiKey,
-        "Cartesia-Version": "2025-04-16",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (resFallback.ok) {
-      return new Uint8Array(await resFallback.arrayBuffer());
-    }
     const errText = await res.text().catch(() => "");
-    console.error(`Cartesia TTS preview failed (${res.status}):`, errText);
+    console.error(`ElevenLabs TTS preview failed (${res.status}):`, errText);
     throw new HTTPException(502, { message: "Voice preview unavailable right now" });
   }
   throw new HTTPException(502, { message: "Voice preview unavailable right now" });
@@ -93,10 +81,11 @@ async function fetchCartesiaPcm(options: {
 export const ttsRoutes = new Hono<AuthEnv>()
   .use(requireAuth)
   .post("/preview", ttsLimit, async (c) => {
-    const apiKey = process.env.CARTESIA_API_KEY;
+    const apiKey = (process.env.ELEVENLABS_API_KEY ?? process.env.ELEVEN_API_KEY ?? "").trim();
     if (!apiKey) {
-      throw new HTTPException(500, { message: "Cartesia TTS is not configured" });
+      throw new HTTPException(500, { message: "ElevenLabs TTS is not configured" });
     }
+    const modelId = (process.env.ELEVENLABS_MODEL || DEFAULT_ELEVENLABS_MODEL).trim();
     const userId = c.get("user").id;
     const body = await parseBody(c, previewSchema);
     const profile = await getProfile(userId);
@@ -104,35 +93,18 @@ export const ttsRoutes = new Hono<AuthEnv>()
       body.tutorId ?? profile.tutorId,
       body.tutorVoice ?? profile.tutorVoice,
     );
-    const voiceId = chosenTutor.voiceId;
-    const targetLanguage = body.language ?? profile.targetLanguage;
-    const nativeLanguage = body.nativeLanguage ?? profile.nativeLanguage;
     const speed = body.slow ? 0.75 : 1.0;
 
-    // Segment text into language-specific portions (e.g. English intro -> Spanish target phrase)
-    const segments = segmentBilingualText(body.text, {
-      nativeLanguage,
-      targetLanguage,
-      defaultLanguage: body.defaultLanguage ?? targetLanguage,
+    // Synthesize the entire utterance (including mixed languages) in one continuous ElevenLabs pass
+    const pcmBuffer = await fetchElevenLabsPcm({
+      apiKey,
+      voiceId: chosenTutor.voiceId,
+      modelId,
+      text: body.text,
       speed,
     });
 
-    // Synthesize all segments in parallel using the exact same Cartesia voice
-    const pcmBuffers = await Promise.all(
-      segments.map((seg) =>
-        fetchCartesiaPcm({
-          apiKey,
-          voiceId,
-          text: seg.text,
-          locale: resolveCartesiaLocale(seg.language, profile.accent, chosenTutor.voicePreset),
-          fallbackLanguage: cartesiaLanguage(seg.language),
-          speed: seg.speed ?? speed,
-        }),
-      ),
-    );
-
-    // Stitch segments together with natural prosodic pause into a single WAV response
-    const wav = buildWavFromPcmSegments(pcmBuffers, 24000, 180);
+    const wav = buildWavFromPcm(pcmBuffer, 24000);
 
     return new Response(wav, {
       status: 200,

@@ -8,19 +8,17 @@ from typing import Any, Callable, Coroutine
 from google import genai
 from google.genai import types
 from livekit.agents import Agent, AgentSession, StopResponse, function_tool, llm
-import livekit.plugins.cartesia as cartesia
 
 from bilingual import (
-    SpeechClause,
-    segment_bilingual_text,
     strip_lang_tags,
     strip_lang_tags_stream,
 )
 from voices import (
-    BilingualCartesiaSynthesizer,
+    ElevenLabsSynthesizer,
+    ElevenLabsTTS,
     resolve_tutor_name,
-    stream_bilingual_tts,
-    synthesize_bilingual_segments,
+    stream_llm_tts,
+    synthesize_speech,
 )
 
 logger = logging.getLogger("voice-agent.roleplay")
@@ -48,13 +46,13 @@ SLOW_EXACT_CUES = {
 
 
 class RoleplayOrchestrator:
-    """Drives dynamic practice-oriented Live Roleplay sessions over LiveKit Data Channels + Cartesia `sonic-3.6`.
+    """Drives dynamic practice-oriented Live Roleplay sessions over LiveKit Data Channels + ElevenLabs TTS.
 
     Key pedagogical guarantees:
-    1. 90%+ target-language in-character conversation voiced with regional `sonic-3.6` `locale`.
-    2. Dynamic user-language clarification aside: whenever the learner asks for clarification/meaning/how-to-say,
-       the tutor briefly explains in `native_lang` (`locale`), models the target phrase in `target_lang` (`locale`),
-       and seamlessly resumes character in `target_lang`.
+    1. 90%+ target-language in-character conversation voiced with natural `eleven_v4_turbo` multilingual delivery.
+    2. Seamless bilingual clarification aside: whenever the learner asks for clarification/meaning/how-to-say,
+       the tutor briefly explains in `native_lang`, models the target phrase in `target_lang`, and resumes character
+       in a single continuous voice pass.
     3. Mission goal tracking + implicit recasting without any artificial turn limit (open-ended practice).
     """
 
@@ -62,8 +60,8 @@ class RoleplayOrchestrator:
         self,
         *,
         meta: dict[str, Any],
-        tts: cartesia.TTS,
-        synthesizer: BilingualCartesiaSynthesizer,
+        tts: ElevenLabsTTS,
+        synthesizer: ElevenLabsSynthesizer,
         broadcast: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
     ) -> None:
         self.meta = meta
@@ -246,19 +244,19 @@ class RoleplayOrchestrator:
         })
         return tid
 
-    async def _speak_clauses(
+    async def _speak(
         self,
-        clauses: list[SpeechClause],
+        text: str,
         *,
-        display_text: str | None = None,
+        speed: float | None = None,
         allow_interruptions: bool = True,
         record_in_transcript: bool = False,
     ) -> None:
-        if not self.session or not clauses:
+        clean_text = strip_lang_tags(text).strip()
+        if not self.session or not clean_text:
             return
         async with self._speech_lock:
-            clean_text = strip_lang_tags(display_text or " ".join(c.text for c in clauses))
-            if record_in_transcript and clean_text:
+            if record_in_transcript:
                 await self.emit_turn(
                     speaker="agent",
                     sender_label=self.sender_role_label,
@@ -272,7 +270,11 @@ class RoleplayOrchestrator:
                     "is_final": True,
                 })
 
-            audio_stream = synthesize_bilingual_segments(self.synthesizer, clauses)
+            audio_stream = synthesize_speech(
+                self.synthesizer,
+                clean_text,
+                speed=speed if speed is not None else self.base_speed,
+            )
             handle = self.session.say(
                 clean_text,
                 audio=audio_stream,
@@ -291,16 +293,9 @@ class RoleplayOrchestrator:
 
         if self.opening_line:
             clean_opening = strip_lang_tags(self.opening_line)
-            clauses = segment_bilingual_text(
+            await self._speak(
                 clean_opening,
-                native_lang=self.native_lang,
-                target_lang=self.target_lang,
-                default_lang=self.target_lang,
                 speed=self.base_speed,
-            )
-            await self._speak_clauses(
-                clauses,
-                display_text=clean_opening,
                 record_in_transcript=not self.resume,
             )
             return
@@ -310,7 +305,7 @@ class RoleplayOrchestrator:
                 instructions=(
                     f"The learner just joined live voice for this ongoing {self.target_lang_name} roleplay as '{self.user_role}'. "
                     f"Stay in character as '{self.ai_role}' and speak 1 short, natural sentence in "
-                    f'<lang code="{self.target_lang}">...</lang> continuing from where the conversation left off.'
+                    f"{self.variety_name} continuing from where the conversation left off."
                 )
             )
             return
@@ -320,8 +315,8 @@ class RoleplayOrchestrator:
         self.session.generate_reply(
             instructions=(
                 f"Open the roleplay scene in character as '{self.ai_role}' speaking to '{self.user_role}'. "
-                f'Output ONLY 1–2 short, natural spoken sentences wrapped in <lang code="{self.target_lang}">...</lang> '
-                f"in {self.variety_name} (CEFR {self.level}) that set the moment and naturally invite the learner toward: {goal_hint}."
+                f"Output ONLY 1–2 short, natural spoken sentences in {self.variety_name} ({self.target_lang_name}, CEFR {self.level}) "
+                f"that set the moment and naturally invite the learner toward: {goal_hint}."
             )
         )
 
@@ -349,13 +344,13 @@ class RoleplayOrchestrator:
             next_goal = remaining[0]
             return (
                 f"Goal marked complete. Stay in character as '{self.ai_role}' in "
-                f'<lang code="{self.target_lang}">...</lang> (1–2 short sentences) and naturally steer toward '
+                f"{self.variety_name} (1–2 short sentences) and naturally steer toward "
                 f"'{next_goal.get('description', next_goal.get('label', ''))}'."
             )
 
         return (
             f"All structured goals are now complete! Stay warmly in character as '{self.ai_role}' in "
-            f'<lang code="{self.target_lang}">...</lang> so the learner can keep practicing dynamically or wrap up naturally.'
+            f"{self.variety_name} so the learner can keep practicing dynamically or wrap up naturally."
         )
 
     async def record_recast(self, user_said: str, natural_form: str) -> None:
@@ -379,34 +374,19 @@ class RoleplayOrchestrator:
         if action == "listen_normal":
             phrase = strip_lang_tags(payload or self.last_tutor_line).strip()
             if phrase:
-                clauses = segment_bilingual_text(
-                    phrase,
-                    native_lang=self.native_lang,
-                    target_lang=self.target_lang,
-                    default_lang=self.target_lang,
-                    speed=self.base_speed,
-                )
-                await self._speak_clauses(clauses, display_text=phrase)
+                await self._speak(phrase, speed=self.base_speed)
             return
 
         if action in ("listen_slow", "slow"):
             phrase = strip_lang_tags(payload or self.last_tutor_line).strip()
             if phrase:
-                clauses = segment_bilingual_text(
-                    phrase,
-                    native_lang=self.native_lang,
-                    target_lang=self.target_lang,
-                    default_lang=self.target_lang,
-                    speed=0.76,
-                )
-                await self._speak_clauses(clauses, display_text=phrase)
+                await self._speak(phrase, speed=0.75)
             return
 
         if action == "play_chunk" and payload:
             clean_chunk = strip_lang_tags(payload).strip()
             if clean_chunk:
-                clause = SpeechClause(text=clean_chunk, language=self.target_lang, speed=0.90, pause_after_ms=0)
-                await self._speak_clauses([clause], display_text=clean_chunk)
+                await self._speak(clean_chunk, speed=0.90)
             return
 
         self.rescue_count += 1
@@ -462,13 +442,13 @@ class RoleplayOrchestrator:
 
 
 class RoleplayAgent(Agent):
-    """LiveKit Agent for dynamic practice-oriented Roleplays with native `sonic-3.6` locale switching."""
+    """LiveKit Agent for dynamic practice-oriented Roleplays with ElevenLabs multilingual synthesis."""
 
     def __init__(
         self,
         *,
         orchestrator: RoleplayOrchestrator,
-        tts: cartesia.TTS,
+        tts: ElevenLabsTTS,
         stt: Any,
     ) -> None:
         self.orchestrator = orchestrator
@@ -490,25 +470,20 @@ class RoleplayAgent(Agent):
             clarification_rule = (
                 f"2. CLARIFICATION REQUESTS: If the learner asks what a word means, asks 'how do I say...', or seems stuck, "
                 f"explain simply in 1 short sentence in {orch.target_lang_name} using easy {orch.level}-level words, model a "
-                f"natural phrase they can say, and immediately continue in character. Wrap all speech in "
-                f'<lang code="{orch.target_lang}">...</lang>.'
+                f"natural phrase they can say, and immediately continue in character."
             )
         else:
             clarification_rule = (
                 f"2. DYNAMIC CLARIFICATION ASIDE (USER LANGUAGE ALLOWED ONLY WHEN NEEDED): "
                 f"90%+ of the conversation MUST be in {orch.target_lang_name}. However, if the learner explicitly asks for "
                 f"clarification, translation, meaning, or 'how do I say...' (in {orch.native_lang_name} or {orch.target_lang_name}), "
-                f"briefly help them as their coach, model the {orch.target_lang_name} phrase, and immediately return to character:\n"
-                f'   - Wrap EVERY {orch.native_lang_name} span in <lang code="{orch.native_lang}">...</lang> (keep to 1 short sentence).\n'
-                f'   - Wrap EVERY {orch.target_lang_name} span in <lang code="{orch.target_lang}">...</lang>.\n'
-                f'   - Example: <lang code="{orch.native_lang}">Sure, that means oat milk. Try asking me:</lang> '
-                f'<lang code="{orch.target_lang}">¿Tienen leche de avena?</lang>\n'
-                f"   - NEVER mix {orch.native_lang_name} and {orch.target_lang_name} inside the same <lang> tag."
+                f"briefly explain in 1 short {orch.native_lang_name} sentence, model the {orch.target_lang_name} phrase naturally, "
+                f"and immediately return to character (e.g. 'Sure, that means oat milk. Try asking me: ¿Tienen leche de avena?')."
             )
 
         strict_rule = (
             "4. FEEDBACK & RECASTING: Strict mode is ON — if the learner makes a grammar or vocabulary mistake, briefly "
-            f'model the exact correction (<lang code="{orch.target_lang}">...</lang>), call `log_roleplay_recast`, and continue in character.'
+            f"model the exact correction in {orch.target_lang_name}, call `log_roleplay_recast`, and continue in character."
             if orch.strict_mode
             else "4. IMPLICIT RECASTING: If the learner's meaning is clear but slightly unnatural or ungrammatical, do NOT "
             "interrupt the scene with a grammar lecture — naturally echo the idiomatic phrasing in your in-character reply "
@@ -530,17 +505,17 @@ class RoleplayAgent(Agent):
             f"Practice goals for the learner:\n{goals_lines}\n"
             f"{history_block}\n"
             "CRITICAL VOICE & LANGUAGE RULES:\n"
-            f'1. TARGET-LANGUAGE DEFAULT: Stay fully in character as \'{orch.ai_role}\' and speak 100% in {orch.variety_name} '
-            f'wrapped in <lang code="{orch.target_lang}">...</lang>. Keep every turn concise and conversational: 1 to 2 short '
-            f"sentences (typically under 150 characters) suited to CEFR {orch.level}, ending with a natural prompt or question.\n"
+            f"1. TARGET-LANGUAGE DEFAULT: Stay fully in character as '{orch.ai_role}' and speak in {orch.variety_name}. "
+            f"Keep every turn concise and conversational: 1 to 2 short sentences (typically under 150 characters) suited "
+            f"to CEFR {orch.level}, ending with a natural prompt or question.\n"
             f"{clarification_rule}\n"
             "3. REALISTIC PRACTICE: Include natural real-life details (prices, availability, times, follow-up questions) "
             "so the learner practices genuine listening and spontaneous speaking.\n"
             f"{strict_rule}\n"
             "5. GOAL TRACKING: As soon as the learner satisfies one of the practice goals, call `mark_roleplay_goal_complete` "
             "with that `goal_id` AND include your next spoken in-character reply.\n"
-            "6. PLAIN SPEECH ONLY: NEVER output markdown (**bold**, *italics*, # headers, bullets), emojis, romanization in "
-            "parentheses, or stage directions like (laughs) or [pause]."
+            "6. PLAIN SPEECH ONLY: NEVER output XML tags (<lang>), markdown (**bold**, *italics*, # headers, bullets), "
+            "emojis, romanization in parentheses, or stage directions like (laughs) or [pause]."
         )
 
     async def transcription_node(self, text, model_settings):
@@ -549,12 +524,9 @@ class RoleplayAgent(Agent):
 
     async def tts_node(self, text, model_settings):
         orch = self.orchestrator
-        async for frame in stream_bilingual_tts(
+        async for frame in stream_llm_tts(
             orch.synthesizer,
             text,
-            native_lang=orch.native_lang,
-            target_lang=orch.target_lang,
-            default_lang=orch.target_lang,
             speed=orch.base_speed,
         ):
             yield frame

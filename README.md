@@ -1,6 +1,6 @@
 # Zuno AI - Real-Time Conversational Voice AI
 
-A low-latency, real-time Voice AI conversational system featuring a native Android application (**Kotlin & Jetpack Compose**), an Auth & API server (**Node.js, TypeScript, Hono, Better Auth & Drizzle ORM**), a real-time Voice AI worker (**Python LiveKit Agents, Silero VAD, Deepgram STT, Google Gemini 2.5 Flash LLM, and Cartesia Sonic-3 Multilingual TTS**), and WebRTC transport via **LiveKit Cloud**.
+A low-latency, real-time Voice AI conversational system featuring a native Android application (**Kotlin & Jetpack Compose**), an Auth & API server (**Node.js, TypeScript, Hono, Better Auth & Drizzle ORM**), a real-time Voice AI worker (**Python LiveKit Agents, Silero VAD, Deepgram STT, Google Gemini 2.5 Flash LLM, and ElevenLabs Eleven v4 Turbo Multilingual TTS**), and WebRTC transport via **LiveKit Cloud**.
 
 ---
 
@@ -20,7 +20,7 @@ A low-latency, real-time Voice AI conversational system featuring a native Andro
                            ├── Silero VAD (Instant interruption / barge-in)
                            ├── Deepgram STT (Streaming speech-to-text)
                            ├── Google Gemini 2.5 Flash (Conversational LLM)
-                           └── Cartesia Sonic-3 Multilingual TTS
+                           └── ElevenLabs Eleven v4 Turbo Multilingual TTS
 ```
 
 ---
@@ -53,7 +53,7 @@ player/
 ├── voice-agent/                   # Real-time Voice AI Worker (Python LiveKit Agents)
 │   ├── agent.py                   # LiveKit conversational & lesson worker
 │   ├── lesson_flow.py             # 5-stage 03g interactive voice lesson orchestrator
-│   ├── voices.py                  # Cartesia Sonic-3 multilingual voice configuration
+│   ├── voices.py                  # ElevenLabs Eleven v4 Turbo multilingual voice configuration
 │   ├── token_server.py            # Local token dispenser (optional)
 │   ├── Dockerfile                 # Voice agent container with WebRTC & audio libraries
 │   ├── requirements.txt           # Python dependencies

@@ -6,31 +6,42 @@ from unittest.mock import AsyncMock
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-import livekit.plugins.cartesia as cartesia
 from bilingual import (
+    clean_text_for_tts,
     detect_clause_language,
-    iter_streaming_clauses,
-    segment_bilingual_text,
+    iter_streaming_sentences,
     strip_lang_tags,
     strip_lang_tags_stream,
+    strip_romanization,
 )
 from roleplay_flow import RoleplayOrchestrator
-from voices import BilingualCartesiaSynthesizer, resolve_cartesia_locale, stream_bilingual_tts
+from voices import (
+    ElevenLabsSynthesizer,
+    TUTOR_CATALOG,
+    create_elevenlabs_tts,
+    resolve_elevenlabs_voice,
+    resolve_tutor_name,
+    stream_llm_tts,
+)
 
 
-class BilingualAndRoleplayTest(unittest.TestCase):
-    def test_strip_lang_tags_variants(self):
+class ElevenLabsAndRoleplayTest(unittest.TestCase):
+    def test_strip_legacy_lang_tags_and_romanization(self):
         self.assertEqual(
             strip_lang_tags('<lang code="en">Sure, that means bill.</lang> <lang code="es">¿Te traigo la cuenta?</lang>'),
             "Sure, that means bill. ¿Te traigo la cuenta?",
         )
         self.assertEqual(
-            strip_lang_tags('[en]Try saying:[/en] [es]Un café con leche[/es]'),
+            strip_lang_tags("[en]Try saying:[/en] [es]Un café con leche[/es]"),
             "Try saying: Un café con leche",
         )
         self.assertEqual(
-            strip_lang_tags('<lang="fr">Bonjour !</lang>'),
-            "Bonjour !",
+            strip_romanization("こんにちは (konnichiwa)"),
+            "こんにちは",
+        )
+        self.assertEqual(
+            clean_text_for_tts("Hola, how are you? Estoy bien"),
+            "Hola, how are you? Estoy bien",
         )
 
     def test_strip_lang_tags_stream_across_chunk_boundaries(self):
@@ -56,86 +67,47 @@ class BilingualAndRoleplayTest(unittest.TestCase):
         result = asyncio.run(_run())
         self.assertEqual(result, "Sure, that means check. ¿La cuenta?")
 
-    def test_double_quotes_regression_and_untagged_bilingual_fallback(self):
-        # Regression test for `.endswith` in Python
-        segs = segment_bilingual_text(
-            'Try asking me: "¿Tienen leche de avena?"',
-            native_lang="en",
-            target_lang="es",
-            default_lang="es",
-        )
-        self.assertEqual(len(segs), 2)
-        self.assertEqual(segs[0].language, "en")
-        self.assertEqual(segs[1].language, "es")
-        self.assertIn("leche de avena", segs[1].text)
+    def test_mixed_language_utterance_synthesizes_in_single_pass_without_dual_speak(self):
+        synth = ElevenLabsSynthesizer(api_key="test-key", tutor_id="sofia")
+        calls: list[tuple[str, float]] = []
 
-        # Untagged multi-sentence clarification + Spanish continuation
-        untagged = "Sure, that word means receipt in English. ¿Quieres el recibo ahora?"
-        segs2 = segment_bilingual_text(
-            untagged,
-            native_lang="en",
-            target_lang="es",
-            default_lang="es",
-        )
-        self.assertEqual(len(segs2), 2)
-        self.assertEqual(segs2[0].language, "en")
-        self.assertEqual(segs2[1].language, "es")
+        async def _fake_stream_pcm(text: str, speed: float = 1.0):
+            calls.append((text, speed))
+            yield b"\x00\x01" * 960  # 40ms of 24kHz mono PCM
 
-        # Pure target language stays 100% target language
-        pure_es = "¡Hola! Buenos días, ¿qué te pongo para tomar?"
-        segs3 = segment_bilingual_text(
-            pure_es,
-            native_lang="en",
-            target_lang="es",
-            default_lang="es",
-        )
-        self.assertEqual(len(segs3), 1)
-        self.assertEqual(segs3[0].language, "es")
-        self.assertEqual(detect_clause_language("Perfecto, un momento.", "en", "es", "es"), "es")
-
-    def test_streaming_clauses_and_sonic36_locale_synthesis(self):
-        synth = BilingualCartesiaSynthesizer(
-            voice_id="ec1e269e-9ca0-402f-8a18-58e0e022355a",
-            tutor_voice="warm",
-            accent="spain",
-        )
-        self.assertEqual(resolve_cartesia_locale("es", "spain", "warm"), "es-ES")
-        self.assertEqual(resolve_cartesia_locale("en", "spain", "warm"), "en-US")
-
-        calls: list[tuple[str, str, float]] = []
-
-        async def _fake_fetch(text: str, language: str, speed: float = 1.0) -> bytes:
-            calls.append((text, language, speed))
-            return b"\x00\x01" * 960  # 40ms of 24kHz mono PCM
-
-        synth.fetch_pcm_bytes = _fake_fetch  # type: ignore[method-assign]
+        synth.stream_pcm_chunks = _fake_stream_pcm  # type: ignore[method-assign]
 
         async def _run():
             async def _tokens():
-                for tok in [
-                    '<lang code="en">That means oat milk. Try asking:</lang> ',
-                    '<lang code="es">¿Tenéis leche de avena?</lang>',
-                ]:
+                # Short mixed greeting merges into a single unified ElevenLabs synthesis call
+                for tok in ["Hola, ", "how are you? ", "Estoy bien."]:
                     yield tok
 
             frames = []
-            async for fr in stream_bilingual_tts(
-                synth,
-                _tokens(),
-                native_lang="en",
-                target_lang="es",
-                default_lang="es",
-                speed=1.0,
-            ):
+            async for fr in stream_llm_tts(synth, _tokens(), speed=1.0):
                 frames.append(fr)
             return frames
 
         frames = asyncio.run(_run())
         self.assertTrue(len(frames) > 0)
-        langs = [c[1] for c in calls]
-        self.assertIn("en", langs)
-        self.assertIn("es", langs)
-        self.assertEqual(langs[-1], "es")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "Hola, how are you? Estoy bien.")
+
+    def test_streaming_sentences_keeps_inline_quotes_intact(self):
+        async def _run():
+            async def _tokens():
+                yield 'Try asking the barista: "¿Tienen leche de avena?" '
+                yield "Then listen for their reply."
+
+            out = []
+            async for s in iter_streaming_sentences(_tokens()):
+                out.append(s)
+            return out
+
+        sentences = asyncio.run(_run())
+        self.assertEqual(len(sentences), 2)
+        self.assertEqual(sentences[0], 'Try asking the barista: "¿Tienen leche de avena?"')
+        self.assertEqual(sentences[1], "Then listen for their reply.")
 
     def test_roleplay_orchestrator_goals_and_rescue_actions(self):
         events = []
@@ -143,8 +115,8 @@ class BilingualAndRoleplayTest(unittest.TestCase):
         async def _broadcast(ev):
             events.append(ev)
 
-        tts = cartesia.TTS(api_key="test-key", voice="ec1e269e-9ca0-402f-8a18-58e0e022355a", language="es")
-        synth = BilingualCartesiaSynthesizer(voice_id="ec1e269e-9ca0-402f-8a18-58e0e022355a", tutor_voice="warm", accent="latam")
+        synth = ElevenLabsSynthesizer(api_key="test-key", tutor_id="sofia")
+        tts = create_elevenlabs_tts(synthesizer=synth)
         meta = {
             "mode": "roleplay",
             "roleplayId": "rp_1",
@@ -183,7 +155,7 @@ class BilingualAndRoleplayTest(unittest.TestCase):
                 actions=["translate", "listen_slow"],
             )
             msg = await orch.on_goal_completed("goal_1", "Yo quiero cafe", "Me gustaría un café")
-            self.assertIn('<lang code="es">', msg)
+            self.assertNotIn("<lang", msg)
             await orch.handle_client_action("hint")
             await orch.handle_client_action("translate")
 
@@ -199,54 +171,17 @@ class BilingualAndRoleplayTest(unittest.TestCase):
         self.assertIn("hint", actions)
         self.assertIn("translate", actions)
 
-    def test_free_talk_user_language_default_and_slow_pronunciation_tags(self):
+    def test_free_talk_user_language_default_and_clean_instructions(self):
         from agent import ConversationalAgent, can_use_multi_stt
 
-        # 1. Strip `<lang code="es" speed="slow">...</lang>` cleanly across chunks
-        tagged_pron = (
-            '<lang code="en">You pronounce it</lang> '
-            '<lang code="es">ferrocarril.</lang> '
-            '<lang code="en">Slowly:</lang> '
-            '<lang code="es" speed="slow">fe, rro, ca, rril.</lang>'
-        )
-        self.assertEqual(
-            strip_lang_tags(tagged_pron),
-            "You pronounce it ferrocarril. Slowly: fe, rro, ca, rril.",
-        )
-
-        segs = segment_bilingual_text(
-            tagged_pron,
-            native_lang="en",
-            target_lang="es",
-            default_lang="en",
-        )
-        self.assertEqual([(s.language, s.speed) for s in segs], [
-            ("en", 1.0),
-            ("es", 1.0),
-            ("en", 1.0),
-            ("es", 0.76),
-        ])
-
-        # 2. Symmetric `detect_clause_language`: English sentence with shared words ("a", "no") stays "en" when default_lang="en"
         self.assertEqual(
             detect_clause_language("No problem, tell me about a trip!", "en", "es", "en"),
             "en",
         )
-        # While Spanish sentence still flips to "es" even when default_lang="en"
         self.assertEqual(
             detect_clause_language("¡Claro! ¿Cómo estás hoy?", "en", "es", "en"),
             "es",
         )
-        # And English gloss quote after "means" stays "en"
-        gloss_segs = segment_bilingual_text(
-            'That word literally means "little coffee" in everyday conversation.',
-            native_lang="en",
-            target_lang="es",
-            default_lang="en",
-        )
-        self.assertTrue(all(s.language == "en" for s in gloss_segs))
-
-        # 3. ConversationalAgent Free Talk defaults to user language & supports non-multi STT switching
         self.assertTrue(can_use_multi_stt("es", "en"))
         self.assertFalse(can_use_multi_stt("ko", "en"))
 
@@ -263,22 +198,26 @@ class BilingualAndRoleplayTest(unittest.TestCase):
         )
         self.assertTrue(agent.is_free_talk)
         self.assertEqual(agent.default_spoken_lang, "en")
+        self.assertNotIn('<lang code="', agent.instructions)
         asyncio.run(agent.set_listening_language("ko"))
         fake_stt.update_options.assert_called_with(language="ko")
 
-    def test_tutor_catalog_six_tutors_1_to_1_mapping(self):
-        from voices import TUTOR_CATALOG, resolve_cartesia_voice, resolve_tutor_name
-
+    def test_tutor_catalog_six_elevenlabs_tutors_1_to_1_mapping(self):
         self.assertEqual(len(TUTOR_CATALOG), 6)
         voice_ids = {spec["voice_id"] for spec in TUTOR_CATALOG.values()}
         self.assertEqual(len(voice_ids), 6)
+        self.assertEqual(resolve_tutor_name("sofia"), "Sofía")
         self.assertEqual(resolve_tutor_name("lucas"), "Lucas")
         self.assertEqual(resolve_tutor_name("ethan"), "Ethan")
         self.assertEqual(resolve_tutor_name("claire"), "Claire")
         self.assertEqual(resolve_tutor_name("elena"), "Sofía")
         self.assertEqual(
-            resolve_cartesia_voice(tutor_id="lucas"),
-            "8c254787-4eb4-4577-bd3d-fb3c273baea2",
+            resolve_elevenlabs_voice(tutor_id="sofia"),
+            "DODLEQrClDo8wCz460ld",
+        )
+        self.assertEqual(
+            resolve_elevenlabs_voice(tutor_id="lucas"),
+            "cjVigY5qzO86Huf0OWal",
         )
 
 

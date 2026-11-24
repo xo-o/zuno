@@ -23,7 +23,7 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Plays spoken phrase & coach-note samples synthesized by Cartesia Sonic-3 (`/api/tts/preview`),
+ * Plays spoken phrase & coach-note samples synthesized by ElevenLabs (`/api/tts/preview`),
  * caching WAV files locally so repeat taps play instantaneously without extra API calls.
  */
 class CartesiaAudioPlayer(
@@ -37,7 +37,7 @@ class CartesiaAudioPlayer(
         slow: Boolean,
     ) -> ByteArray,
 ) {
-    private val cacheRoot = File(context.applicationContext.cacheDir, "cartesia_tts_v2").apply { mkdirs() }
+    private val cacheRoot = File(context.applicationContext.cacheDir, "elevenlabs_tts_v1").apply { mkdirs() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var mediaPlayer: MediaPlayer? = null
     private var playJob: Job? = null

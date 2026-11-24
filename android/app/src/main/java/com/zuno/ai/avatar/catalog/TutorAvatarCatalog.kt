@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Central registry of Zuno's 6 curated AI tutors.
- * Every tutor maps 1:1 to a dark-studio Crisp-Clips v4 lip-sync bundle and a Cartesia Sonic-3.6 multilingual voice.
+ * Every tutor maps 1:1 to a dark-studio Crisp-Clips v4 lip-sync bundle and an ElevenLabs Eleven v4 Turbo multilingual voice.
  */
 object TutorAvatarCatalog {
     val SOFIA = TutorAvatarProfile(
@@ -17,7 +17,7 @@ object TutorAvatarCatalog {
         displayName = "Sofía",
         roleLabel = "AI Tutor",
         voicePreset = "warm",
-        voiceId = "ec1e269e-9ca0-402f-8a18-58e0e022355a",
+        voiceId = "DODLEQrClDo8wCz460ld",
         taglineRes = R.string.settings_pref_voice_warm,
         thumbPoster = TutorPosterSource.DrawableRes(R.drawable.tutor_sofia_thumb),
         stagePoster = TutorPosterSource.DrawableRes(R.drawable.tutor_sofia_poster),
@@ -29,7 +29,7 @@ object TutorAvatarCatalog {
         displayName = "Valeria",
         roleLabel = "AI Tutor",
         voicePreset = "calm",
-        voiceId = "ae823354-f9be-4aef-8543-f569644136b4",
+        voiceId = "EXAVITQu4vr4xnSDxMaL",
         taglineRes = R.string.settings_pref_voice_calm,
         thumbPoster = TutorPosterSource.DrawableRes(R.drawable.tutor_valeria_thumb),
         stagePoster = TutorPosterSource.DrawableRes(R.drawable.tutor_valeria_poster),
@@ -41,7 +41,7 @@ object TutorAvatarCatalog {
         displayName = "Claire",
         roleLabel = "AI Tutor",
         voicePreset = "crisp",
-        voiceId = "f786b574-daa5-4673-aa0c-cbe3e8534c02",
+        voiceId = "Xb7hH8MSUJpSbSDYk0k2",
         taglineRes = R.string.settings_pref_voice_crisp,
         thumbPoster = TutorPosterSource.DrawableRes(R.drawable.tutor_claire_thumb),
         stagePoster = TutorPosterSource.DrawableRes(R.drawable.tutor_claire_poster),
@@ -53,7 +53,7 @@ object TutorAvatarCatalog {
         displayName = "Mateo",
         roleLabel = "AI Tutor",
         voicePreset = "energetic",
-        voiceId = "4df027cb-2920-4a1f-8c34-f21529d5c3fe",
+        voiceId = "TX3LPaxmHKxFdv7VOQHJ",
         taglineRes = R.string.settings_pref_voice_energetic,
         thumbPoster = TutorPosterSource.DrawableRes(R.drawable.tutor_mateo_thumb),
         stagePoster = TutorPosterSource.DrawableRes(R.drawable.tutor_mateo_poster),
@@ -65,7 +65,7 @@ object TutorAvatarCatalog {
         displayName = "Lucas",
         roleLabel = "AI Tutor",
         voicePreset = "steady",
-        voiceId = "8c254787-4eb4-4577-bd3d-fb3c273baea2",
+        voiceId = "cjVigY5qzO86Huf0OWal",
         taglineRes = R.string.settings_pref_voice_steady,
         thumbPoster = TutorPosterSource.DrawableRes(R.drawable.tutor_lucas_thumb),
         stagePoster = TutorPosterSource.DrawableRes(R.drawable.tutor_lucas_poster),
@@ -77,7 +77,7 @@ object TutorAvatarCatalog {
         displayName = "Ethan",
         roleLabel = "AI Tutor",
         voicePreset = "casual",
-        voiceId = "30894953-bcce-41fe-892c-15ce19c843ff",
+        voiceId = "bIHbv24MWmeRgasZH58o",
         taglineRes = R.string.settings_pref_voice_casual,
         thumbPoster = TutorPosterSource.DrawableRes(R.drawable.tutor_ethan_thumb),
         stagePoster = TutorPosterSource.DrawableRes(R.drawable.tutor_ethan_poster),

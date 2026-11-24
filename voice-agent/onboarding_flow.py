@@ -8,10 +8,9 @@ from typing import Any, Callable, Coroutine
 from google import genai
 from google.genai import types
 from livekit.agents import Agent, AgentSession, StopResponse, llm
-import livekit.plugins.cartesia as cartesia
 
-from bilingual import SpeechClause, ensure_terminal_punct
-from voices import BilingualCartesiaSynthesizer, synthesize_bilingual_segments, update_cartesia_tts
+from bilingual import ensure_terminal_punct
+from voices import ElevenLabsSynthesizer, ElevenLabsTTS, synthesize_speech
 
 logger = logging.getLogger("voice-agent.onboarding")
 
@@ -102,7 +101,8 @@ class OnboardingOrchestrator:
         self,
         *,
         meta: dict[str, Any],
-        tts: cartesia.TTS,
+        tts: ElevenLabsTTS,
+        synthesizer: ElevenLabsSynthesizer | None = None,
         broadcast: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
     ) -> None:
         self.meta = meta
@@ -124,8 +124,11 @@ class OnboardingOrchestrator:
         self._speech_lock = asyncio.Lock()
         self._processing = False
 
-        voice_id = getattr(tts, "_opts", None) and tts._opts.voice
-        self.synthesizer = BilingualCartesiaSynthesizer(voice_id=voice_id)
+        self.synthesizer = synthesizer or getattr(tts, "synthesizer", None) or ElevenLabsSynthesizer(
+            voice_id=meta.get("voice"),
+            tutor_voice=meta.get("tutorVoice"),
+            tutor_id=meta.get("tutorId") or "sofia",
+        )
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self._genai = genai.Client(
             api_key=api_key,
@@ -161,11 +164,7 @@ class OnboardingOrchestrator:
             return
         async with self._speech_lock:
             clean = ensure_terminal_punct(text.strip())
-            update_cartesia_tts(self.tts, language=self.native_lang, speed=1.0)
-            audio_stream = synthesize_bilingual_segments(
-                self.synthesizer,
-                [SpeechClause(text=clean, language=self.native_lang, speed=1.0)],
-            )
+            audio_stream = synthesize_speech(self.synthesizer, clean, speed=1.0)
             handle = self.session.say(
                 clean,
                 audio=audio_stream,
@@ -332,7 +331,7 @@ class OnboardingAgent(Agent):
         self,
         *,
         orchestrator: OnboardingOrchestrator,
-        tts: cartesia.TTS,
+        tts: ElevenLabsTTS,
         stt: Any,
     ) -> None:
         self.orchestrator = orchestrator
