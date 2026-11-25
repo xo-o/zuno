@@ -1473,3 +1473,197 @@ internal fun JSONObject.toCoachPrompts(): CoachPrompts {
         questions = list("questions"),
     )
 }
+
+// ── 10 · Account Privacy & Blocked Learners ─────────────────────────────────
+
+data class BlockedLearner(val id: String, val name: String)
+
+data class PrivacySettings(
+    val openToSpeak: Boolean = true,
+    val allowCallInvites: Boolean = true,
+    val whoCanMessage: String = "partners", // "partners" | "everyone" | "nobody"
+    val blockedLearners: List<BlockedLearner> = emptyList(),
+)
+
+internal fun JSONObject.toPrivacySettings() = PrivacySettings(
+    openToSpeak = optBoolean("openToSpeak", true),
+    allowCallInvites = optBoolean("allowCallInvites", true),
+    whoCanMessage = optString("whoCanMessage", "partners"),
+    blockedLearners = optJSONArray("blockedLearners")?.objects()?.map {
+        BlockedLearner(it.getString("id"), it.optString("name"))
+    }.orEmpty(),
+)
+
+// ── 12 · Vocabulary SRS Library ─────────────────────────────────────────────
+
+enum class VocabBucket(val wire: String) {
+    Due("due"),
+    Learning("learning"),
+    Mastered("mastered");
+
+    companion object {
+        fun fromWire(value: String?) = entries.firstOrNull { it.wire == value } ?: Due
+    }
+}
+
+data class VocabPhrase(
+    val id: String,
+    val language: String = "es",
+    val phrase: String,
+    val translation: String,
+    val source: String,
+    val contextNote: String? = null,
+    val exampleSentence: String? = null,
+    val exampleTranslation: String? = null,
+    val syllableStress: String? = null,
+    val recallCue: String? = null,
+    val streak: Int = 0,
+    val intervalDays: Int = 0,
+    val intervalLabel: String = "Due now",
+    val bucket: VocabBucket = VocabBucket.Due,
+    val dueNow: Boolean = true,
+)
+
+data class VocabCounts(
+    val due: Int = 0,
+    val learning: Int = 0,
+    val mastered: Int = 0,
+    val total: Int = 0,
+)
+
+data class VocabLibrary(
+    val phrases: List<VocabPhrase>,
+    val counts: VocabCounts,
+)
+
+data class VocabPreview(
+    val translation: String,
+    val exampleSentence: String,
+    val exampleTranslation: String,
+    val syllableStress: String,
+    val recallCue: String,
+)
+
+internal fun JSONObject.toVocabPhrase() = VocabPhrase(
+    id = getString("id"),
+    language = optString("language", "es"),
+    phrase = optString("phrase"),
+    translation = optString("translation"),
+    source = optString("source", "Added manually"),
+    contextNote = optStringOrNull("contextNote"),
+    exampleSentence = optStringOrNull("exampleSentence"),
+    exampleTranslation = optStringOrNull("exampleTranslation"),
+    syllableStress = optStringOrNull("syllableStress"),
+    recallCue = optStringOrNull("recallCue"),
+    streak = optInt("streak", 0),
+    intervalDays = optInt("intervalDays", 0),
+    intervalLabel = optString("intervalLabel", "Due now"),
+    bucket = VocabBucket.fromWire(optString("bucket")),
+    dueNow = optBoolean("dueNow", true),
+)
+
+internal fun JSONObject.toVocabLibrary(): VocabLibrary {
+    val phrases = optJSONArray("phrases")?.objects()?.map { it.toVocabPhrase() }.orEmpty()
+    val c = optJSONObject("counts")
+    val counts = VocabCounts(
+        due = c?.optInt("due", phrases.count { it.dueNow }) ?: phrases.count { it.dueNow },
+        learning = c?.optInt("learning", phrases.count { !it.dueNow && it.bucket == VocabBucket.Learning }) ?: 0,
+        mastered = c?.optInt("mastered", phrases.count { !it.dueNow && it.bucket == VocabBucket.Mastered }) ?: 0,
+        total = c?.optInt("total", phrases.size) ?: phrases.size,
+    )
+    return VocabLibrary(phrases = phrases, counts = counts)
+}
+
+internal fun JSONObject.toVocabPreview() = VocabPreview(
+    translation = optString("translation"),
+    exampleSentence = optString("exampleSentence"),
+    exampleTranslation = optString("exampleTranslation"),
+    syllableStress = optString("syllableStress"),
+    recallCue = optString("recallCue"),
+)
+
+// ── 15 · Live Rooms ─────────────────────────────────────────────────────────
+
+data class LiveRoomMember(
+    val id: String,
+    val name: String,
+    val initial: String,
+    val imageUrl: String? = null,
+    val isHost: Boolean = false,
+    val ready: Boolean = true,
+    val isYou: Boolean = false,
+)
+
+data class LiveRoom(
+    val id: String,
+    val title: String,
+    val description: String = "",
+    val language: String = "es",
+    val level: String = "B1",
+    val maxMembers: Int = 4,
+    val visibility: String = "public",
+    val code: String? = null,
+    val sourceKind: String = "user", // "system" | "user"
+    val status: String = "lobby", // "lobby" | "live" | "ended"
+    val hostUserId: String = "",
+    val hostName: String = "Zuno",
+    val isHost: Boolean = false,
+    val discussionPrompts: List<String> = emptyList(),
+    val currentRound: Int = 1,
+    val members: List<LiveRoomMember> = emptyList(),
+) {
+    val isSystem: Boolean get() = sourceKind == "system"
+    val isPublic: Boolean get() = visibility == "public"
+    val isLive: Boolean get() = status == "live"
+}
+
+data class LiveRoomsBrowse(
+    val featured: LiveRoom?,
+    val rooms: List<LiveRoom>,
+)
+
+data class JoinLiveRoomResult(
+    val room: LiveRoom,
+    val livekit: LivekitTicket?,
+)
+
+internal fun JSONObject.toLiveRoomMember() = LiveRoomMember(
+    id = getString("id"),
+    name = optString("name"),
+    initial = optString("initial", "Z"),
+    imageUrl = optStringOrNull("imageUrl"),
+    isHost = optBoolean("isHost", false),
+    ready = optBoolean("ready", true),
+    isYou = optBoolean("isYou", false),
+)
+
+internal fun JSONObject.toLiveRoom() = LiveRoom(
+    id = getString("id"),
+    title = optString("title"),
+    description = optString("description"),
+    language = optString("language", "es"),
+    level = optString("level", "B1"),
+    maxMembers = optInt("maxMembers", 4),
+    visibility = optString("visibility", "public"),
+    code = optStringOrNull("code"),
+    sourceKind = optString("sourceKind", "user"),
+    status = optString("status", "lobby"),
+    hostUserId = optString("hostUserId"),
+    hostName = optString("hostName", "Zuno"),
+    isHost = optBoolean("isHost", false),
+    discussionPrompts = optJSONArray("discussionPrompts")?.let { arr ->
+        List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() }
+    }.orEmpty(),
+    currentRound = optInt("currentRound", 1),
+    members = optJSONArray("members")?.objects()?.map { it.toLiveRoomMember() }.orEmpty(),
+)
+
+internal fun JSONObject.toLiveRoomsBrowse() = LiveRoomsBrowse(
+    featured = optJSONObject("featured")?.toLiveRoom(),
+    rooms = optJSONArray("rooms")?.objects()?.map { it.toLiveRoom() }.orEmpty(),
+)
+
+internal fun JSONObject.toJoinLiveRoomResult() = JoinLiveRoomResult(
+    room = getJSONObject("room").toLiveRoom(),
+    livekit = optJSONObject("livekit")?.toLivekitTicket(),
+)

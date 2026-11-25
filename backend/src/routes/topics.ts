@@ -80,6 +80,7 @@ const builderTurnSchema = z.object({
 const updateTopicSchema = z.object({
   pinned: z.boolean().optional(),
   category: topicCategoryEnum.optional(),
+  title: z.string().trim().min(1).max(80).optional(),
 });
 
 const shareSchema = z.object({
@@ -537,7 +538,7 @@ export const topicRoutes = new Hono<AuthEnv>()
     const row = await loadTopic(c.get("user").id, c.req.param("id"));
     return c.json({ topic: serializeTopicDetail(row, row.lessons) });
   })
-  /** Pin / unpin or update category (Topics are immutable in content after creation). */
+  /** Pin / unpin, rename, or update category. */
   .patch("/:id", async (c) => {
     const row = await loadTopic(c.get("user").id, c.req.param("id"));
     const body = await parseBody(c, updateTopicSchema);
@@ -546,6 +547,7 @@ export const topicRoutes = new Hono<AuthEnv>()
       .set({
         ...(body.pinned !== undefined && { pinnedAt: body.pinned ? new Date() : null }),
         ...(body.category !== undefined && { category: body.category }),
+        ...(body.title !== undefined && { title: body.title }),
       })
       .where(eq(topic.id, row.id))
       .returning();

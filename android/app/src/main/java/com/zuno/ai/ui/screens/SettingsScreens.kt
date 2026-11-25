@@ -82,6 +82,7 @@ import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.Levels
 import com.zuno.ai.data.NotificationPrefs
 import com.zuno.ai.data.Preferences
+import com.zuno.ai.data.PrivacySettings
 import com.zuno.ai.data.Profile
 import com.zuno.ai.data.TeachingStyles
 import com.zuno.ai.data.TutorVoices
@@ -434,21 +435,13 @@ fun SettingsOverviewScreen(
                 )
             }
 
-            // Sign out · Delete account
+            // Sign out (`2151:5122` — Delete account lives in Account `2960:11889`)
             ZunoSettingsGroup {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_sign_out),
                     icon = R.drawable.zuno_ic_log_out,
                     showChevron = true,
                     onClick = onSignOut,
-                )
-                ZunoSettingsRow(
-                    title = stringResource(R.string.settings_delete_account),
-                    icon = R.drawable.zuno_ic_trash_muted,
-                    muted = true,
-                    showChevron = true,
-                    showDivider = true,
-                    onClick = onDeleteAccount,
                 )
             }
         }
@@ -1075,13 +1068,17 @@ fun SettingsLearningScreen(
     onFindLevel: () -> Unit,
     onPreferencesChange: ((Preferences) -> Preferences) -> Unit,
     onBack: () -> Unit,
+    onUpdateInterests: (List<String>) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val language = profile?.language ?: LearningLanguages.Spanish
     val level = profile?.level ?: "B1"
     val preferences = profile?.preferences ?: Preferences()
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingInterests by rememberSaveable { mutableStateOf(false) }
     val languageName = language.displayName(appLanguage)
+    val interestsValue = profile?.interests?.takeIf { it.isNotEmpty() }?.joinToString(", ")
+        ?: stringResource(R.string.settings_learn_interests_empty)
 
     val (levelTitle, levelDescription) = when (level) {
         "A1" -> stringResource(R.string.settings_learn_level_a1_title) to stringResource(R.string.settings_learn_level_a1_desc)
@@ -1199,8 +1196,30 @@ fun SettingsLearningScreen(
                     showDivider = true,
                     onClick = { picker = "focus" },
                 )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_learn_interests),
+                    icon = R.drawable.zuno_ic_sparkles_secondary,
+                    value = interestsValue,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = { editingInterests = true },
+                )
             }
         }
+    }
+
+    if (editingInterests) {
+        ZunoInputDialog(
+            title = stringResource(R.string.settings_learn_interests),
+            initialValue = profile?.interests?.joinToString(", ").orEmpty(),
+            confirmLabel = stringResource(R.string.common_save),
+            onConfirm = { raw ->
+                editingInterests = false
+                val parsed = raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10)
+                onUpdateInterests(parsed)
+            },
+            onDismiss = { editingInterests = false },
+        )
     }
 
     when (picker) {
@@ -1305,7 +1324,7 @@ fun SettingsLearningLanguageScreen(
                     }
                 }
             } else {
-                if (current != null && profile != null) {
+                if (current != null) {
                     ZunoSettingsGroup(sectionLabel = stringResource(R.string.learning_language_now)) {
                         ZunoSettingsRow(
                             title = current.nativeName,
@@ -1417,12 +1436,19 @@ fun SettingsAccountScreen(
     onDownloadData: () -> Unit,
     onDeleteAccount: () -> Unit,
     onBack: () -> Unit,
+    openToSpeak: Boolean = true,
+    onToggleOpenToSpeak: (Boolean) -> Unit = {},
+    onTakePhoto: () -> Unit = onChangePhoto,
+    onRemovePhoto: () -> Unit = {},
+    onOpenPrivacy: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val displayName = profile?.displayName.orEmpty()
     val email = profile?.email.orEmpty()
     val initial = displayName.take(1).uppercase()
     var editingName by rememberSaveable { mutableStateOf(false) }
+    var showPhotoSheet by rememberSaveable { mutableStateOf(false) }
+    var showPrivacySheet by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -1463,7 +1489,7 @@ fun SettingsAccountScreen(
                                 .clip(CircleShape)
                                 .background(ZunoColors.SurfaceInverse)
                                 .border(2.dp, ZunoGlassTokens.CanvasTop, CircleShape)
-                                .clickable(role = Role.Button, onClick = onChangePhoto),
+                                .clickable(role = Role.Button, onClick = { showPhotoSheet = true }),
                             contentAlignment = Alignment.Center,
                         ) {
                             ZunoIcon(R.drawable.zuno_ic_t_camera, 13.dp, tint = ZunoColors.IconOnInverse)
@@ -1474,7 +1500,7 @@ fun SettingsAccountScreen(
                     modifier = Modifier
                         .height(36.dp)
                         .clip(CircleShape)
-                        .clickable(enabled = !uploadingPhoto, role = Role.Button, onClick = onChangePhoto)
+                        .clickable(enabled = !uploadingPhoto, role = Role.Button, onClick = { showPhotoSheet = true })
                         .padding(horizontal = ZunoSpace.s16),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1521,12 +1547,14 @@ fun SettingsAccountScreen(
                     enabled = false,
                 )
                 ZunoSettingsRow(
-                    title = "Privacy & visibility",
-                    subtitle = "Open to speak · Partners",
+                    title = stringResource(R.string.account_privacy_title),
+                    subtitle = if (openToSpeak) stringResource(R.string.account_privacy_sub_open) else stringResource(R.string.account_privacy_sub_hidden),
                     icon = R.drawable.zuno_ic_t_lock,
                     showChevron = true,
                     showDivider = true,
-                    onClick = onDownloadData,
+                    onClick = {
+                        if (onOpenPrivacy != null) onOpenPrivacy() else showPrivacySheet = true
+                    },
                 )
             }
 
@@ -1560,6 +1588,189 @@ fun SettingsAccountScreen(
             },
             onDismiss = { editingName = false },
         )
+    }
+
+    if (showPhotoSheet) {
+        ZunoSheet(
+            onDismiss = { showPhotoSheet = false },
+            title = stringResource(R.string.account_photo_sheet_title),
+        ) {
+            ZunoSettingsGroup(modifier = Modifier.padding(horizontal = ZunoSpace.s12)) {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.account_photo_take),
+                    icon = R.drawable.zuno_ic_t_camera,
+                    onClick = {
+                        showPhotoSheet = false
+                        onTakePhoto()
+                    },
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.account_photo_library),
+                    icon = R.drawable.zuno_ic_image,
+                    showDivider = true,
+                    onClick = {
+                        showPhotoSheet = false
+                        onChangePhoto()
+                    },
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.account_photo_remove),
+                    icon = R.drawable.zuno_ic_t_trash,
+                    destructive = true,
+                    showDivider = true,
+                    enabled = profile?.imageUrl != null,
+                    onClick = {
+                        showPhotoSheet = false
+                        onRemovePhoto()
+                    },
+                )
+            }
+        }
+    }
+
+    if (showPrivacySheet) {
+        ZunoSheet(
+            onDismiss = { showPrivacySheet = false },
+            title = stringResource(R.string.account_privacy_title),
+            description = stringResource(R.string.account_privacy_sheet_desc),
+        ) {
+            ZunoSettingsGroup(modifier = Modifier.padding(horizontal = ZunoSpace.s12)) {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.chats_open_to_speak),
+                    subtitle = stringResource(R.string.account_privacy_open_sheet_sub),
+                    icon = R.drawable.zuno_ic_t_globe,
+                    checked = openToSpeak,
+                    onClick = { onToggleOpenToSpeak(!openToSpeak) },
+                )
+            }
+        }
+    }
+}
+
+// ── Account · 4 · Privacy & Visibility (2960:12180) ─────────────────────────
+
+@Composable
+fun SettingsPrivacyScreen(
+    privacy: PrivacySettings?,
+    languageName: String,
+    level: String,
+    onUpdate: (openToSpeak: Boolean?, allowCallInvites: Boolean?, whoCanMessage: String?) -> Unit,
+    onUnblock: (String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val current = privacy ?: PrivacySettings()
+    var showWhoSheet by rememberSaveable { mutableStateOf(false) }
+    var showBlockedSheet by rememberSaveable { mutableStateOf(false) }
+
+    val whoLabel = when (current.whoCanMessage) {
+        "everyone" -> stringResource(R.string.account_privacy_msg_everyone)
+        "nobody" -> stringResource(R.string.account_privacy_msg_nobody)
+        else -> stringResource(R.string.account_privacy_msg_partners)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .zunoCanvasBackground()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        ZunoBackTitleTopBar(title = stringResource(R.string.account_privacy_title), onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
+        ) {
+            ZunoSettingsGroup {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.chats_open_to_speak),
+                    subtitle = stringResource(R.string.account_privacy_open_sub, "$languageName $level"),
+                    icon = R.drawable.zuno_ic_user_plus,
+                    checked = current.openToSpeak,
+                    onClick = { onUpdate(!current.openToSpeak, null, null) },
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.account_privacy_call_invites),
+                    subtitle = stringResource(R.string.account_privacy_call_invites_sub),
+                    icon = R.drawable.zuno_ic_t_phone,
+                    checked = current.allowCallInvites,
+                    showDivider = true,
+                    onClick = { onUpdate(null, !current.allowCallInvites, null) },
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.account_privacy_who_message),
+                    icon = R.drawable.zuno_ic_t_message_circle,
+                    value = whoLabel,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = { showWhoSheet = true },
+                )
+            }
+
+            ZunoSettingsGroup(sectionLabel = stringResource(R.string.account_privacy_safety_section)) {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.account_privacy_blocked),
+                    icon = R.drawable.zuno_ic_t_lock,
+                    value = if (current.blockedLearners.isEmpty()) {
+                        stringResource(R.string.account_privacy_blocked_none)
+                    } else {
+                        current.blockedLearners.size.toString()
+                    },
+                    showChevron = true,
+                    onClick = { showBlockedSheet = true },
+                )
+            }
+        }
+    }
+
+    if (showWhoSheet) {
+        ZunoOptionSheet(
+            title = stringResource(R.string.account_privacy_who_message),
+            options = listOf("partners", "everyone", "nobody"),
+            selected = current.whoCanMessage,
+            label = { mode ->
+                when (mode) {
+                    "everyone" -> stringResource(R.string.account_privacy_msg_everyone)
+                    "nobody" -> stringResource(R.string.account_privacy_msg_nobody)
+                    else -> stringResource(R.string.account_privacy_msg_partners)
+                }
+            },
+            onSelect = {
+                showWhoSheet = false
+                onUpdate(null, null, it)
+            },
+            onDismiss = { showWhoSheet = false },
+        )
+    }
+
+    if (showBlockedSheet) {
+        ZunoSheet(
+            onDismiss = { showBlockedSheet = false },
+            title = stringResource(R.string.account_privacy_blocked),
+        ) {
+            if (current.blockedLearners.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.account_privacy_blocked_empty),
+                    style = ZunoType.BodySmall,
+                    color = ZunoColors.TextSecondary,
+                    modifier = Modifier.padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
+                )
+            } else {
+                ZunoSettingsGroup(modifier = Modifier.padding(horizontal = ZunoSpace.s12)) {
+                    current.blockedLearners.forEachIndexed { idx, learner ->
+                        ZunoSettingsRow(
+                            title = learner.name,
+                            value = stringResource(R.string.account_privacy_unblock),
+                            showDivider = idx > 0,
+                            onClick = { onUnblock(learner.id) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

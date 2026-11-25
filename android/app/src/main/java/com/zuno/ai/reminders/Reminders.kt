@@ -2,6 +2,7 @@ package com.zuno.ai.reminders
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -78,6 +79,7 @@ object Reminders {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(openChatIntent(context, reminder.conversationId))
             .build()
@@ -132,6 +134,7 @@ object Reminders {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Practice reminders", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Nudges to continue a conversation you asked to be reminded about"
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
     }

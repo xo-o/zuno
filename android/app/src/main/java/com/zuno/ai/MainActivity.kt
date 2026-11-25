@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.zuno.ai.auth.AuthViewModel
+import com.zuno.ai.auth.extractMagicLinkToken
+import com.zuno.ai.push.CallNotification
 import com.zuno.ai.push.DeepLink
 import com.zuno.ai.push.Push
 import com.zuno.ai.ui.ZunoApp
@@ -37,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     /** Where a notification tap should go (chat, scheduled session, topic); cleared once handled. */
     private val deepLink = MutableStateFlow<DeepLink?>(null)
     private var handledChatIntent: String? = null
+    private var handledMagicLinkToken: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -46,13 +49,16 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawableResource(R.color.background)
 
-        // Magic link tokens are single-use, so only redeem on a fresh launch, not on recreation.
-        if (savedInstanceState == null) authViewModel.handleMagicLink(intent?.data)
+        // Track the redeemed token in saved state so rotation skips re-redeeming a single-use link,
+        // while process recreation from the email app still redeems a newly arrived magic link.
+        handledMagicLinkToken = savedInstanceState?.getString(KEY_HANDLED_MAGIC_LINK_TOKEN)
+        handleMagicLinkIfNeeded(intent)
         // A reminder tap can also recreate the activity from saved state (process was killed), so check
         // the intent whenever it hasn't been handled yet.
         handledChatIntent = savedInstanceState?.getString(KEY_HANDLED_CHAT_INTENT)
         handleOpenChat(intent)
         Push.ensureChannels(this)
+        CallNotification.ensureChannel(this)
 
         setContent {
             ZunoTheme {
@@ -119,7 +125,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        authViewModel.handleMagicLink(intent.data)
+        handleMagicLinkIfNeeded(intent)
         handledChatIntent = null
         handleOpenChat(intent)
     }
@@ -127,6 +133,15 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_HANDLED_CHAT_INTENT, handledChatIntent)
+        outState.putString(KEY_HANDLED_MAGIC_LINK_TOKEN, handledMagicLinkToken)
+    }
+
+    private fun handleMagicLinkIfNeeded(intent: Intent?) {
+        val uri = intent?.data
+        val token = extractMagicLinkToken(uri) ?: return
+        if (token == handledMagicLinkToken) return
+        handledMagicLinkToken = token
+        authViewModel.handleMagicLink(uri)
     }
 
     private fun handleOpenChat(intent: Intent?) {
@@ -138,5 +153,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val KEY_HANDLED_CHAT_INTENT = "handled_chat_intent"
+        const val KEY_HANDLED_MAGIC_LINK_TOKEN = "handled_magic_link_token"
     }
 }

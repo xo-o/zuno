@@ -686,10 +686,12 @@ class TopicsAndRoleplaysUiTest {
             waitForText("Create “astrophysics”")
             saveScreenshot("05_topics_explore_empty")
 
-            // 5. 09 · Community Topic Preview
+            // 5. 09 · Community Topic Preview (`2998:13198`, `7210:11885`)
             step = "05_topic_preview"
             waitForText("Community topic")
-            waitForText("Add to my Topics")
+            waitForText("Community topic · Free")
+            waitForText("Save to your library")
+            waitForText("Add topic")
             waitForText("Syllabus · 5 lessons")
             saveScreenshot("06_topic_preview")
 
@@ -700,25 +702,33 @@ class TopicsAndRoleplaysUiTest {
             waitForText("Madrid trip")
             saveScreenshot("07_topic_builder_greeting")
 
-            // 7. 10b · Topic Builder Draft Ready (with mid-chat PDF)
+            // 7. 10b · Topic Builder Draft Ready + 19 · Draft Details Modal (`3005:13754`, `7226:12547`)
             step = "07_topic_builder_draft"
             waitForText("DRAFT TOPIC · 5 LESSONS")
             waitForText("Madrid Trip Essentials")
-            waitForText("Refine")
+            waitForText("Details")
             waitForText("Create topic")
             saveScreenshot("08_topic_builder_draft")
+            tapText("Details")
+            waitForText("Topic details")
+            waitForText("CONTENTS · 5 LESSONS")
+            saveScreenshot("08b_topic_draft_details")
 
-            // 8. 10c · Topic Settings
+            // 8. 10c · Topic Settings (`3007:13865`)
             step = "08_topic_settings"
             waitForText("Topic settings")
-            waitForText("TOPIC CREATED · 5 LESSONS")
+            waitForText("TOPIC · 5 LESSONS")
+            waitForText("Details")
             waitForText("Public to community")
-            waitForText("Start Lesson 1")
+            waitForText("Sharing")
+            waitForText("Delete topic")
             saveScreenshot("09_topic_settings")
 
-            // 9. 02 · Topic — In progress (with Public badge + updated overflow menu)
+            // 9. 02 · Topic — In progress (`2677:27375`)
             step = "09_topic_in_progress"
             waitForText("0 of 5 lessons · 25 min left · Public")
+            waitForText("Start · Lesson 1")
+            waitForText("All lessons")
             saveScreenshot("10_topic_detail_public")
 
             // 10. Roleplays · 1 · Empty
@@ -739,11 +749,12 @@ class TopicsAndRoleplaysUiTest {
             waitForText("Find community roleplays")
             saveScreenshot("13_roleplays_add_sheet")
 
-            // 12. Roleplays · 5 · Explore Roleplays
+            // 12. Roleplays · 5 · Explore Roleplays (`3092:13754`)
             step = "12_roleplays_explore"
             waitForText("Explore roleplays")
-            waitForText("COMMUNITY SCENARIOS")
+            waitForText("Community scenarios")
             waitForText("Housing")
+            waitForText("B1")
             saveScreenshot("14_roleplays_explore")
 
             // 13. Roleplays · 9 · Explore Roleplays Empty
@@ -752,13 +763,13 @@ class TopicsAndRoleplaysUiTest {
             waitForText("Create “space station”")
             saveScreenshot("15_roleplays_explore_empty")
 
-            // 14. Roleplays · 6 · Community Preview
+            // 14. Roleplays · 6 · Community Preview (`2999:13467`, `7210:12308`)
             step = "14_roleplay_preview"
             waitForText("Community roleplay")
             waitForText("Lost luggage at Barajas")
-            waitForText("Start live roleplay")
-            waitForText("Save")
-            waitForText("Share")
+            waitForText("Community roleplay · Free")
+            waitForText("Save to your library")
+            waitForText("Add roleplay")
             saveScreenshot("16_roleplay_preview")
 
             // 15. Roleplays · 3a · Chat Builder Greeting
@@ -767,19 +778,27 @@ class TopicsAndRoleplaysUiTest {
             waitForText("Startup interview")
             saveScreenshot("17_roleplay_builder_greeting")
 
-            // 16. Roleplays · 3b · Chat Builder Draft Ready
+            // 16. Roleplays · 3b · Chat Builder Draft Ready + 16 · Draft Details Modal (`3005:13865`, `7226:12635`)
             step = "16_roleplay_builder_draft"
             waitForText("DRAFT ROLEPLAY")
             waitForText("Startup Product Interview")
             waitForText("You: Candidate · Sofía: Hiring Lead")
+            waitForText("Details")
             waitForText("Create roleplay")
             saveScreenshot("18_roleplay_builder_draft")
+            tapText("Details")
+            waitForText("Roleplay details")
+            waitForText("CONTEXT")
+            saveScreenshot("18b_roleplay_draft_details")
 
-            // 17. Roleplays · 3c · Roleplay Settings
+            // 17. Roleplays · 17 · Roleplay Settings (`7249:12833`)
             step = "17_roleplay_settings"
             waitForText("Roleplay settings")
-            waitForText("ROLEPLAY READY")
-            waitForText("Start live roleplay")
+            waitForText("ROLEPLAY · WORK")
+            waitForText("Details")
+            waitForText("Your role")
+            waitForText("Sharing")
+            waitForText("Delete roleplay")
             saveScreenshot("19_roleplay_settings")
 
             // 18. 11 · Share & Visibility Sheet

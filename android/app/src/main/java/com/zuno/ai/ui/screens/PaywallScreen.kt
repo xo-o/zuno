@@ -29,12 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
+import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
@@ -285,6 +287,123 @@ private fun PaywallPlanRow(
         }
         if (selected) {
             ZunoIcon(R.drawable.zuno_ic_t_check, 18.dp, tint = ZunoColors.IconPrimary)
+        }
+    }
+}
+
+/**
+ * `11 · Paywall · 2 · Welcome to Pro` (`2365:8964`).
+ */
+@Composable
+fun WelcomeToProScreen(
+    onStartPractising: () -> Unit,
+    onManageSubscription: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .zunoCanvasBackground()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = ZunoSpace.s24),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
+        ) {
+            Box(
+                modifier = Modifier.size(60.dp).zunoGlassSubtle(CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(R.drawable.zuno_ic_t_sparkles, 24.dp, tint = ZunoColors.IconPrimary)
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+            ) {
+                Text(
+                    text = stringResource(R.string.paywall_welcome_title),
+                    style = ZunoType.TitleLarge,
+                    color = ZunoColors.TextPrimary,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = stringResource(R.string.paywall_welcome_body),
+                    style = ZunoType.BodySmall,
+                    color = ZunoColors.TextSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                    .padding(ZunoSpace.s16),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+            ) {
+                WelcomePerkRow(
+                    title = stringResource(R.string.paywall_welcome_perk_1_title),
+                    subtitle = stringResource(R.string.paywall_welcome_perk_1_sub),
+                )
+                WelcomePerkRow(
+                    title = stringResource(R.string.paywall_welcome_perk_2_title),
+                    subtitle = stringResource(R.string.paywall_welcome_perk_2_sub),
+                )
+                WelcomePerkRow(
+                    title = stringResource(R.string.paywall_welcome_perk_3_title),
+                    subtitle = stringResource(R.string.paywall_welcome_perk_3_sub),
+                )
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = ZunoSpace.s16),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        ) {
+            ZunoButton(
+                label = stringResource(R.string.paywall_welcome_start_btn),
+                onClick = onStartPractising,
+                size = ZunoButtonSize.Large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ZunoButton(
+                label = stringResource(R.string.paywall_welcome_manage_btn),
+                onClick = onManageSubscription,
+                variant = ZunoButtonVariant.Ghost,
+                size = ZunoButtonSize.Large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun WelcomePerkRow(title: String, subtitle: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(32.dp).zunoGlassSubtle(CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            ZunoIcon(R.drawable.zuno_ic_t_check, 15.dp, tint = ZunoColors.IconPrimary)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+            Text(title, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
+            Text(subtitle, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
         }
     }
 }

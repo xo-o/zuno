@@ -57,10 +57,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.zuno.ai.R
 import com.zuno.ai.avatar.audio.AvatarSpeechSink
 import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
@@ -76,13 +78,18 @@ import com.zuno.ai.data.PronunciationEvalUi
 import com.zuno.ai.data.RescuePayloadUi
 import com.zuno.ai.model.ChatMessage
 import com.zuno.ai.model.Speaker
+import com.zuno.ai.ui.components.AgentGlowState
+import com.zuno.ai.ui.components.CallAvatarItem
+import com.zuno.ai.ui.components.GlowTheme
 import com.zuno.ai.ui.components.LiveKitVideoFeed
 import com.zuno.ai.ui.components.VoiceOrbState
+import com.zuno.ai.ui.components.ZunoAgentGlow
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoCallControlsBar
+import com.zuno.ai.ui.components.ZunoCallTopBar
 import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
 import com.zuno.ai.ui.components.ZunoDialog
@@ -179,7 +186,7 @@ fun VoiceModeScreen(
     onSwitchTopic: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val defaultCaptions = initialCaptionsOn ?: true
+    val defaultCaptions = initialCaptionsOn ?: isLessonMode
     var captionsOn by rememberSaveable(isLessonMode, initialCaptionsOn) { mutableStateOf(defaultCaptions) }
     var confirmExitLesson by rememberSaveable { mutableStateOf(false) }
 
@@ -204,10 +211,18 @@ fun VoiceModeScreen(
     }
 
     val elapsed = rememberElapsed(startedAtMillis)
-    val topBarTitle = when {
-        isCameraOn -> stringResource(R.string.call_video_title, elapsed)
-        isLessonMode -> stringResource(R.string.call_waiting_title, elapsed)
-        else -> stringResource(R.string.call_live_title, elapsed)
+    val topBarLabel = when {
+        isCameraOn -> stringResource(R.string.call_video_label)
+        isLessonMode -> stringResource(R.string.call_voice_label)
+        else -> sessionKindLabel
+    }
+    val topAvatars = remember(tutor, userInitial, isCameraOn) {
+        buildList {
+            add(CallAvatarItem(initial = tutor.displayName.take(1), tutor = tutor))
+            if (isCameraOn) {
+                add(CallAvatarItem(initial = userInitial))
+            }
+        }
     }
 
     Column(
@@ -217,8 +232,11 @@ fun VoiceModeScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoCompactTitleTopBar(
-            title = topBarTitle,
+        ZunoCallTopBar(
+            sessionLabel = topBarLabel,
+            elapsed = elapsed,
+            showAvatars = captionsOn,
+            avatars = topAvatars,
             onBack = handleExitRequest,
             trailing = {
                 if (menu.isNotEmpty()) {
@@ -380,23 +398,18 @@ private fun PortraitVoiceCallBody(
 
     Column(modifier = modifier) {
         AnimatedContent(
-            targetState = isCameraOn,
+            targetState = Triple(isCameraOn, captionsOn, true),
             transitionSpec = { fadeIn() togetherWith fadeOut() },
             label = "voiceCallCameraMode",
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(bottom = ZunoSpace.s4),
-        ) { cameraActive ->
-            if (cameraActive) {
-                // `Chats · 11 · AI Tutor — Video Call (Both Cameras)` (`2847:15551`)
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6),
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-                ) {
-                    AiVideoParticipantsRow(
+        ) { (cameraActive, showCaptions, _) ->
+            when {
+                // `Chats · 19 · AI Tutor — Video Call (No Captions, Cameras Only)` (`7353:15475`)
+                cameraActive && !showCaptions -> {
+                    StackedAiVideoParticipants(
                         tutor = tutor,
                         avatarSpeechSink = avatarSpeechSink,
                         tutorSpeaking = tutorSpeaking,
@@ -409,8 +422,20 @@ private fun PortraitVoiceCallBody(
                         room = room,
                         localVideoTrack = localVideoTrack,
                         onInterrupt = onInterrupt,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s8),
                     )
-                    if (captionsOn) {
+                }
+
+                // `Chats · 11 · AI Tutor — Video Call` (`2847:15551`) & `Home · 7 · Speaking — Captions` (`2738:13222`)
+                showCaptions -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = ZunoSpace.s20),
+                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                    ) {
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
@@ -424,7 +449,7 @@ private fun PortraitVoiceCallBody(
                                     Speaker.AGENT -> {
                                         ZunoAssistantBubble(
                                             message = turn.text,
-                                            senderLabel = tutor.displayName,
+                                            senderLabel = if (cameraActive) tutor.displayName else "${tutor.displayName} · $sessionKindLabel",
                                             onListen = { onTranslate?.invoke(turn.text) },
                                             listenLabel = stringResource(R.string.voice_chip_translate),
                                             listenIcon = R.drawable.zuno_ic_languages,
@@ -455,107 +480,87 @@ private fun PortraitVoiceCallBody(
                             }
                         }
 
-                        ZunoTabbedCoachCard(
-                            prompts = coachPrompts,
-                            onSpeakPhrase = onSpeakCoachPhrase,
-                        )
-                    } else {
-                        Spacer(Modifier.weight(1f))
+                        if (cameraActive) {
+                            ZunoTabbedCoachCard(
+                                prompts = coachPrompts,
+                                onSpeakPhrase = onSpeakCoachPhrase,
+                            )
+                        } else {
+                            FreeTalkCoachCard(
+                                sessionKindLabel = sessionKindLabel,
+                                languageLevelLabel = languageLevelLabel,
+                                status = status,
+                                coachPrompts = coachPrompts,
+                                onSpeakCoachPhrase = onSpeakCoachPhrase,
+                                onSwitchTopic = onSwitchTopic,
+                            )
+                        }
                     }
                 }
-            } else {
-                // Keep PortraitStageCard at a stable slot so toggling captions resizes without recreating GL/MediaPlayer
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val portraitHeight = (maxHeight * 0.44f).coerceIn(190.dp, 296.dp)
-                    val bottomScrimHeight by animateDpAsState(
-                        if (captionsOn) 52.dp else 64.dp,
-                        label = "portraitScrimHeight",
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = if (captionsOn) Arrangement.spacedBy(ZunoSpace.s8) else Arrangement.Top,
+
+                // `Home · 6 · Speaking — No captions` (`7383:13309`) — transitions from Mono to Cobalt on start
+                else -> {
+                    val glowState = when (status) {
+                        VoiceCallStatus.Speaking -> AgentGlowState.Speaking
+                        VoiceCallStatus.Listening -> AgentGlowState.Listening
+                        VoiceCallStatus.Thinking, VoiceCallStatus.Connecting -> AgentGlowState.Thinking
+                        VoiceCallStatus.Muted -> AgentGlowState.Disabled
+                    }
+                    var enteredCall by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        enteredCall = true
+                    }
+                    val glowTheme = if (enteredCall && status != VoiceCallStatus.Muted) {
+                        GlowTheme.Cobalt
+                    } else {
+                        GlowTheme.Mono
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = ZunoSpace.s8, end = ZunoSpace.s8, top = 70.dp)
+                            .clickable(
+                                enabled = tutorSpeaking,
+                                role = Role.Button,
+                                onClick = onInterrupt,
+                            )
+                            .semantics { contentDescription = "ZunoAI — ${if (tutorSpeaking) "tap to interrupt" else "active"}" },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        PortraitStageCard(
-                            tutor = tutor,
-                            avatarSpeechSink = avatarSpeechSink,
-                            tutorSpeaking = tutorSpeaking,
-                            isCameraOn = false,
-                            room = room,
-                            localVideoTrack = localVideoTrack,
-                            bottomScrimHeight = bottomScrimHeight,
-                            pipWidth = if (captionsOn) 76.dp else 96.dp,
-                            pipHeight = if (captionsOn) 104.dp else 132.dp,
-                            onInterrupt = onInterrupt,
-                            modifier = if (captionsOn) {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(portraitHeight)
-                            } else {
-                                Modifier.fillMaxSize()
-                            },
+                        ZunoAgentGlow(
+                            state = glowState,
+                            audioLevel = level,
+                            theme = glowTheme,
+                            canvasColor = ZunoColors.BgCanvas,
+                            shape = RoundedCornerShape(40.dp),
+                            modifier = Modifier.fillMaxSize(),
                         )
-
-                        if (captionsOn) {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = ZunoSpace.s20),
-                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-                            ) {
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth(),
-                                    contentPadding = PaddingValues(vertical = ZunoSpace.s4),
-                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-                                ) {
-                                    items(displayTurns, key = { it.id }) { turn ->
-                                        when (turn.speaker) {
-                                            Speaker.AGENT -> {
-                                                ZunoAssistantBubble(
-                                                    message = turn.text,
-                                                    senderLabel = "${tutor.displayName} · $sessionKindLabel",
-                                                    onListen = { onTranslate?.invoke(turn.text) },
-                                                    listenLabel = stringResource(R.string.voice_chip_translate),
-                                                    listenIcon = R.drawable.zuno_ic_languages,
-                                                    onExplain = { onSlowReplay?.invoke(turn.text) },
-                                                    explainLabel = stringResource(R.string.voice_chip_speed_slow),
-                                                    explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
-                                                )
-                                            }
-                                            Speaker.USER -> {
-                                                ZunoUserBubble(
-                                                    message = turn.text,
-                                                    senderLabel = if (turn.isFinal) "You" else stringResource(R.string.voice_you_speaking),
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (rescuePayload != null && rescuePayload.text.isNotBlank()) {
-                                        item(key = "free_talk_portrait_rescue_pill") {
-                                            ZunoFeedbackPill(text = rescuePayload.text)
-                                        }
-                                    }
-
-                                    if (showListeningPlaceholder) {
-                                        item(key = "listening_placeholder") {
-                                            ListeningTurnPlaceholderBubble()
-                                        }
-                                    }
-                                }
-
-                                FreeTalkCoachCard(
-                                    sessionKindLabel = sessionKindLabel,
-                                    languageLevelLabel = languageLevelLabel,
-                                    status = status,
-                                    coachPrompts = coachPrompts,
-                                    onSpeakCoachPhrase = onSpeakCoachPhrase,
-                                    onSwitchTopic = onSwitchTopic,
-                                )
-                            }
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = ZunoSpace.s24)
+                                .padding(bottom = 72.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                        ) {
+                            Text(
+                                text = "ZunoAI",
+                                style = ZunoType.WebTitle.copy(fontWeight = FontWeight.Medium, fontSize = 22.sp),
+                                color = ZunoColors.TextPrimary,
+                            )
+                            Text(
+                                text = stringResource(
+                                    when (status) {
+                                        VoiceCallStatus.Connecting -> R.string.voice_connecting
+                                        VoiceCallStatus.Listening -> R.string.voice_listening
+                                        VoiceCallStatus.Muted -> R.string.voice_muted
+                                        VoiceCallStatus.Thinking -> R.string.voice_thinking
+                                        VoiceCallStatus.Speaking -> R.string.voice_speak_anytime_interrupt
+                                    },
+                                ),
+                                style = ZunoType.LabelSmall.copy(fontWeight = FontWeight.Normal),
+                                color = ZunoColors.TextTertiary,
+                                textAlign = TextAlign.Center,
+                            )
                         }
                     }
                 }
@@ -577,7 +582,7 @@ private fun PortraitVoiceCallBody(
 }
 
 @Composable
-private fun AiVideoParticipantsRow(
+private fun StackedAiVideoParticipants(
     tutor: TutorAvatarProfile,
     avatarSpeechSink: AvatarSpeechSink?,
     tutorSpeaking: Boolean,
@@ -590,171 +595,128 @@ private fun AiVideoParticipantsRow(
     room: Room?,
     localVideoTrack: VideoTrack?,
     onInterrupt: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+    ) {
+        AiTutorVideoTile(
+            tutor = tutor,
+            avatarSpeechSink = avatarSpeechSink,
+            tutorSpeaking = tutorSpeaking,
+            audioLevel = audioLevel,
+            sessionKindLabel = sessionKindLabel,
+            onInterrupt = onInterrupt,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
+        UserVideoTile(
+            userName = userName,
+            userInitial = userInitial,
+            learnerLevel = learnerLevel,
+            isMuted = isMuted,
+            room = room,
+            localVideoTrack = localVideoTrack,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun AiTutorVideoTile(
+    tutor: TutorAvatarProfile,
+    avatarSpeechSink: AvatarSpeechSink?,
+    tutorSpeaking: Boolean,
+    audioLevel: () -> Float,
+    sessionKindLabel: String,
+    onInterrupt: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val tileShape = RoundedCornerShape(ZunoRadius.xxl)
-    val overlayPill = Color(0xD6242429)
     val scrim = Brush.verticalGradient(
         0f to Color.Transparent,
         0.55f to Color(0x910D0D0F),
         1f to Color(0xE00D0D0F),
     )
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+    Box(
+        modifier = modifier
+            .clip(tileShape)
+            .background(ZunoColors.SurfaceDefault)
+            .border(
+                width = if (tutorSpeaking) 1.5.dp else 1.dp,
+                color = if (tutorSpeaking) ZunoColors.StatusSpeaking else ZunoColors.BorderDefault,
+                shape = tileShape,
+            )
+            .clickable(
+                enabled = tutorSpeaking,
+                role = Role.Button,
+                onClick = onInterrupt,
+            )
+            .semantics { contentDescription = "${tutor.displayName} AI tutor — tap to interrupt" },
     ) {
-        // Left tile: Sofía (AI Tutor)
+        TutorStageAvatar(
+            tutor = tutor,
+            speechSink = avatarSpeechSink,
+            contentDescription = tutor.displayName,
+            modifier = Modifier.fillMaxSize(),
+        )
         Box(
             modifier = Modifier
-                .weight(1f)
-                .height(204.dp)
-                .clip(tileShape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(
-                    width = if (tutorSpeaking) 1.5.dp else 1.dp,
-                    color = if (tutorSpeaking) ZunoColors.StatusSpeaking else ZunoColors.BorderDefault,
-                    shape = tileShape,
-                )
-                .clickable(
-                    enabled = tutorSpeaking,
-                    role = Role.Button,
-                    onClick = onInterrupt,
-                )
-                .semantics { contentDescription = "${tutor.displayName} AI tutor — tap to interrupt" },
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(98.dp)
+                .background(scrim),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            TutorStageAvatar(
-                tutor = tutor,
-                speechSink = avatarSpeechSink,
-                contentDescription = tutor.displayName,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(98.dp)
-                    .background(scrim),
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
-                verticalArrangement = Arrangement.SpaceBetween,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .zunoGlassMediaPill(CircleShape)
+                        .padding(horizontal = ZunoSpace.s8, vertical = ZunoSpace.s4),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .zunoGlassMediaPill(CircleShape)
-                            .padding(horizontal = ZunoSpace.s8, vertical = ZunoSpace.s4),
-                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ZunoIcon(
-                            icon = R.drawable.zuno_ic_t_sparkles,
-                            size = 11.dp,
-                            tint = Color.White,
-                        )
-                        Text(
-                            text = stringResource(R.string.chats_filter_ai_tutor),
-                            style = ZunoType.Micro,
-                            color = Color.White,
-                            maxLines = 1,
-                        )
-                    }
-                    if (tutorSpeaking) {
-                        Box(
-                            modifier = Modifier
-                                .height(22.dp)
-                                .zunoGlassMediaPill(CircleShape)
-                                .padding(horizontal = ZunoSpace.s8),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ZunoVoiceWaveform(
-                                active = true,
-                                audioLevel = audioLevel,
-                                modifier = Modifier.width(23.dp),
-                            )
-                        }
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                    ZunoIcon(
+                        icon = R.drawable.zuno_ic_t_sparkles,
+                        size = 11.dp,
+                        tint = Color.White,
+                    )
                     Text(
-                        text = tutor.displayName,
-                        style = ZunoType.BodyMediumStrong,
+                        text = stringResource(R.string.chats_filter_ai_tutor),
+                        style = ZunoType.Micro,
                         color = Color.White,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = if (tutorSpeaking) {
-                            "${stringResource(R.string.voice_status_dot_speaking)} · $sessionKindLabel"
-                        } else {
-                            sessionKindLabel
-                        },
-                        style = ZunoType.FootnoteRegular,
-                        color = if (tutorSpeaking) ZunoColors.StatusSpeaking else ZunoColors.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
-        }
-
-        // Right tile: You (Camera feed or avatar fallback)
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(204.dp)
-                .clip(tileShape)
-                .background(ZunoColors.SurfaceDefault)
-                .border(1.dp, ZunoColors.BorderDefault, tileShape),
-        ) {
-            if (localVideoTrack != null) {
-                LiveKitVideoFeed(
-                    room = room,
-                    videoTrack = localVideoTrack,
-                    mirror = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(68.dp)
-                        .clip(CircleShape)
-                        .background(ZunoColors.SurfaceStrong)
-                        .border(1.dp, ZunoColors.BorderDefault, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = userInitial.take(1).uppercase(),
-                        style = ZunoType.TitleLarge,
-                        color = ZunoColors.TextPrimary,
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(98.dp)
-                    .background(scrim),
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = ZunoSpace.s12, vertical = 10.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                if (tutorSpeaking) {
+                    Box(
+                        modifier = Modifier
+                            .height(22.dp)
+                            .zunoGlassMediaPill(CircleShape)
+                            .padding(horizontal = ZunoSpace.s8),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ZunoVoiceWaveform(
+                            active = true,
+                            audioLevel = audioLevel,
+                            modifier = Modifier.width(23.dp),
+                        )
+                    }
+                } else {
                     Box(
                         modifier = Modifier
                             .zunoGlassMediaPill(CircleShape)
@@ -762,28 +724,130 @@ private fun AiVideoParticipantsRow(
                         contentAlignment = Alignment.Center,
                     ) {
                         ZunoIcon(
-                            icon = if (isMuted) R.drawable.zuno_ic_mic_off else R.drawable.zuno_ic_t_mic,
+                            icon = R.drawable.zuno_ic_t_mic,
                             size = 12.dp,
-                            tint = if (isMuted) ZunoColors.TextDanger else Color.White,
+                            tint = Color.White,
                         )
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-                    Text(
-                        text = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
-                        style = ZunoType.BodyMediumStrong,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${if (isMuted) stringResource(R.string.voice_status_dot_muted) else stringResource(R.string.voice_status_dot_listening)} · $learnerLevel",
-                        style = ZunoType.FootnoteRegular,
-                        color = ZunoColors.TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                Text(
+                    text = tutor.displayName,
+                    style = ZunoType.BodyMediumStrong,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (tutorSpeaking) {
+                        "${stringResource(R.string.voice_status_dot_speaking)} · $sessionKindLabel"
+                    } else {
+                        sessionKindLabel
+                    },
+                    style = ZunoType.FootnoteRegular,
+                    color = if (tutorSpeaking) ZunoColors.StatusSpeaking else ZunoColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserVideoTile(
+    userName: String,
+    userInitial: String,
+    learnerLevel: String,
+    isMuted: Boolean,
+    room: Room?,
+    localVideoTrack: VideoTrack?,
+    modifier: Modifier = Modifier,
+) {
+    val tileShape = RoundedCornerShape(ZunoRadius.xxl)
+    val scrim = Brush.verticalGradient(
+        0f to Color.Transparent,
+        0.55f to Color(0x910D0D0F),
+        1f to Color(0xE00D0D0F),
+    )
+
+    Box(
+        modifier = modifier
+            .clip(tileShape)
+            .background(ZunoColors.SurfaceDefault)
+            .border(1.dp, ZunoColors.BorderDefault, tileShape),
+    ) {
+        if (localVideoTrack != null) {
+            LiveKitVideoFeed(
+                room = room,
+                videoTrack = localVideoTrack,
+                mirror = true,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(ZunoColors.SurfaceStrong)
+                    .border(1.dp, ZunoColors.BorderDefault, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = userInitial.take(1).uppercase(),
+                    style = ZunoType.TitleLarge,
+                    color = ZunoColors.TextPrimary,
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(98.dp)
+                .background(scrim),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = ZunoSpace.s12, vertical = 10.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .zunoGlassMediaPill(CircleShape)
+                        .padding(horizontal = 7.dp, vertical = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ZunoIcon(
+                        icon = if (isMuted) R.drawable.zuno_ic_mic_off else R.drawable.zuno_ic_t_mic,
+                        size = 12.dp,
+                        tint = if (isMuted) ZunoColors.TextDanger else Color.White,
                     )
                 }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                Text(
+                    text = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
+                    style = ZunoType.BodyMediumStrong,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${if (isMuted) stringResource(R.string.voice_status_dot_muted) else stringResource(R.string.voice_status_dot_listening)} · $learnerLevel",
+                    style = ZunoType.FootnoteRegular,
+                    color = ZunoColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -1182,14 +1246,9 @@ private fun LessonAvatarVoiceBody(
                 .fillMaxWidth()
                 .padding(bottom = ZunoSpace.s4),
         ) {
-            if (isCameraOn) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6),
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-                ) {
-                    AiVideoParticipantsRow(
+            when {
+                isCameraOn && !captionsOn -> {
+                    StackedAiVideoParticipants(
                         tutor = tutor,
                         avatarSpeechSink = avatarSpeechSink,
                         tutorSpeaking = tutorSpeaking,
@@ -1202,79 +1261,47 @@ private fun LessonAvatarVoiceBody(
                         room = room,
                         localVideoTrack = localVideoTrack,
                         onInterrupt = onInterrupt,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s8),
                     )
-                    if (captionsOn) {
-                        LessonConversationAndCoach(
-                            displayTurns = displayTurns,
-                            listState = listState,
-                            stageKind = stageKind,
-                            tutorSpeaking = tutorSpeaking,
-                            liveUserText = liveUserText,
-                            showLiveUserBubble = showLiveUserBubble,
-                            showPlaceholder = showPlaceholder,
-                            lessonStage = lessonStage,
-                            pronunciationEval = pronunciationEval,
-                            rescuePayload = rescuePayload,
-                            pulseFirstWord = pulseFirstWord,
-                            onLessonAction = onLessonAction,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                        )
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                    }
                 }
-            } else {
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val portraitHeight = (maxHeight * 0.44f).coerceIn(190.dp, 296.dp)
-                    val bottomScrimHeight by animateDpAsState(
-                        if (captionsOn) 52.dp else 64.dp,
-                        label = "lessonPortraitScrim",
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = if (captionsOn) Arrangement.spacedBy(ZunoSpace.s8) else Arrangement.Top,
-                    ) {
-                        PortraitStageCard(
-                            tutor = tutor,
-                            avatarSpeechSink = avatarSpeechSink,
-                            tutorSpeaking = tutorSpeaking,
-                            isCameraOn = false,
-                            room = room,
-                            localVideoTrack = localVideoTrack,
-                            bottomScrimHeight = bottomScrimHeight,
-                            pipWidth = if (captionsOn) 76.dp else 96.dp,
-                            pipHeight = if (captionsOn) 104.dp else 132.dp,
-                            onInterrupt = onInterrupt,
-                            modifier = if (captionsOn) {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(portraitHeight)
-                            } else {
-                                Modifier.fillMaxSize()
-                            },
-                        )
 
-                        if (captionsOn) {
-                            LessonConversationAndCoach(
-                                displayTurns = displayTurns,
-                                listState = listState,
-                                stageKind = stageKind,
-                                tutorSpeaking = tutorSpeaking,
-                                liveUserText = liveUserText,
-                                showLiveUserBubble = showLiveUserBubble,
-                                showPlaceholder = showPlaceholder,
-                                lessonStage = lessonStage,
-                                pronunciationEval = pronunciationEval,
-                                rescuePayload = rescuePayload,
-                                pulseFirstWord = pulseFirstWord,
-                                onLessonAction = onLessonAction,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = ZunoSpace.s20),
-                            )
-                        }
-                    }
+                captionsOn -> {
+                    LessonConversationAndCoach(
+                        displayTurns = displayTurns,
+                        listState = listState,
+                        stageKind = stageKind,
+                        tutorSpeaking = tutorSpeaking,
+                        liveUserText = liveUserText,
+                        showLiveUserBubble = showLiveUserBubble,
+                        showPlaceholder = showPlaceholder,
+                        lessonStage = lessonStage,
+                        pronunciationEval = pronunciationEval,
+                        rescuePayload = rescuePayload,
+                        pulseFirstWord = pulseFirstWord,
+                        onLessonAction = onLessonAction,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = ZunoSpace.s20),
+                    )
+                }
+
+                // `03g · Voice — No Captions (Avatar Only)` (`7352:15550`) & `11.15 · Sprint — No Captions` (`7352:15637`)
+                else -> {
+                    PortraitStageCard(
+                        tutor = tutor,
+                        avatarSpeechSink = avatarSpeechSink,
+                        tutorSpeaking = tutorSpeaking,
+                        isCameraOn = false,
+                        room = room,
+                        localVideoTrack = localVideoTrack,
+                        bottomScrimHeight = 48.dp,
+                        pipWidth = 96.dp,
+                        pipHeight = 132.dp,
+                        onInterrupt = onInterrupt,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }

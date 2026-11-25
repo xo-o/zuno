@@ -38,6 +38,8 @@ export const userProfile = pgTable("user_profile", {
   onboardingCompletedAt: timestamp("onboarding_completed_at"),
   recommendedTopics: jsonb("recommended_topics").$type<RecommendedTopic[]>(),
   openToSpeak: boolean("open_to_speak").default(true).notNull(),
+  allowCallInvites: boolean("allow_call_invites").default(true).notNull(),
+  whoCanMessage: text("who_can_message", { enum: ["partners", "everyone", "nobody"] }).default("partners").notNull(),
   lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
   plan: text("plan", { enum: ["free", "pro"] }).default("free").notNull(),
   planExpiresAt: timestamp("plan_expires_at"),
@@ -684,3 +686,102 @@ export const peerMessageRelations = relations(peerMessage, ({ one }) => ({
 export const peerCallRoomRelations = relations(peerCallRoom, ({ one }) => ({
   conversation: one(peerConversation, { fields: [peerCallRoom.peerConversationId], references: [peerConversation.id] }),
 }));
+
+// ── Account Safety: Blocked Learners ─────────────────────────────────────────
+
+export const blockedLearner = pgTable(
+  "blocked_learner",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    blockedUserId: text("blocked_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.blockedUserId] })],
+);
+
+// ── 12 · Vocabulary SRS Library ──────────────────────────────────────────────
+
+export const vocabPhrase = pgTable(
+  "vocab_phrase",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    language: text("language").notNull(),
+    phrase: text("phrase").notNull(),
+    translation: text("translation").notNull(),
+    source: text("source").default("Added manually").notNull(),
+    contextNote: text("context_note"),
+    exampleSentence: text("example_sentence"),
+    exampleTranslation: text("example_translation"),
+    syllableStress: text("syllable_stress"),
+    recallCue: text("recall_cue"),
+    streak: integer("streak").default(0).notNull(),
+    intervalDays: integer("interval_days").default(0).notNull(),
+    bucket: text("bucket", { enum: ["due", "learning", "mastered"] }).default("due").notNull(),
+    dueAt: timestamp("due_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("vocab_phrase_userId_lang_idx").on(table.userId, table.language, table.bucket),
+    index("vocab_phrase_dueAt_idx").on(table.userId, table.dueAt),
+  ],
+);
+
+// ── 15 · Live Rooms ──────────────────────────────────────────────────────────
+
+export const liveRoom = pgTable(
+  "live_room",
+  {
+    id: text("id").primaryKey(),
+    hostUserId: text("host_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").default("").notNull(),
+    language: text("language").notNull(),
+    level: text("level").default("B1").notNull(),
+    maxMembers: integer("max_members").default(4).notNull(),
+    visibility: text("visibility", { enum: ["public", "private"] }).default("public").notNull(),
+    code: text("code").unique(),
+    sourceKind: text("source_kind", { enum: ["system", "user"] }).default("user").notNull(),
+    status: text("status", { enum: ["lobby", "live", "ended"] }).default("lobby").notNull(),
+    livekitRoom: text("livekit_room").notNull().unique(),
+    discussionPrompts: jsonb("discussion_prompts").$type<string[]>().default([]).notNull(),
+    currentRound: integer("current_round").default(1).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("live_room_lang_status_idx").on(table.language, table.status),
+    index("live_room_code_idx").on(table.code),
+  ],
+);
+
+export const liveRoomMember = pgTable(
+  "live_room_member",
+  {
+    roomId: text("room_id")
+      .notNull()
+      .references(() => liveRoom.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["host", "member"] }).default("member").notNull(),
+    ready: boolean("ready").default(true).notNull(),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
+);

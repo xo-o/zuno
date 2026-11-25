@@ -35,6 +35,8 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.zuno.ai.R
+import com.zuno.ai.avatar.model.TutorAvatarProfile
+import com.zuno.ai.avatar.ui.TutorStaticAvatar
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
@@ -128,6 +130,104 @@ fun ZunoCompactTitleTopBar(
             color = ZunoColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
+        Box(Modifier.size(ZunoIconButtonSize.Large.button), contentAlignment = Alignment.Center) { trailing() }
+    }
+}
+
+data class CallAvatarItem(
+    val initial: String,
+    val imageUrl: String? = null,
+    val tutor: TutorAvatarProfile? = null,
+)
+
+/**
+ * Top Bar · Call (`7352:15448`, `2847:15551`, `2704:12814`):
+ * When [showAvatars] is true (captions ON), shows a centered 24dp avatar stack + `sessionLabel · elapsed`.
+ * When [showAvatars] is false (captions OFF), shows clean centered `sessionLabel · elapsed`.
+ */
+@Composable
+fun ZunoCallTopBar(
+    sessionLabel: String,
+    elapsed: String,
+    showAvatars: Boolean,
+    avatars: List<CallAvatarItem>,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(TopBarHeight)
+            .padding(horizontal = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ZunoIconButton(R.drawable.zuno_ic_arrow_left, onBack, size = ZunoIconButtonSize.Large, contentDescription = "Back")
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (showAvatars && avatars.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy((-6).dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        avatars.take(4).forEach { item ->
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, ZunoColors.BorderDefault, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (item.tutor != null) {
+                                    TutorStaticAvatar(
+                                        tutor = item.tutor,
+                                        size = 24.dp,
+                                        contentDescription = null,
+                                    )
+                                } else {
+                                    ZunoAvatar(
+                                        initial = item.initial.take(1).uppercase(),
+                                        imageUrl = item.imageUrl,
+                                        size = 24.dp,
+                                        textStyle = ZunoType.Micro,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = sessionLabel,
+                            style = ZunoType.LabelMedium,
+                            color = ZunoColors.TextPrimary,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = "· $elapsed",
+                            style = ZunoType.LabelSmall,
+                            color = ZunoColors.TextSecondary,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            } else {
+                EllipsizedText(
+                    text = "$sessionLabel · $elapsed",
+                    style = ZunoType.Headline.copy(textAlign = TextAlign.Center),
+                    color = ZunoColors.TextPrimary,
+                )
+            }
+        }
         Box(Modifier.size(ZunoIconButtonSize.Large.button), contentAlignment = Alignment.Center) { trailing() }
     }
 }
@@ -425,7 +525,7 @@ fun ZunoSessionRow(
 
 enum class LessonStatus { Done, Current, Upcoming }
 
-/** Lesson in a topic path; sits inside a glass [ZunoListGroup]. */
+/** Lesson in a topic path (`8:135`); sits inside a glass [ZunoListGroup]. */
 @Composable
 fun ZunoLessonRow(
     number: Int,
@@ -441,7 +541,7 @@ fun ZunoLessonRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(46.dp)
                 .then(
                     if (status == LessonStatus.Current) {
                         Modifier.background(ZunoColors.SurfaceStrong)
@@ -450,38 +550,36 @@ fun ZunoLessonRow(
                     },
                 )
                 .clickable(role = Role.Button, onClick = onClick)
-                .padding(horizontal = ZunoSpace.s16),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                .padding(horizontal = ZunoSpace.s14),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val indicatorModifier = Modifier.size(32.dp).clip(CircleShape)
-            Box(
-                modifier = when (status) {
-                    LessonStatus.Done -> indicatorModifier.background(ZunoColors.SurfaceInverse)
-                    LessonStatus.Current -> indicatorModifier.border(1.5.dp, ZunoColors.TextPrimary, CircleShape)
-                    LessonStatus.Upcoming -> indicatorModifier.border(1.5.dp, ZunoColors.BorderStrong, CircleShape)
-                },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (status == LessonStatus.Done) {
-                    ZunoIcon(R.drawable.zuno_ic_check_inverse, 16.dp)
-                } else {
-                    Text(
-                        number.toString(),
-                        style = ZunoType.FootnoteStrong,
-                        color = if (status == LessonStatus.Current) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
-                    )
-                }
+            if (status == LessonStatus.Done) {
+                ZunoIcon(
+                    icon = R.drawable.zuno_ic_t_check,
+                    size = 15.dp,
+                    tint = ZunoColors.IconSecondary,
+                )
+            } else {
+                Text(
+                    text = number.toString(),
+                    style = ZunoType.FootnoteStrong,
+                    color = if (status == LessonStatus.Current) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
+                )
             }
             EllipsizedText(
                 text = title,
-                style = ZunoType.BodyMediumStrong,
-                color = if (status == LessonStatus.Upcoming) ZunoColors.TextSecondary else ZunoColors.TextPrimary,
+                style = ZunoType.BodySmall,
+                color = when (status) {
+                    LessonStatus.Done -> ZunoColors.TextSecondary
+                    LessonStatus.Current -> ZunoColors.TextPrimary
+                    LessonStatus.Upcoming -> ZunoColors.TextTertiary
+                },
                 modifier = Modifier.weight(1f),
             )
             meta?.let {
                 Text(
-                    it,
+                    text = it,
                     style = ZunoType.FootnoteRegular,
                     color = if (status == LessonStatus.Current) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
                 )

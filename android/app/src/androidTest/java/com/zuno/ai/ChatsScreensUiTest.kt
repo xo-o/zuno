@@ -546,9 +546,10 @@ class ChatsScreensUiTest {
 
             // 7. Empty All (`Chats · 6 · Empty — All`)
             stage = "chats_empty"
-            waitForText("No conversations yet")
-            waitForText("Choose a way to start practicing below.")
-            waitForText("Ways to start")
+            waitForText("Start your first conversation")
+            waitForText("Start chatting")
+            waitForText("Meet a partner")
+            waitForText("Your availability")
             saveScreenshot(scenario, "10_chats_empty_all")
 
             // 8. AI Tutor Chat + Returned Call Summary + Chat Actions (`06 · Chat actions`)
@@ -587,9 +588,9 @@ class ChatsScreensUiTest {
             saveScreenshot(scenario, "16_chat_actions_delete")
             activeActionModal = null
 
-            // 9. AI Tutor Call (`Home · 7` portrait + `Chats · 11` video call)
+            // 9. AI Tutor Call (`Home · 7` Captions + `Chats · 11` video call + `Chats · 19` No Captions)
             stage = "ai_call"
-            waitForText("Live · ", substring = true)
+            waitForText("Free talk")
             waitForText("Sofía · Free talk")
             waitForText("Answers")
             waitForText("Switch topic")
@@ -597,10 +598,18 @@ class ChatsScreensUiTest {
             saveScreenshot(scenario, "17_ai_tutor_call")
 
             aiCameraOn = true
-            waitForText("Video call · ", substring = true)
-            waitForText("AI Tutor")
+            waitForText("Video Call")
             waitForText("Follow-ups")
             saveScreenshot(scenario, "18_ai_tutor_video_call")
+
+            tapText("Hide captions")
+            waitForText("AI Tutor")
+            waitForText("Noah (You)")
+            saveScreenshot(scenario, "19_ai_tutor_video_no_captions")
+
+            // End call so VoiceModeScreen / TutorStageAvatar / ZunoVoiceWaveform dispose cleanly before ActivityScenario.close()
+            tapText("End call")
+            waitForText("Video call · 03:42 · Ended")
         }
     }
 }

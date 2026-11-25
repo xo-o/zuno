@@ -32,14 +32,16 @@
                                                       │
                                       (onboardingCompleted == false)
                                                       ▼
+                                         [5a₀ · Your Language (App Language)]
+                                                      │
+                                                      ▼
                                          [5a · Target Language & Accent]
-                                                      │ (Mic granted → Voice; Declined → Chat)
+                                                      │ (Chat-only mode)
                                                       ▼
                   ┌───────────────────────────────────────────────────────────────────────┐
-                  │ 5b · Name ──► 5c · Level ──► 5d · Goals                               │
-                  │   • Voice mode: Portrait Stage (top) + top-aligned scrollable chat    │
-                  │   • Chat mode:  Synced LazyColumn + quick chips + composer            │
-                  │   • Bidirectional switch ("Type instead" ◄──► "Speak instead")        │
+                  │ 5b (Chat) · Name ──► 5c (Chat) · Level ──► 5d (Chat) · Goals          │
+                  │   • Chat-only: Synced LazyColumn + quick chips + composer             │
+                  │   • No voice mode or mic prompt during onboarding                     │
                   └───────────────────────────────────┬───────────────────────────────────┘
                                                       ▼
                                          [5e · Preparing Path] (POST /api/me/onboarding)
@@ -94,45 +96,28 @@
 
 ---
 
-### US-4 — Target Language & Accent Selection (`5a`)
+### US-4 — User Language & Target Language / Accent Selection (`5a₀`, `5a`)
 **As a** new learner,  
-**I want** to pick the language I'm learning and its regional accent before speaking with Sofía,  
-**so that** my onboarding and starter lessons use the right dialect.
+**I want** to pick my own UI/explanation language first, and then pick the language and regional accent I'm learning before chatting with Sofía,  
+**so that** the entire onboarding experience, explanations, and starter lessons use the right languages.
 
 **Acceptance Criteria:**
-- `5a · Target Language` (`2544:20712`) lists all 35 supported languages (popular languages surfaced first, A–Z thereafter), supports diacritic-insensitive live search, and displays regional accent chips (e.g., `Latin America` / `Spain`) when `accents.size > 1`.
-- Tapping `"Continue"` requests microphone permission if not yet granted: granted enters `5b` in **Voice** mode; declined enters `5b` in **Chat** mode.
+- `5a₀ · Your Language` lists all 8 supported app/explanation languages (`English`, `Español`, `Français`, `Deutsch`, `Italiano`, `Português`, `Nederlands`, `Polski`), previews UI copy live on selection, and persists `nativeLanguage` on Continue.
+- `5a · Target Language` (`2544:20712`) lists all supported target languages (popular languages surfaced first, A–Z thereafter), supports diacritic-insensitive live search, and displays regional accent chips (e.g., `Latin America` / `Spain`) when `accents.size > 1`.
+- Tapping `"Continue"` enters `5b` directly in **Chat** mode without requesting microphone permission.
 
 ---
 
-### US-5 — Progressive Conversational Voice Onboarding (`5b`, `5c`, `5d`)
+### US-5 & US-6 — Chat-Only Conversational Onboarding (`5b (Chat)`, `5c (Chat)`, `5d (Chat)`)
 **As a** learner meeting Sofía for the first time,  
-**I want** Sofía's portrait cleanly framed at the top with conversation bubbles appearing right beneath her as we talk,  
-**so that** the UI feels like a modern live video/voice call without text cards blocking her face or leaving awkward empty gaps.
+**I want** a fast, focused chat conversation with quick-option chips and no voice-call prompts during setup,  
+**so that** I can complete onboarding anywhere in seconds.
 
 **Acceptance Criteria:**
-- **Vertical Stage Layout** (replacing legacy floating overlay cards):
-  1. **`Portrait Stage Card`**: Top `296dp` max (clamped `(maxHeight * 0.36f).coerceIn(200.dp, 296.dp)`), `ContentScale.Crop` (`TopCenter`), with a **`28.dp` top scrim** and **`52.dp` light bottom feather scrim** (`0% → 22% → 68% → 100%` into `BgCanvas`) so Sofía's face and shoulders remain bright and unobstructed.
-  2. **Scrollable `Conversation` (`Modifier.weight(1f)`)**: **Top-aligned** (`Arrangement.Top` / `MIN`) `LazyColumn` directly beneath the portrait (`paddingHorizontal = 20dp`, `spacedBy(8dp)`):
-     - Bubbles start immediately below the portrait with **zero blank space above them**.
-     - As the conversation progresses (`5b` Name → `5c` Level → `5d` Goals), prior turns remain visible and scroll naturally once content exceeds the viewport.
-     - Assistant turns use `ZunoAssistantBubble` with step-aware sender labels (`"Sofía · Your Spanish tutor"`, `"Sofía · Spanish level"`, `"Sofía · Learning goals"`).
-     - Completed user turns use `ZunoUserBubble`.
-     - While the user is speaking, a live **`You · Speaking`** `ZunoUserBubble` appears **progressively** at the bottom of the list only when `liveTranscript.isNotBlank()` (never showing an empty placeholder box beforehand).
-  3. **Contextual Quick Options** (optional on `5c` Level / `5d` Goals): Compact horizontal `ZunoChip` row (`Beginner / Intermediate / Advanced` on `5c`; `Work / Travel / Interviews / Daily chat` on `5d`) positioned cleanly above `Call controls` only when helpful, leaving `5b` uncluttered.
-  4. **Bottom `Call controls`**: `Mic` toggle (reflecting `Listening` / `Speaking` state), `"Type instead"` pill (switches seamlessly to Chat mode), and `→` Advance button (enabled once a live transcript is captured).
-
----
-
-### US-6 — Synced Text Chat Fallback (`5b (Chat)`, `5c (Chat)`, `5d (Chat)`)
-**As a** learner in a quiet place or without mic access,  
-**I want** to type or tap chips and switch back and forth between typing and speaking,  
-**so that** I never lose my onboarding progress.
-
-**Acceptance Criteria:**
-- Both Voice and Chat modes read and mutate `OnboardingViewModel.state.chatHistory`.
-- Switching via `"Type instead"` / `"Speak instead"` pauses/resumes voice playback & STT cleanly while keeping all prior turns intact.
-- `5c (Chat)` displays single-tap `Beginner / Intermediate / Advanced` chips; `5d (Chat)` supports multi-select goal chips + free-text note.
+- Onboarding uses **Chat mode only** (no voice stage, no mic permission prompt, and no `"Speak instead"` / `"Type instead"` switcher).
+- `5b (Chat)` asks for the learner's name with keyboard focus ready.
+- `5c (Chat)` displays `Beginner / Intermediate / Advanced` chips above the composer; tapping a chip inserts its text into the composer input so the learner can edit it before tapping Send (never auto-sends).
+- `5d (Chat)` supports multi-select goal chips (`Work`, `Travel`, `Interviews`, `Daily chat`) that add/remove their text in the composer input so the learner can customize or add notes before tapping Send.
 
 ---
 

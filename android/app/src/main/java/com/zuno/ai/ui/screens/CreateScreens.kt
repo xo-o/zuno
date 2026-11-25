@@ -9,6 +9,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,12 +24,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -48,15 +51,18 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.zuno.ai.R
+import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.data.Roleplay
 import com.zuno.ai.data.RoleplayDraft
 import com.zuno.ai.data.TopicDetail
 import com.zuno.ai.data.TopicDraft
-import com.zuno.ai.data.TopicStatus
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoBackTitleTopBar
 import com.zuno.ai.ui.components.ZunoButton
@@ -69,9 +75,16 @@ import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
 import com.zuno.ai.ui.components.ZunoComposer
 import com.zuno.ai.ui.components.ZunoDraftAttachment
 import com.zuno.ai.ui.components.ZunoIcon
+import com.zuno.ai.ui.components.ZunoIconButton
+import com.zuno.ai.ui.components.ZunoIconButtonSize
+import com.zuno.ai.ui.components.ZunoIconButtonStyle
+import com.zuno.ai.ui.components.ZunoInputDialog
+import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.components.ZunoTypingBubble
 import com.zuno.ai.ui.components.ZunoUserBubble
+import com.zuno.ai.ui.theme.Lexend
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
@@ -104,6 +117,7 @@ fun NewTopicScreen(
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     var dictating by remember { mutableStateOf(false) }
+    var showDraftDetails by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val composerFocus = remember { FocusRequester() }
@@ -277,7 +291,7 @@ fun NewTopicScreen(
                     DraftTopicCard(
                         draft = draft,
                         busy = busy,
-                        onRefine = { composerFocus.requestFocus() },
+                        onDetails = { showDraftDetails = true },
                         onCreate = {
                             focusManager.clearFocus()
                             onAcceptDraft(draft)
@@ -322,13 +336,27 @@ fun NewTopicScreen(
             )
         }
     }
+
+    val activeDraft = builder.draft
+    if (showDraftDetails && activeDraft != null) {
+        TopicDetailsSheet(
+            draft = activeDraft,
+            busy = busy,
+            onDismiss = { showDraftDetails = false },
+            onCreate = {
+                showDraftDetails = false
+                focusManager.clearFocus()
+                onAcceptDraft(activeDraft)
+            },
+        )
+    }
 }
 
 @Composable
 private fun DraftTopicCard(
     draft: TopicDraft,
     busy: Boolean,
-    onRefine: () -> Unit,
+    onDetails: () -> Unit,
     onCreate: () -> Unit,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.xxl)
@@ -375,11 +403,11 @@ private fun DraftTopicCard(
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {
             ZunoButton(
-                label = stringResource(R.string.topics_draft_refine),
-                onClick = onRefine,
+                label = stringResource(R.string.draft_details_action),
+                onClick = onDetails,
                 variant = ZunoButtonVariant.Secondary,
                 size = ZunoButtonSize.Medium,
-                leadingIcon = R.drawable.zuno_ic_t_pencil,
+                leadingIcon = R.drawable.zuno_ic_t_info,
                 leadingIconTint = ZunoColors.IconPrimary,
                 enabled = !busy,
             )
@@ -394,7 +422,108 @@ private fun DraftTopicCard(
     }
 }
 
+@Composable
+private fun TopicDetailsSheet(
+    draft: TopicDraft,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: () -> Unit,
+) {
+    ZunoSheet(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.topic_details_title),
+        spacing = ZunoSpace.s14,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ZunoSpace.s12),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = draft.title,
+                        style = ZunoType.Headline.copy(
+                            fontFamily = Lexend,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 18.sp,
+                            lineHeight = 24.sp,
+                        ),
+                        color = ZunoColors.TextPrimary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ZunoChip(
+                        label = topicCategoryLabel(draft.category),
+                        onClick = {},
+                    )
+                }
+                Text(
+                    text = draft.translation.ifBlank { draft.prompt },
+                    style = ZunoType.BodySmall,
+                    color = ZunoColors.TextSecondary,
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
+                Text(
+                    text = stringResource(R.string.topic_details_contents, draft.lessons.size),
+                    style = ZunoType.Micro,
+                    color = ZunoColors.TextTertiary,
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
+                ) {
+                    draft.lessons.forEachIndexed { index, lesson ->
+                        if (index > 0) ZunoGlassHairline()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = ZunoSpace.s14, vertical = 11.dp),
+                            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = (index + 1).toString(),
+                                style = ZunoType.FootnoteStrong,
+                                color = ZunoColors.TextTertiary,
+                            )
+                            Text(
+                                text = lesson.title,
+                                style = ZunoType.BodySmall,
+                                color = ZunoColors.TextPrimary,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = stringResource(R.string.topics_lesson_est_min),
+                                style = ZunoType.FootnoteRegular,
+                                color = ZunoColors.TextTertiary,
+                            )
+                        }
+                    }
+                }
+            }
+
+            ZunoButton(
+                label = stringResource(R.string.topics_draft_create),
+                onClick = onCreate,
+                size = ZunoButtonSize.Large,
+                loading = busy,
+                modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s4),
+            )
+        }
+    }
+}
+
 // ── 10c · Topic Settings (`3007:13865`) ─────────────────────────────────────
+
+private val TopicCategories = listOf("travel", "food", "work", "daily_life", "grammar", "culture")
 
 @Composable
 fun TopicSettingsScreen(
@@ -406,9 +535,16 @@ fun TopicSettingsScreen(
     onSelectPublic: (Boolean) -> Unit,
     onShare: (String) -> Unit,
     onCopyLink: (String) -> Unit,
-    onPrimaryAction: (TopicDetail) -> Unit,
+    onPrimaryAction: (TopicDetail) -> Unit = {},
+    onUpdateTitle: (String) -> Unit = {},
+    onUpdateCategory: (String) -> Unit = {},
+    onOpenLearning: () -> Unit = {},
+    onDelete: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    var editingTitle by rememberSaveable { mutableStateOf(false) }
+    var pickingCategory by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -433,43 +569,101 @@ fun TopicSettingsScreen(
         val shareUrl = summary.shareUrl
         val displayUrl = shareUrl?.removePrefix("https://")?.removePrefix("http://")
             ?: "heyzuno.app/t/${summary.id.take(8)}"
+        val estMinutes = (summary.totalLessons * 5).coerceAtLeast(5)
 
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s12),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
         ) {
-            val cardShape = RoundedCornerShape(ZunoRadius.xxl)
-            Column(
+            // Header Card (`7251:12836`)
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(cardShape)
-                    .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault)
+                    .padding(ZunoSpace.s14),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = stringResource(R.string.topics_settings_created_eyebrow, summary.totalLessons),
-                    style = ZunoType.Micro,
-                    color = ZunoColors.TextTertiary,
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .zunoGlassElevated(
+                            shape = RoundedCornerShape(ZunoRadius.lg),
+                            fillColor = ZunoColors.SurfaceStrong,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ZunoIcon(R.drawable.zuno_ic_t_book_open, 20.dp, tint = ZunoColors.IconPrimary)
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.topics_settings_created_eyebrow, summary.totalLessons),
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        VisibilityStatusTag(isPublic = isPublic)
+                    }
+                    Text(
+                        text = summary.title,
+                        style = ZunoType.BodyMediumStrong,
+                        color = ZunoColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "$languageName $level · ${topicCategoryLabel(summary.category)} · ~$estMinutes min",
+                        style = ZunoType.FootnoteRegular,
+                        color = ZunoColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // Details Section (`7251:12848`)
+            ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_details_section)) {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_details_title_label),
+                    icon = R.drawable.zuno_ic_t_pencil,
+                    value = summary.title,
+                    showChevron = true,
+                    onClick = { if (!busy) editingTitle = true },
                 )
-                Text(
-                    text = summary.title,
-                    style = ZunoType.BodyMediumStrong,
-                    color = ZunoColors.TextPrimary,
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_details_category_label),
+                    icon = R.drawable.zuno_ic_layout_grid,
+                    value = topicCategoryLabel(summary.category),
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = { if (!busy) pickingCategory = true },
                 )
-                Text(
-                    text = "$languageName $level · ${topicCategoryLabel(summary.category)}",
-                    style = ZunoType.FootnoteRegular,
-                    color = ZunoColors.TextSecondary,
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_details_level_label),
+                    icon = R.drawable.zuno_ic_languages,
+                    value = "$languageName · $level",
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = onOpenLearning,
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
+            // Visibility Section (`7251:12881`)
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
                 Text(
-                    text = stringResource(R.string.topics_settings_who_label),
+                    text = stringResource(R.string.settings_visibility_section),
                     style = ZunoType.FootnoteStrong,
                     color = ZunoColors.TextSecondary,
                 )
@@ -492,67 +686,86 @@ fun TopicSettingsScreen(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                Text(
-                    text = if (isPublic && summary.learnersCount > 0) {
-                        "$displayUrl · ${stringResource(R.string.topics_learners_count, summary.learnersCount)}"
-                    } else {
-                        displayUrl
-                    },
-                    style = ZunoType.BodySmall,
-                    color = if (isPublic) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val ready = isPublic && shareUrl != null && !busy
+            // Sharing Section (`7251:12906`)
+            val shareReady = isPublic && shareUrl != null && !busy
+            ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_sharing_section)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .padding(start = ZunoSpace.s16, end = ZunoSpace.s12),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ZunoButton(
-                        label = stringResource(R.string.share_action),
-                        onClick = { shareUrl?.let(onShare) },
-                        variant = ZunoButtonVariant.Secondary,
-                        size = ZunoButtonSize.Medium,
-                        leadingIcon = R.drawable.zuno_ic_t_share,
-                        leadingIconTint = ZunoColors.IconPrimary,
-                        enabled = ready,
+                    ZunoIcon(R.drawable.zuno_ic_t_link, 18.dp, tint = ZunoColors.IconSecondary)
+                    Text(
+                        text = displayUrl,
+                        style = ZunoType.BodySmall,
+                        color = if (isPublic) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    ZunoButton(
-                        label = stringResource(R.string.share_copy_link),
-                        onClick = { shareUrl?.let(onCopyLink) },
-                        variant = ZunoButtonVariant.Secondary,
-                        size = ZunoButtonSize.Medium,
-                        leadingIcon = R.drawable.zuno_ic_t_copy,
-                        leadingIconTint = ZunoColors.IconPrimary,
-                        enabled = ready,
-                        modifier = Modifier.weight(1f),
+                    ZunoIconButton(
+                        icon = R.drawable.zuno_ic_t_copy,
+                        onClick = { if (shareReady) shareUrl?.let(onCopyLink) },
+                        style = ZunoIconButtonStyle.Subtle,
+                        size = ZunoIconButtonSize.Small,
+                        tint = if (shareReady) ZunoColors.IconPrimary else ZunoColors.IconTertiary,
+                        contentDescription = stringResource(R.string.share_copy_link),
                     )
                 }
+                ZunoSettingsRow(
+                    title = stringResource(R.string.topics_settings_share_row),
+                    icon = R.drawable.zuno_ic_t_share,
+                    showChevron = true,
+                    showDivider = true,
+                    enabled = shareReady,
+                    onClick = { shareUrl?.let(onShare) },
+                )
             }
-        }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s16),
-        ) {
-            val primaryLabel = if (summary.status == TopicStatus.NotStarted) {
-                stringResource(R.string.topics_settings_start_lesson1)
-            } else {
-                stringResource(R.string.topics_settings_open_topic)
+            // Delete Topic (`7251:12927`)
+            ZunoSettingsGroup {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.topics_settings_delete_row),
+                    icon = R.drawable.zuno_ic_t_trash,
+                    destructive = true,
+                    showChevron = true,
+                    enabled = !busy,
+                    onClick = onDelete,
+                )
             }
-            ZunoButton(
-                label = primaryLabel,
-                onClick = { onPrimaryAction(topic) },
-                size = ZunoButtonSize.Large,
-                leadingIcon = if (summary.status == TopicStatus.NotStarted) R.drawable.zuno_ic_t_play_circle else R.drawable.zuno_ic_t_arrow_right,
-                leadingIconTint = ZunoColors.IconOnInverse,
-                loading = busy,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
+    }
+
+    if (editingTitle && topic != null) {
+        ZunoInputDialog(
+            title = stringResource(R.string.settings_details_title_label),
+            initialValue = topic.summary.title,
+            confirmLabel = stringResource(R.string.common_save),
+            onConfirm = { newTitle ->
+                editingTitle = false
+                if (newTitle.isNotBlank() && newTitle != topic.summary.title) {
+                    onUpdateTitle(newTitle)
+                }
+            },
+            onDismiss = { editingTitle = false },
+        )
+    }
+
+    if (pickingCategory && topic != null) {
+        ZunoOptionSheet(
+            title = stringResource(R.string.settings_details_category_label),
+            options = TopicCategories,
+            selected = topic.summary.category,
+            label = { topicCategoryLabel(it) },
+            onSelect = { chosen ->
+                pickingCategory = false
+                if (chosen != topic.summary.category) onUpdateCategory(chosen)
+            },
+            onDismiss = { pickingCategory = false },
+        )
     }
 }
 
@@ -574,6 +787,7 @@ fun NewRoleplayScreen(
     modifier: Modifier = Modifier,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
+    var showDraftDetails by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val composerFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -685,7 +899,7 @@ fun NewRoleplayScreen(
                     DraftRoleplayCard(
                         draft = draft,
                         busy = busy,
-                        onRefine = { composerFocus.requestFocus() },
+                        onDetails = { showDraftDetails = true },
                         onCreate = {
                             focusManager.clearFocus()
                             onAcceptDraft(draft)
@@ -730,13 +944,27 @@ fun NewRoleplayScreen(
             )
         }
     }
+
+    val activeDraft = builder.draft
+    if (showDraftDetails && activeDraft != null) {
+        RoleplayDetailsSheet(
+            draft = activeDraft,
+            busy = busy,
+            onDismiss = { showDraftDetails = false },
+            onCreate = {
+                showDraftDetails = false
+                focusManager.clearFocus()
+                onAcceptDraft(activeDraft)
+            },
+        )
+    }
 }
 
 @Composable
 private fun DraftRoleplayCard(
     draft: RoleplayDraft,
     busy: Boolean,
-    onRefine: () -> Unit,
+    onDetails: () -> Unit,
     onCreate: () -> Unit,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.xxl)
@@ -779,11 +1007,11 @@ private fun DraftRoleplayCard(
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {
             ZunoButton(
-                label = stringResource(R.string.topics_draft_refine),
-                onClick = onRefine,
+                label = stringResource(R.string.draft_details_action),
+                onClick = onDetails,
                 variant = ZunoButtonVariant.Secondary,
                 size = ZunoButtonSize.Medium,
-                leadingIcon = R.drawable.zuno_ic_t_sparkles,
+                leadingIcon = R.drawable.zuno_ic_t_info,
                 leadingIconTint = ZunoColors.IconPrimary,
                 enabled = !busy,
             )
@@ -798,7 +1026,122 @@ private fun DraftRoleplayCard(
     }
 }
 
-// ── Roleplays · 3c · Roleplay Settings (`3008:13950`) ───────────────────────
+@Composable
+private fun RoleplayDetailsSheet(
+    draft: RoleplayDraft,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: () -> Unit,
+) {
+    val tutorName = LocalActiveTutor.current.displayName
+    ZunoSheet(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.roleplay_details_title),
+        spacing = ZunoSpace.s14,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ZunoSpace.s12),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = draft.title,
+                    style = ZunoType.Headline.copy(
+                        fontFamily = Lexend,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 18.sp,
+                        lineHeight = 24.sp,
+                    ),
+                    color = ZunoColors.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                ZunoChip(
+                    label = roleplayCategoryLabel(draft.category),
+                    onClick = {},
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.roleplays_preview_your_role),
+                        style = ZunoType.BodySmall,
+                        color = ZunoColors.TextSecondary,
+                    )
+                    Text(
+                        text = draft.userRole,
+                        style = ZunoType.LabelMedium,
+                        color = ZunoColors.TextPrimary,
+                    )
+                }
+                ZunoGlassHairline()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "ZunoAI’s role",
+                        style = ZunoType.BodySmall,
+                        color = ZunoColors.TextSecondary,
+                    )
+                    Text(
+                        text = "${draft.aiRole} ($tutorName)",
+                        style = ZunoType.LabelMedium,
+                        color = ZunoColors.TextPrimary,
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceSubtle)
+                    .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+            ) {
+                Text(
+                    text = stringResource(R.string.roleplay_details_context),
+                    style = ZunoType.Micro,
+                    color = ZunoColors.TextTertiary,
+                )
+                Text(
+                    text = draft.setting.ifBlank { draft.scenario },
+                    style = ZunoType.BodySmall,
+                    color = ZunoColors.TextPrimary,
+                )
+            }
+
+            ZunoButton(
+                label = stringResource(R.string.roleplays_draft_create),
+                onClick = onCreate,
+                size = ZunoButtonSize.Large,
+                loading = busy,
+                modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s4),
+            )
+        }
+    }
+}
+
+// ── Roleplays · 17 · Roleplay Settings (`7249:12833`) ───────────────────────
 
 @Composable
 fun RoleplaySettingsScreen(
@@ -810,9 +1153,16 @@ fun RoleplaySettingsScreen(
     onSelectPublic: (Boolean) -> Unit,
     onShare: (String) -> Unit,
     onCopyLink: (String) -> Unit,
-    onStartLive: (Roleplay) -> Unit,
+    onStartLive: (Roleplay) -> Unit = {},
+    onUpdateTitle: (String) -> Unit = {},
+    onUpdateUserRole: (String) -> Unit = {},
+    onUpdateAiRole: (String) -> Unit = {},
+    onDelete: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val tutorName = LocalActiveTutor.current.displayName
+    var editField by rememberSaveable { mutableStateOf<String?>(null) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -842,38 +1192,94 @@ fun RoleplaySettingsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s12),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
         ) {
-            val cardShape = RoundedCornerShape(ZunoRadius.xxl)
-            Column(
+            // Header Card (`7249:12852`)
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(cardShape)
-                    .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault)
+                    .padding(ZunoSpace.s14),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = stringResource(R.string.roleplays_settings_created_eyebrow),
-                    style = ZunoType.Micro,
-                    color = ZunoColors.TextTertiary,
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .zunoGlassElevated(
+                            shape = RoundedCornerShape(ZunoRadius.lg),
+                            fillColor = ZunoColors.SurfaceStrong,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ZunoIcon(R.drawable.zuno_ic_messages_square, 20.dp, tint = ZunoColors.IconPrimary)
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "ROLEPLAY · ${roleplayCategoryLabel(roleplay.category).uppercase()}",
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        VisibilityStatusTag(isPublic = isPublic)
+                    }
+                    Text(
+                        text = roleplay.title,
+                        style = ZunoType.BodyMediumStrong,
+                        color = ZunoColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "You: ${roleplay.userRole} · $tutorName: ${roleplay.aiRole}",
+                        style = ZunoType.FootnoteRegular,
+                        color = ZunoColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // Details Section (`7249:12863`)
+            ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_details_section)) {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_details_title_label),
+                    icon = R.drawable.zuno_ic_t_pencil,
+                    value = roleplay.title,
+                    showChevron = true,
+                    onClick = { if (!busy) editField = "title" },
                 )
-                Text(
-                    text = roleplay.title,
-                    style = ZunoType.BodyMediumStrong,
-                    color = ZunoColors.TextPrimary,
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_details_your_role_label),
+                    icon = R.drawable.zuno_ic_user_circle,
+                    value = roleplay.userRole,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = { if (!busy) editField = "userRole" },
                 )
-                Text(
-                    text = stringResource(R.string.roleplays_draft_roles_line, roleplay.userRole, roleplay.aiRole) +
-                        " · $languageName $level · ${roleplayCategoryLabel(roleplay.category)}",
-                    style = ZunoType.FootnoteRegular,
-                    color = ZunoColors.TextSecondary,
+                ZunoSettingsRow(
+                    title = stringResource(R.string.settings_details_tutor_role_label, tutorName),
+                    icon = R.drawable.zuno_ic_t_sparkles,
+                    value = roleplay.aiRole,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = { if (!busy) editField = "aiRole" },
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
+            // Visibility Section (`7249:12896`)
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
                 Text(
-                    text = stringResource(R.string.topics_settings_who_label),
+                    text = stringResource(R.string.settings_visibility_section),
                     style = ZunoType.FootnoteStrong,
                     color = ZunoColors.TextSecondary,
                 )
@@ -896,62 +1302,106 @@ fun RoleplaySettingsScreen(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                Text(
-                    text = if (isPublic && roleplay.practicedCount > 0) {
-                        "$displayUrl · ${stringResource(R.string.roleplays_practiced_count, roleplay.practicedCount)}"
-                    } else {
-                        displayUrl
-                    },
-                    style = ZunoType.BodySmall,
-                    color = if (isPublic) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val ready = isPublic && shareUrl != null && !busy
+            // Sharing Section (`7249:12920`)
+            val shareReady = isPublic && shareUrl != null && !busy
+            ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_sharing_section)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .padding(start = ZunoSpace.s16, end = ZunoSpace.s12),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ZunoButton(
-                        label = stringResource(R.string.share_action),
-                        onClick = { shareUrl?.let(onShare) },
-                        variant = ZunoButtonVariant.Secondary,
-                        size = ZunoButtonSize.Medium,
-                        leadingIcon = R.drawable.zuno_ic_t_share,
-                        leadingIconTint = ZunoColors.IconPrimary,
-                        enabled = ready,
+                    ZunoIcon(R.drawable.zuno_ic_t_link, 18.dp, tint = ZunoColors.IconSecondary)
+                    Text(
+                        text = displayUrl,
+                        style = ZunoType.BodySmall,
+                        color = if (isPublic) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    ZunoButton(
-                        label = stringResource(R.string.share_copy_link),
-                        onClick = { shareUrl?.let(onCopyLink) },
-                        variant = ZunoButtonVariant.Secondary,
-                        size = ZunoButtonSize.Medium,
-                        leadingIcon = R.drawable.zuno_ic_t_copy,
-                        leadingIconTint = ZunoColors.IconPrimary,
-                        enabled = ready,
-                        modifier = Modifier.weight(1f),
+                    ZunoIconButton(
+                        icon = R.drawable.zuno_ic_t_copy,
+                        onClick = { if (shareReady) shareUrl?.let(onCopyLink) },
+                        style = ZunoIconButtonStyle.Subtle,
+                        size = ZunoIconButtonSize.Small,
+                        tint = if (shareReady) ZunoColors.IconPrimary else ZunoColors.IconTertiary,
+                        contentDescription = stringResource(R.string.share_copy_link),
                     )
                 }
+                ZunoSettingsRow(
+                    title = stringResource(R.string.roleplays_settings_share_row),
+                    icon = R.drawable.zuno_ic_t_share,
+                    showChevron = true,
+                    showDivider = true,
+                    enabled = shareReady,
+                    onClick = { shareUrl?.let(onShare) },
+                )
+            }
+
+            // Delete Roleplay (`7249:12941`)
+            ZunoSettingsGroup {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.roleplays_settings_delete_row),
+                    icon = R.drawable.zuno_ic_t_trash,
+                    destructive = true,
+                    showChevron = true,
+                    enabled = !busy,
+                    onClick = onDelete,
+                )
             }
         }
+    }
 
+    if (editField != null && roleplay != null) {
+        val (dialogTitle, initialVal) = when (editField) {
+            "userRole" -> stringResource(R.string.settings_details_your_role_label) to roleplay.userRole
+            "aiRole" -> stringResource(R.string.settings_details_tutor_role_label, tutorName) to roleplay.aiRole
+            else -> stringResource(R.string.settings_details_title_label) to roleplay.title
+        }
+        ZunoInputDialog(
+            title = dialogTitle,
+            initialValue = initialVal,
+            confirmLabel = stringResource(R.string.common_save),
+            onConfirm = { value ->
+                val target = editField
+                editField = null
+                if (value.isNotBlank() && value != initialVal) {
+                    when (target) {
+                        "userRole" -> onUpdateUserRole(value)
+                        "aiRole" -> onUpdateAiRole(value)
+                        "title" -> onUpdateTitle(value)
+                    }
+                }
+            },
+            onDismiss = { editField = null },
+        )
+    }
+}
+
+@Composable
+private fun VisibilityStatusTag(isPublic: Boolean) {
+    Row(
+        modifier = Modifier
+            .zunoGlassSubtle(CircleShape, fillColor = ZunoColors.SurfaceSubtle)
+            .padding(start = ZunoSpace.s8, end = 9.dp, top = 4.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s16),
-        ) {
-            ZunoButton(
-                label = stringResource(R.string.roleplays_settings_start_cta),
-                onClick = { onStartLive(roleplay) },
-                size = ZunoButtonSize.Large,
-                leadingIcon = R.drawable.zuno_ic_t_audio_lines,
-                leadingIconTint = ZunoColors.IconOnInverse,
-                loading = busy,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(if (isPublic) ZunoColors.StatusSpeaking else ZunoColors.IconTertiary),
+        )
+        Text(
+            text = stringResource(if (isPublic) R.string.topics_public_badge else R.string.topics_private_badge),
+            style = ZunoType.FootnoteRegular,
+            color = ZunoColors.TextSecondary,
+            maxLines = 1,
+        )
     }
 }
 

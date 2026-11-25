@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { blockedLearner, conversation, roleplay, schedule, topic, userProfile, vocabPhrase } from "../db/app-schema.js";
 import { account, user } from "../db/auth-schema.js";
 import { db } from "../db/index.js";
 import { deleteAccount, R2_PREFIX } from "../lib/account.js";
@@ -96,6 +97,12 @@ const avatarSchema = z.object({
   sizeBytes: z.number().int().positive().max(AVATAR_MAX_BYTES, "Photos can be up to 5 MB"),
 });
 const avatarCompleteSchema = z.object({ key: z.string().min(1).max(200) });
+
+const privacySchema = z.object({
+  openToSpeak: z.boolean().optional(),
+  allowCallInvites: z.boolean().optional(),
+  whoCanMessage: z.enum(["partners", "everyone", "nobody"]).optional(),
+});
 
 async function imageUrl(image: string | null | undefined) {
   if (!image) return null;
@@ -271,4 +278,75 @@ export const profileRoutes = new Hono<AuthEnv>()
       paragraphs: [t(profile.nativeLanguage, "accountDeletedBody")],
     }).catch((err) => console.error("Account deletion email failed:", err));
     return c.body(null, 204);
+  })
+  .get("/privacy", async (c) => {
+    const userId = c.get("user").id;
+    await getProfile(userId);
+    const [row] = await db.select().from(userProfile).where(eq(userProfile.userId, userId));
+    const blocked = await db
+      .select({ id: user.id, name: user.name })
+      .from(blockedLearner)
+      .innerJoin(user, eq(blockedLearner.blockedUserId, user.id))
+      .where(eq(blockedLearner.userId, userId));
+    return c.json({
+      privacy: {
+        openToSpeak: row?.openToSpeak ?? true,
+        allowCallInvites: row?.allowCallInvites ?? true,
+        whoCanMessage: row?.whoCanMessage ?? "partners",
+        blockedLearners: blocked,
+      },
+    });
+  })
+  .patch("/privacy", async (c) => {
+    const userId = c.get("user").id;
+    const patch = await parseBody(c, privacySchema);
+    await getProfile(userId);
+    const [updated] = await db
+      .update(userProfile)
+      .set({
+        ...(patch.openToSpeak !== undefined && { openToSpeak: patch.openToSpeak }),
+        ...(patch.allowCallInvites !== undefined && { allowCallInvites: patch.allowCallInvites }),
+        ...(patch.whoCanMessage !== undefined && { whoCanMessage: patch.whoCanMessage }),
+      })
+      .where(eq(userProfile.userId, userId))
+      .returning();
+    const blocked = await db
+      .select({ id: user.id, name: user.name })
+      .from(blockedLearner)
+      .innerJoin(user, eq(blockedLearner.blockedUserId, user.id))
+      .where(eq(blockedLearner.userId, userId));
+    return c.json({
+      privacy: {
+        openToSpeak: updated?.openToSpeak ?? true,
+        allowCallInvites: updated?.allowCallInvites ?? true,
+        whoCanMessage: updated?.whoCanMessage ?? "partners",
+        blockedLearners: blocked,
+      },
+    });
+  })
+  .delete("/blocked/:blockedUserId", async (c) => {
+    const userId = c.get("user").id;
+    await db
+      .delete(blockedLearner)
+      .where(and(eq(blockedLearner.userId, userId), eq(blockedLearner.blockedUserId, c.req.param("blockedUserId"))));
+    return c.body(null, 204);
+  })
+  .post("/export", async (c) => {
+    const current = c.get("user");
+    const [profile, convs, tps, rps, vocabs, scheds] = await Promise.all([
+      getProfile(current.id),
+      db.select().from(conversation).where(eq(conversation.userId, current.id)),
+      db.select().from(topic).where(eq(topic.userId, current.id)),
+      db.select().from(roleplay).where(eq(roleplay.userId, current.id)),
+      db.select().from(vocabPhrase).where(eq(vocabPhrase.userId, current.id)),
+      db.select().from(schedule).where(eq(schedule.userId, current.id)),
+    ]);
+    const summaryText = `Your Zuno data export includes ${convs.length} chats, ${tps.length} topics, ${rps.length} roleplays, ${vocabs.length} vocabulary phrases, and ${scheds.length} scheduled sessions (${profile.targetLanguage.toUpperCase()} ${profile.level}).`;
+    sendEmail({
+      to: current.email,
+      subject: "Your Zuno data export",
+      heading: "Your Zuno data export is ready",
+      paragraphs: [summaryText, "If you need a full archive or assistance, reply to this email."],
+    }).catch((err) => console.warn("Data export email failed:", err));
+    return c.json({ ok: true, email: current.email });
   });

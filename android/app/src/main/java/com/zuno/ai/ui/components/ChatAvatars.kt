@@ -280,6 +280,7 @@ fun ZunoCallControlsBar(
     onToggleSpeaker: () -> Unit,
     onToggleCaptions: () -> Unit,
     modifier: Modifier = Modifier,
+    endCallLabel: String = stringResource(R.string.voice_end_call),
 ) {
     Row(
         modifier = modifier
@@ -305,7 +306,7 @@ fun ZunoCallControlsBar(
         }
 
         ZunoButton(
-            label = stringResource(R.string.voice_end_call),
+            label = endCallLabel,
             onClick = onEndCall,
             variant = ZunoButtonVariant.Secondary,
             size = ZunoButtonSize.Medium,
@@ -352,5 +353,167 @@ private fun RoundCallControlButton(
         contentAlignment = Alignment.Center,
     ) {
         ZunoIcon(icon, 22.dp, tint = tint)
+    }
+}
+
+/**
+ * System / Ongoing Call Banner (`7172:1741`, `7172:1766`):
+ * Glass card with Zuno call badge, caller title, live dot + status/timer, session subtitle,
+ * and 3 action pills (`Mute`, `Speaker`, `End`).
+ */
+@Composable
+fun ZunoOngoingCallBanner(
+    callerTitle: String,
+    sessionSubtitle: String,
+    statusLabel: String,
+    statusColor: Color,
+    isMuted: Boolean,
+    isSpeakerOn: Boolean,
+    onReturnToCall: () -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onEndCall: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardShape = RoundedCornerShape(ZunoRadius.xxl)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .zunoGlassElevated(
+                shape = cardShape,
+                fillColor = ZunoColors.BgElevated,
+                borderBrush = androidx.compose.ui.graphics.SolidColor(ZunoColors.BorderDefault),
+            )
+            .clickable(role = Role.Button, onClick = onReturnToCall)
+            .padding(ZunoSpace.s14),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .zunoGlassElevated(
+                        shape = RoundedCornerShape(ZunoRadius.sm),
+                        fillColor = ZunoColors.BgCanvas,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoLogoMark(24.dp)
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = callerTitle,
+                        style = ZunoType.LabelMedium,
+                        color = ZunoColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(statusColor),
+                        )
+                        Text(
+                            text = statusLabel,
+                            style = ZunoType.FootnoteStrong,
+                            color = statusColor,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                Text(
+                    text = sessionSubtitle,
+                    style = ZunoType.BodySmall,
+                    color = ZunoColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+        ) {
+            OngoingBannerActionPill(
+                icon = if (isMuted) R.drawable.zuno_ic_mic_off else R.drawable.zuno_ic_t_mic,
+                label = stringResource(if (isMuted) R.string.voice_unmute else R.string.voice_mute),
+                active = isMuted,
+                danger = false,
+                onClick = onToggleMute,
+                modifier = Modifier.weight(1f),
+            )
+            OngoingBannerActionPill(
+                icon = R.drawable.zuno_ic_t_volume,
+                label = "Speaker",
+                active = isSpeakerOn,
+                danger = false,
+                onClick = onToggleSpeaker,
+                modifier = Modifier.weight(1f),
+            )
+            OngoingBannerActionPill(
+                icon = R.drawable.zuno_ic_t_phone,
+                label = "End",
+                active = false,
+                danger = true,
+                onClick = onEndCall,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun OngoingBannerActionPill(
+    @DrawableRes icon: Int,
+    label: String,
+    active: Boolean,
+    danger: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bgColor = when {
+        danger -> ZunoColors.SurfaceDanger
+        active -> ZunoColors.SurfaceInverse
+        else -> ZunoColors.SurfaceStrong
+    }
+    val fgColor = when {
+        danger -> ZunoColors.TextPrimary
+        active -> ZunoColors.TextOnInverse
+        else -> ZunoColors.TextPrimary
+    }
+    Row(
+        modifier = modifier
+            .height(34.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ZunoIcon(icon, 15.dp, tint = fgColor)
+        Text(
+            text = label,
+            style = ZunoType.LabelSmall,
+            color = fgColor,
+            maxLines = 1,
+        )
     }
 }

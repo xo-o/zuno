@@ -137,6 +137,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         conversationId: String? = null,
         language: String? = null,
         speakLastReply: Boolean = false,
+        enableCamera: Boolean = false,
     ) {
         if (_agentState.value != AgentState.DISCONNECTED) return
         if (sessionToken == null) {
@@ -155,7 +156,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                     conversationId = conversationId,
                     speakLastReply = speakLastReply,
                 )
-                joinRoom(tokenResult.url, tokenResult.token, tokenResult.room)
+                joinRoom(tokenResult.url, tokenResult.token, tokenResult.room, enableCamera = enableCamera)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SessionExpiredException) {
@@ -353,7 +354,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         }
         refreshVideoTracks(room)
         _isSpeakerOn.value = true
-        room.setSpeakerMute(false)
+        applySpeakerRouting(room, speakerOn = true, preferHeadset = true)
         levelJob = viewModelScope.launch { pollAudioLevels(room) }
         _isMuted.value = false
         if (_agentState.value == AgentState.CONNECTING) {
@@ -443,12 +444,19 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         val room = currentRoom ?: return
         val next = !_isSpeakerOn.value
         _isSpeakerOn.value = next
+        applySpeakerRouting(room, speakerOn = next, preferHeadset = false)
+    }
+
+    private fun applySpeakerRouting(room: Room, speakerOn: Boolean, preferHeadset: Boolean) {
         runCatching {
             room.setSpeakerMute(false)
             val audioHandler = room.audioSwitchHandler
             if (audioHandler != null) {
                 val devices = audioHandler.availableAudioDevices
-                val target = if (next) {
+                val target = if (preferHeadset && devices.any { it is AudioDevice.BluetoothHeadset || it is AudioDevice.WiredHeadset }) {
+                    devices.firstOrNull { it is AudioDevice.BluetoothHeadset }
+                        ?: devices.firstOrNull { it is AudioDevice.WiredHeadset }
+                } else if (speakerOn) {
                     devices.firstOrNull { it is AudioDevice.Speakerphone }
                 } else {
                     devices.firstOrNull { it is AudioDevice.BluetoothHeadset }
@@ -461,7 +469,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
             } else {
                 val am = getApplication<Application>().getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                 @Suppress("DEPRECATION")
-                am?.isSpeakerphoneOn = next
+                am?.isSpeakerphoneOn = speakerOn
             }
         }
     }

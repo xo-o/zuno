@@ -1,6 +1,5 @@
 package com.zuno.ai
 
-import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Handler
@@ -23,7 +22,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.zuno.ai.data.AppLanguage
-import com.zuno.ai.data.CartesiaAudioPlayer
 import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.LessonState
 import com.zuno.ai.data.OnboardingCompleteResult
@@ -41,7 +39,6 @@ import com.zuno.ai.ui.screens.OnboardingScreen
 import com.zuno.ai.ui.theme.ZunoTheme
 import com.zuno.ai.viewmodel.OnboardingStep
 import com.zuno.ai.viewmodel.OnboardingViewModel
-import com.zuno.ai.viewmodel.VoiceSessionViewModel
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -136,6 +133,13 @@ class OnboardingScreensUiTest {
         throw AssertionError("Timed out waiting for '$expected'. Visible texts: $texts")
     }
 
+    private fun assertNoText(unexpected: String) {
+        val root = instrumentation.uiAutomation.rootInActiveWindow
+        val texts = mutableListOf<String>()
+        collectTexts(root, texts)
+        assertTrue("Expected '$unexpected' to be absent, but found in $texts", texts.none { it == unexpected })
+    }
+
     private fun tapText(label: String) {
         val root = instrumentation.uiAutomation.rootInActiveWindow
             ?: throw AssertionError("No active window")
@@ -161,11 +165,10 @@ class OnboardingScreensUiTest {
 
     @Test
     fun verifyWelcomeAuthAndAllOnboardingFlowScreens() {
-        val app = instrumentation.targetContext.applicationContext as Application
         val onboardingVm = OnboardingViewModel()
-        val voiceVm = VoiceSessionViewModel(app)
         var stage by mutableStateOf("welcome")
         var linkSentTo by mutableStateOf<String?>(null)
+        var currentAppLanguage by mutableStateOf(AppLanguage.English)
         val allowPathComplete = CompletableDeferred<Unit>()
 
         ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
@@ -175,7 +178,6 @@ class OnboardingScreensUiTest {
                     navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
                 )
                 activity.window.setBackgroundDrawableResource(R.color.background)
-                val tts = CartesiaAudioPlayer(activity) { _, _, _, _ -> ByteArray(0) }
                 activity.setContent {
                     ZunoTheme {
                         when (stage) {
@@ -199,15 +201,11 @@ class OnboardingScreensUiTest {
 
                             "flow" -> OnboardingFlowScreen(
                                 onboardingViewModel = onboardingVm,
-                                voiceViewModel = voiceVm,
                                 languages = LearningLanguages.bundled,
-                                appLanguage = AppLanguage.English,
+                                appLanguage = currentAppLanguage,
                                 busy = false,
-                                micGranted = { true },
-                                requestVoicePermission = { onGranted, _ -> onGranted() },
-                                ttsPlayer = tts,
-                                sessionTokenProvider = { null },
-                                onSessionExpired = {},
+                                onSelectAppLanguage = { currentAppLanguage = it },
+                                onConfirmAppLanguage = { currentAppLanguage = it },
                                 onParseTurn = { step, answer, chips, _, _ ->
                                     when (step) {
                                         "name" -> OnboardingTurnResult(step = "name", valid = true, name = "Noah")
@@ -245,10 +243,42 @@ class OnboardingScreensUiTest {
                                                 TopicLesson(
                                                     id = "l1",
                                                     position = 1,
-                                                    title = "Presentación técnica",
-                                                    translation = "Technical intro",
+                                                    title = "Mi perfil y herramientas técnicas",
+                                                    translation = "My profile and technical tools",
                                                     objective = "Introduce your backend stack and role in Mexican Spanish.",
                                                     state = LessonState.Current,
+                                                ),
+                                                TopicLesson(
+                                                    id = "l2",
+                                                    position = 2,
+                                                    title = "Explicar mi stack de backend",
+                                                    translation = "Explain my backend stack",
+                                                    objective = "Describe services, databases, and APIs.",
+                                                    state = LessonState.Upcoming,
+                                                ),
+                                                TopicLesson(
+                                                    id = "l3",
+                                                    position = 3,
+                                                    title = "Pedir café y comida en CDMX",
+                                                    translation = "Order coffee and food in CDMX",
+                                                    objective = "Order naturally at cafés and street stalls.",
+                                                    state = LessonState.Upcoming,
+                                                ),
+                                                TopicLesson(
+                                                    id = "l4",
+                                                    position = 4,
+                                                    title = "Moverse por la ciudad",
+                                                    translation = "Getting around the city",
+                                                    objective = "Ask for directions and take transit.",
+                                                    state = LessonState.Upcoming,
+                                                ),
+                                                TopicLesson(
+                                                    id = "l5",
+                                                    position = 5,
+                                                    title = "Conversaciones diarias en el trabajo",
+                                                    translation = "Daily conversations at work",
+                                                    objective = "Handle casual check-ins with teammates.",
+                                                    state = LessonState.Upcoming,
                                                 ),
                                             ),
                                         ),
@@ -271,8 +301,7 @@ class OnboardingScreensUiTest {
                                         pathSubtitle = "Built from your goals in Mexico & travel.",
                                     )
                                 },
-                                onStartFirstLesson = {},
-                                onSelectRecommendedTopic = {},
+                                onStartLesson = { _, _ -> },
                                 onGoHome = {},
                                 onExitOnboarding = {},
                                 modifier = Modifier.fillMaxSize(),
@@ -294,27 +323,29 @@ class OnboardingScreensUiTest {
             waitForText("Check your email")
             saveScreenshot(scenario, "04c_check_email")
 
-            // 5a · Target Language
+            // User Language Step
             instrumentation.runOnMainSync { stage = "flow" }
+            waitForText("What’s your language?")
+            waitForText("English")
+            waitForText("Español")
+            saveScreenshot(scenario, "05_user_language")
+
+            // 5a · Target Language
+            tapText("Continue")
             waitForText("Choose a language")
             waitForText("Español")
             waitForText("Latin America")
             saveScreenshot(scenario, "05a_target_language")
 
-            // 5b · Step 1 (Voice) — Name
+            // 5c (Chat) · Step 1 — Name (chat-only, no voice mode controls)
             tapText("Continue")
-            waitForText("Sofía · Your Spanish tutor")
-            waitForText("Hi, I’m Sofía. What should I call you?")
-            waitForText("Type instead")
-            saveScreenshot(scenario, "05b_voice_name")
-
-            // 5b (Chat) · Step 1 — Name
-            tapText("Type instead")
-            waitForText("Hi, I’m Sofía. What should I call you?")
+            waitForText("Hi, I’m Zuno. What should I call you?")
+            assertNoText("Speak instead")
+            assertNoText("Type instead")
             instrumentation.runOnMainSync { onboardingVm.updateDraft("Call me Noah.") }
-            saveScreenshot(scenario, "05b_chat_name")
+            saveScreenshot(scenario, "05c_chat_name")
 
-            // Advance to 5c Chat
+            // Advance to 5d Chat
             instrumentation.runOnMainSync {
                 onboardingVm.applyParsedTurn(
                     step = OnboardingStep.Name,
@@ -328,52 +359,45 @@ class OnboardingScreensUiTest {
             waitForText("Beginner")
             waitForText("Intermediate")
             waitForText("Advanced")
-            saveScreenshot(scenario, "05c_chat_level")
+            assertNoText("Speak instead")
+            saveScreenshot(scenario, "05d_chat_level")
 
-            // 5c · Step 2 (Voice) — Level
-            tapText("Speak instead")
-            waitForText("Sofía · Spanish level")
-            waitForText("Nice to meet you, Noah. How much Spanish do you know?")
-            waitForText("“Call me Noah.”")
-            saveScreenshot(scenario, "05c_voice_level")
-
-            // Tap Intermediate chip in Voice mode -> advances to 5d Voice
+            // Tap Intermediate chip -> populates composer without auto-sending, then tap Send -> advances to 5e Chat Goals
             tapText("Intermediate")
-            waitForText("Sofía · Learning goals")
+            assertNoText("Why are you learning Spanish, Noah?")
+            tapText("Send")
             waitForText("Why are you learning Spanish, Noah?")
             waitForText("Work")
             waitForText("Travel")
             waitForText("Interviews")
             waitForText("Daily chat")
-            saveScreenshot(scenario, "05d_voice_goals")
-
-            // 5d (Chat) · Step 3 — Goals
-            tapText("Type instead")
-            waitForText("Why are you learning Spanish, Noah?")
             tapText("Work")
             tapText("Travel")
             tapText("Interviews")
+            waitForText("Work, Travel, Interviews")
             instrumentation.runOnMainSync {
                 onboardingVm.updateDraft("Backend interviews in Mexico, plus coffee and travel.")
             }
-            saveScreenshot(scenario, "05d_chat_goals")
+            saveScreenshot(scenario, "05e_chat_goals")
 
-            // Submit -> 5e · Preparing Path -> 5f · Starting Path Ready
+            // Submit -> 5f · Preparing Path -> 5g · Starting Path Ready
             tapText("Send")
             waitForText("Building your path")
-            waitForText("Sofía is tailoring lessons", substring = true)
-            saveScreenshot(scenario, "05e_preparing_path")
+            waitForText("Zuno is tailoring lessons", substring = true)
+            saveScreenshot(scenario, "05f_preparing_path")
             allowPathComplete.complete(Unit)
 
             waitForText("Your path is ready, Noah")
-            waitForText("Starter · 5 lessons")
-            waitForText("Mi perfil y herramientas técnicas")
+            waitForText("Intermediate · B1")
+            waitForText("Starter · Lesson 1 of 5")
+            waitForText("Start")
+            waitForText("Starter syllabus · 5 lessons")
+            waitForText("Up next")
             waitForText("Start first lesson")
-            waitForText("Recommended next")
             waitForText("Go to Home")
-            saveScreenshot(scenario, "05f_path_ready")
+            saveScreenshot(scenario, "05g_path_ready")
 
-            assertTrue(File(screenshotDir(), "05f_path_ready.png").exists())
+            assertTrue(File(screenshotDir(), "05g_path_ready.png").exists())
         }
     }
 }

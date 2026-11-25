@@ -131,6 +131,9 @@
         <receiver
             android:name=".push.PeerCallActionReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".push.OngoingCallActionReceiver"
+            android:exported="false" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="reminders" />

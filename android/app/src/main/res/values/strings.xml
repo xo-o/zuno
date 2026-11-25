@@ -16,6 +16,7 @@
     <string name="drawer_roleplays">Roleplays</string>
     <string name="drawer_progress">Progress</string>
     <string name="drawer_vocabulary">Vocabulary</string>
+    <string name="drawer_unread_count">%1$d unread</string>
     <string name="drawer_recent_sessions">Recent sessions</string>
     <string name="drawer_recent_empty">Your conversations, topics and roleplays will show up here.</string>
     <string name="drawer_upgrade_banner">Get more with Zuno Pro</string>

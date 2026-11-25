@@ -60,6 +60,7 @@ import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
 import com.zuno.ai.ui.components.ZunoIconButtonStyle
 import com.zuno.ai.ui.components.ZunoLoadState
+import com.zuno.ai.ui.components.ZunoLogoMark
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOpenToSpeakAvatar
 import com.zuno.ai.ui.components.ZunoOverflowMenu
@@ -368,16 +369,29 @@ private fun MemberTopBar(
                 initial = partner?.initial ?: "L",
                 imageUrl = partner?.imageUrl,
                 size = 36.dp,
-                openToSpeak = partner?.openToSpeak == true,
+                openToSpeak = false,
             )
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(
-                    text = partner?.name.orEmpty(),
-                    style = ZunoType.LabelMedium,
-                    color = ZunoColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = partner?.name.orEmpty(),
+                        style = ZunoType.LabelMedium,
+                        color = ZunoColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (partner?.openToSpeak == true) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.StatusSpeaking),
+                        )
+                    }
+                }
                 if (partner != null) {
                     Text(
                         text = if (partner.openToSpeak) {
@@ -536,7 +550,7 @@ private fun MissedInviteCard(
             modifier = Modifier
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(ZunoColors.IconTertiary),
+                .background(ZunoColors.TextDanger),
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
             Text(
@@ -611,21 +625,35 @@ private fun IncomingInviteNotificationBanner(
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(ZunoColors.SurfaceInverse),
+                .size(38.dp)
+                .zunoGlassElevated(
+                    shape = RoundedCornerShape(ZunoRadius.sm),
+                    fillColor = ZunoColors.BgCanvas,
+                ),
             contentAlignment = Alignment.Center,
         ) {
-            ZunoIcon(R.drawable.zuno_ic_t_phone, 18.dp, tint = ZunoColors.IconOnInverse)
+            ZunoLogoMark(24.dp)
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-            Text(
-                text = "$partnerName invited you to talk",
-                style = ZunoType.LabelMedium,
-                color = ZunoColors.TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$partnerName invited you to talk",
+                    style = ZunoType.LabelMedium,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "now",
+                    style = ZunoType.FootnoteRegular,
+                    color = ZunoColors.TextTertiary,
+                )
+            }
             Text(
                 text = stringResource(R.string.member_invite_banner_body, languageName, level),
                 style = ZunoType.FootnoteRegular,
@@ -634,13 +662,6 @@ private fun IncomingInviteNotificationBanner(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        ZunoIconButton(
-            icon = R.drawable.zuno_ic_t_x,
-            onClick = onDismiss,
-            size = ZunoIconButtonSize.Small,
-            tint = ZunoColors.IconSecondary,
-            contentDescription = "Dismiss",
-        )
     }
 }
 

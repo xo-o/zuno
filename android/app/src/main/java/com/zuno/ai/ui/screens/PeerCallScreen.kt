@@ -47,9 +47,11 @@ import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.data.PeerLearner
 import com.zuno.ai.model.ChatMessage
 import com.zuno.ai.model.Speaker
+import com.zuno.ai.ui.components.CallAvatarItem
 import com.zuno.ai.ui.components.LiveKitVideoFeed
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoCallControlsBar
+import com.zuno.ai.ui.components.ZunoCallTopBar
 import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
 import com.zuno.ai.ui.components.ZunoIcon
@@ -121,10 +123,15 @@ fun PeerCallScreen(
     val partnerInitial = partner?.initial ?: "L"
     val partnerLevel = partner?.level ?: userLevel
 
-    val topTitle = stringResource(
-        if (isCameraOn || remoteVideoTrack != null) R.string.call_video_title else R.string.call_waiting_title,
-        elapsedText,
+    val topSessionLabel = stringResource(
+        if (isCameraOn || remoteVideoTrack != null) R.string.call_video_label else R.string.call_voice_label,
     )
+    val topAvatars = remember(partnerInitial, partner?.imageUrl, userInitial) {
+        listOf(
+            CallAvatarItem(initial = partnerInitial, imageUrl = partner?.imageUrl),
+            CallAvatarItem(initial = userInitial),
+        )
+    }
 
     Column(
         modifier = modifier
@@ -133,8 +140,11 @@ fun PeerCallScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoCompactTitleTopBar(
-            title = topTitle,
+        ZunoCallTopBar(
+            sessionLabel = topSessionLabel,
+            elapsed = elapsedText,
+            showAvatars = partnerJoined && captionsOn,
+            avatars = topAvatars,
             onBack = handleEnd,
             trailing = {
                 if (menu.isNotEmpty()) {
@@ -152,13 +162,12 @@ fun PeerCallScreen(
                 .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         ) {
-            // 2-up Participants Row (`Chats · 13` waiting and `Chats · 14` active)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-            ) {
-                if (!partnerJoined) {
-                    // `Chats · 13`: Left tile = Partner (Waiting), Right tile = You (In room)
+            if (!partnerJoined) {
+                // `Chats · 13`: 2-up Lobby Tiles + Call room invite card + Tabbed Coach Card
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+                ) {
                     ParticipantTile(
                         name = partnerName,
                         initial = partnerInitial,
@@ -171,7 +180,7 @@ fun PeerCallScreen(
                         room = room,
                         videoTrack = null,
                         dimmed = true,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(204.dp),
                     )
                     ParticipantTile(
                         name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
@@ -185,44 +194,10 @@ fun PeerCallScreen(
                         room = room,
                         videoTrack = localVideoTrack,
                         mirrorVideo = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                } else {
-                    // `Chats · 14`: Left tile = Partner, Right tile = You
-                    val partnerSpeaking = status == VoiceCallStatus.Speaking
-                    val userSpeaking = status == VoiceCallStatus.Listening
-                    ParticipantTile(
-                        name = partnerName,
-                        initial = partnerInitial,
-                        subtitle = "Open to speak · $partnerLevel",
-                        badgeText = if (partnerSpeaking) stringResource(R.string.voice_status_dot_speaking) else null,
-                        highlightColor = if (partnerSpeaking) ZunoColors.StatusSpeaking else null,
-                        isSpeaking = partnerSpeaking,
-                        isMuted = false,
-                        audioLevel = audioLevel,
-                        room = room,
-                        videoTrack = remoteVideoTrack,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ParticipantTile(
-                        name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
-                        initial = userInitial,
-                        subtitle = "${if (isMuted) stringResource(R.string.voice_status_dot_muted) else stringResource(R.string.voice_status_dot_listening)} · $languageName $userLevel",
-                        badgeText = null,
-                        highlightColor = if (userSpeaking && !isMuted) ZunoColors.StatusListening else null,
-                        isSpeaking = false,
-                        isMuted = isMuted,
-                        audioLevel = audioLevel,
-                        room = room,
-                        videoTrack = localVideoTrack,
-                        mirrorVideo = true,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(204.dp),
                     )
                 }
-            }
 
-            if (!partnerJoined) {
-                // `Chats · 13`: Call room invite card + Tabbed Coach Card
                 val hudShape = RoundedCornerShape(ZunoRadius.xxxl)
                 Column(
                     modifier = Modifier
@@ -249,8 +224,44 @@ fun PeerCallScreen(
                     }
                 }
                 Spacer(Modifier.weight(1f))
+            } else if (!captionsOn) {
+                // `Chats · 20 · Member Call — Voice Mode (No Captions, Avatars Only)` (`7353:15600`)
+                val partnerSpeaking = status == VoiceCallStatus.Speaking
+                val userSpeaking = status == VoiceCallStatus.Listening
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+                ) {
+                    ParticipantTile(
+                        name = partnerName,
+                        initial = partnerInitial,
+                        subtitle = "Open to speak · $partnerLevel",
+                        badgeText = if (partnerSpeaking) stringResource(R.string.voice_status_dot_speaking) else null,
+                        highlightColor = if (partnerSpeaking) ZunoColors.StatusSpeaking else null,
+                        isSpeaking = partnerSpeaking,
+                        isMuted = false,
+                        audioLevel = audioLevel,
+                        room = room,
+                        videoTrack = remoteVideoTrack,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                    ParticipantTile(
+                        name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
+                        initial = userInitial,
+                        subtitle = "${if (isMuted) stringResource(R.string.voice_status_dot_muted) else stringResource(R.string.voice_status_dot_listening)} · $languageName $userLevel",
+                        badgeText = null,
+                        highlightColor = if (userSpeaking && !isMuted) ZunoColors.StatusListening else null,
+                        isSpeaking = false,
+                        isMuted = isMuted,
+                        audioLevel = audioLevel,
+                        room = room,
+                        videoTrack = localVideoTrack,
+                        mirrorVideo = true,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
+                }
             } else {
-                // `Chats · 14`: Top-aligned scrollable Conversation (`You` + `Partner · Speaking`)
+                // `Chats · 14`: Full-height Conversation (`You` + `Partner · Speaking`) + Tabbed Coach Card
                 val displayTurns = remember(turns, partnerLine) {
                     if (turns.isNotEmpty()) {
                         turns.filter { it.text.isNotBlank() }
@@ -351,7 +362,6 @@ private fun ParticipantTile(
 
     Box(
         modifier = modifier
-            .height(204.dp)
             .alpha(if (dimmed) 0.72f else 1f)
             .then(
                 if (highlightColor != null) {

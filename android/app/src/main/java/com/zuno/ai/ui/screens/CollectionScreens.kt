@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -1040,8 +1041,9 @@ fun ExploreTopicsScreen(
                                         color = ZunoColors.TextSecondary,
                                     )
                                     Text(
-                                        text = stringResource(
-                                            R.string.topics_explore_results_count,
+                                        text = pluralStringResource(
+                                            R.plurals.topics_explore_results_count,
+                                            communityFiltered.size,
                                             communityFiltered.size,
                                             communityFiltered.firstOrNull()?.totalLessons ?: 5,
                                         ),
@@ -1118,9 +1120,9 @@ fun ExploreTopicsScreen(
     }
 }
 
-// ── Roleplays · 5 & 9 · Explore Roleplays ───────────────────────────────────
+// ── Roleplays · 5 & 9 · Explore Roleplays (`3092:13754`, `3092:13864`) ─────────
 
-private val RoleplayExploreCategories = listOf("all", "travel", "food", "work", "housing")
+private val RoleplayExploreCategories = listOf("all", "travel", "food", "work", "housing", "health", "social")
 
 @Composable
 fun ExploreRoleplaysScreen(
@@ -1130,15 +1132,24 @@ fun ExploreRoleplaysScreen(
     onFilterChanged: (category: String, query: String) -> Unit,
     onOpenPreview: (DiscoverRoleplay) -> Unit,
     onCreateFromQuery: (String) -> Unit,
+    onFilterWithLevel: ((category: String, query: String, level: String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf(initialQuery) }
     var selectedCategory by rememberSaveable { mutableStateOf("all") }
+    var selectedLevel by rememberSaveable { mutableStateOf("all") }
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(selectedCategory, query) {
+    LaunchedEffect(selectedCategory, query, selectedLevel) {
         if (query.isNotEmpty()) delay(180)
-        onFilterChanged(selectedCategory, query.trim())
+        if (onFilterWithLevel != null) {
+            onFilterWithLevel(selectedCategory, query.trim(), selectedLevel)
+        } else {
+            onFilterChanged(selectedCategory, query.trim())
+        }
     }
+
+    val activeFilterCount = if (selectedLevel != "all") 1 else 0
 
     Column(
         modifier = modifier
@@ -1149,39 +1160,133 @@ fun ExploreRoleplaysScreen(
     ) {
         ZunoBackTitleTopBar(title = stringResource(R.string.roleplays_explore_title), onBack = onBack)
 
-        Column(
-            modifier = Modifier.padding(horizontal = ZunoSpace.s24),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            ExploreSearchField(
-                query = query,
-                onQueryChange = { query = it },
-                placeholder = stringResource(R.string.roleplays_explore_search_placeholder),
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = ZunoSpace.s24),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                RoleplayExploreCategories.forEach { cat ->
-                    val label = when (cat) {
-                        "all" -> stringResource(R.string.topics_cat_all)
-                        else -> roleplayCategoryLabel(cat)
+                ExploreSearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = stringResource(R.string.roleplays_explore_search_placeholder),
+                    modifier = Modifier.weight(1f),
+                )
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .zunoGlassSubtle(
+                                shape = CircleShape,
+                                fillColor = ZunoColors.SurfaceControlTrack,
+                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            )
+                            .clickable(role = Role.Button, onClick = { showFilterSheet = true }),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ZunoIcon(
+                            icon = R.drawable.zuno_ic_sliders,
+                            size = 18.dp,
+                            contentDescription = stringResource(R.string.roleplays_explore_filter_title),
+                            tint = ZunoColors.IconPrimary,
+                        )
                     }
-                    ZunoChip(
-                        label = label,
-                        onClick = { selectedCategory = cat },
-                        selected = selectedCategory == cat,
-                    )
+                    if (activeFilterCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 2.dp, y = (-3).dp)
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.SurfaceInverse)
+                                .border(2.dp, ZunoColors.BgCanvas, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = activeFilterCount.toString(),
+                                style = ZunoType.Micro,
+                                color = ZunoColors.TextOnInverse,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
+            }
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = ZunoSpace.s24, end = 36.dp),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                ) {
+                    RoleplayExploreCategories.forEach { cat ->
+                        val label = when (cat) {
+                            "all" -> stringResource(R.string.topics_cat_all)
+                            else -> roleplayCategoryLabel(cat)
+                        }
+                        val selected = selectedCategory == cat
+                        Box(
+                            modifier = Modifier
+                                .height(34.dp)
+                                .zunoGlassSubtle(
+                                    shape = CircleShape,
+                                    fillColor = if (selected) ZunoColors.SurfaceControlActive else ZunoColors.SurfaceControlTrack,
+                                    borderBrush = SolidColor(if (selected) ZunoColors.BorderControlActive else ZunoColors.BorderSubtle),
+                                )
+                                .clickable(role = Role.Button, onClick = { selectedCategory = cat })
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = label,
+                                style = ZunoType.LabelSmall,
+                                color = if (selected) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(44.dp)
+                        .height(36.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                0f to Color.Transparent,
+                                1f to ZunoColors.BgCanvas,
+                            ),
+                        ),
+                )
             }
         }
 
         val data = discover.items
+        val officialFiltered = data?.official?.filter {
+            selectedLevel == "all" || it.level.equals(selectedLevel, ignoreCase = true)
+        }.orEmpty()
+        val communityFiltered = data?.community?.filter {
+            selectedLevel == "all" || it.level.equals(selectedLevel, ignoreCase = true)
+        }.orEmpty()
+
         when {
             data == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                ZunoLoadState(error = discover.error, onRetry = { onFilterChanged(selectedCategory, query.trim()) })
+                ZunoLoadState(
+                    error = discover.error,
+                    onRetry = {
+                        if (onFilterWithLevel != null) {
+                            onFilterWithLevel(selectedCategory, query.trim(), selectedLevel)
+                        } else {
+                            onFilterChanged(selectedCategory, query.trim())
+                        }
+                    },
+                )
             }
-            data.official.isEmpty() && data.community.isEmpty() -> {
+            officialFiltered.isEmpty() && communityFiltered.isEmpty() -> {
                 val trimmed = query.trim().ifEmpty { roleplayCategoryLabel(selectedCategory) }
                 Column(
                     modifier = Modifier
@@ -1192,7 +1297,7 @@ fun ExploreRoleplaysScreen(
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16, Alignment.CenterVertically),
                 ) {
                     ZunoEmptyState(
-                        icon = R.drawable.zuno_ic_users,
+                        icon = R.drawable.zuno_ic_search,
                         title = stringResource(R.string.roleplays_browse_empty_title, trimmed),
                         description = stringResource(R.string.roleplays_browse_empty_body),
                     )
@@ -1200,7 +1305,7 @@ fun ExploreRoleplaysScreen(
                         label = stringResource(R.string.topics_create_query_cta, trimmed),
                         onClick = { onCreateFromQuery(trimmed) },
                         size = ZunoButtonSize.Medium,
-                        leadingIcon = R.drawable.zuno_ic_plus_inverse,
+                        leadingIcon = R.drawable.zuno_ic_t_sparkles,
                         leadingIconTint = ZunoColors.IconOnInverse,
                     )
                 }
@@ -1208,53 +1313,122 @@ fun ExploreRoleplaysScreen(
             else -> {
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = 14.dp, bottom = ZunoSpace.s32),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = 18.dp, bottom = ZunoSpace.s32),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
-                    if (data.official.isNotEmpty()) {
-                        item(key = "official-header") {
-                            Text(
-                                text = stringResource(R.string.topics_official_header),
-                                style = ZunoType.Micro,
-                                color = ZunoColors.TextTertiary,
-                            )
-                        }
-                        item(key = "official-list") {
-                            ZunoListGroup {
-                                data.official.forEachIndexed { index, item ->
-                                    ExplorePreviewCard(
-                                        icon = R.drawable.zuno_ic_t_sparkles,
-                                        title = item.title,
-                                        subtitle = "${stringResource(R.string.topics_official_badge)} · ${item.userRole} / ${item.aiRole}",
-                                        onClick = { onOpenPreview(item) },
-                                        showDivider = index > 0,
-                                    )
+                    if (officialFiltered.isNotEmpty()) {
+                        item(key = "official-section") {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = stringResource(R.string.topics_official_header),
+                                    style = ZunoType.LabelSmall,
+                                    color = ZunoColors.TextSecondary,
+                                )
+                                ZunoListGroup {
+                                    officialFiltered.forEachIndexed { index, item ->
+                                        ExplorePreviewCard(
+                                            icon = R.drawable.zuno_ic_t_sparkles,
+                                            title = item.title,
+                                            subtitle = "${item.userRole} · ${item.aiRole}",
+                                            onClick = { onOpenPreview(item) },
+                                            showDivider = index > 0,
+                                            inverseBadge = true,
+                                            levelBadge = item.level,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    if (data.community.isNotEmpty()) {
-                        item(key = "community-header") {
-                            Text(
-                                text = stringResource(R.string.roleplays_community_header),
-                                style = ZunoType.Micro,
-                                color = ZunoColors.TextTertiary,
-                            )
-                        }
-                        item(key = "community-list") {
-                            ZunoListGroup {
-                                data.community.forEachIndexed { index, item ->
-                                    ExplorePreviewCard(
-                                        icon = R.drawable.zuno_ic_users,
-                                        title = item.title,
-                                        subtitle = "${item.authorHandle ?: "@learner"} · ${stringResource(R.string.roleplays_practiced_count, item.practicedCount)}",
-                                        onClick = { onOpenPreview(item) },
-                                        showDivider = index > 0,
+                    if (communityFiltered.isNotEmpty()) {
+                        item(key = "community-section") {
+                            val levelsSummary = communityFiltered.map { it.level }.distinct().let { lvls ->
+                                when {
+                                    lvls.size >= 2 -> "${lvls.first()}–${lvls.last()}"
+                                    lvls.size == 1 -> lvls.first()
+                                    else -> "B1"
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.roleplays_community_header),
+                                        style = ZunoType.LabelSmall,
+                                        color = ZunoColors.TextSecondary,
                                     )
+                                    Text(
+                                        text = pluralStringResource(
+                                            R.plurals.roleplays_explore_results_count,
+                                            communityFiltered.size,
+                                            communityFiltered.size,
+                                            levelsSummary,
+                                        ),
+                                        style = ZunoType.FootnoteRegular,
+                                        color = ZunoColors.TextTertiary,
+                                    )
+                                }
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .zunoGlassSubtle(
+                                            shape = RoundedCornerShape(ZunoRadius.xxl),
+                                            fillColor = ZunoColors.SurfaceSubtle,
+                                            borderBrush = SolidColor(ZunoColors.BorderSubtle),
+                                        ),
+                                ) {
+                                    communityFiltered.forEachIndexed { index, item ->
+                                        ExplorePreviewCard(
+                                            icon = R.drawable.zuno_ic_t_globe,
+                                            title = item.title,
+                                            subtitle = "${item.authorHandle ?: "@learner"} · ${stringResource(R.string.roleplays_practiced_count, item.practicedCount)}",
+                                            onClick = { onOpenPreview(item) },
+                                            showDivider = index > 0,
+                                            inverseBadge = false,
+                                            levelBadge = item.level,
+                                        )
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showFilterSheet) {
+        ZunoSheet(
+            onDismiss = { showFilterSheet = false },
+            title = stringResource(R.string.roleplays_explore_filter_title),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = ZunoSpace.s12),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            ) {
+                Text(
+                    text = stringResource(R.string.topics_explore_filter_level),
+                    style = ZunoType.LabelSmall,
+                    color = ZunoColors.TextSecondary,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                ) {
+                    TopicExploreLevels.forEach { lvl ->
+                        val label = if (lvl == "all") stringResource(R.string.topics_cat_all) else lvl
+                        ZunoChip(
+                            label = label,
+                            selected = selectedLevel == lvl,
+                            onClick = {
+                                selectedLevel = lvl
+                                showFilterSheet = false
+                            },
+                        )
                     }
                 }
             }

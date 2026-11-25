@@ -54,6 +54,7 @@ enum class DrawerDestination(@param:StringRes val labelRes: Int, val label: Stri
     Roleplays(R.string.drawer_roleplays, "Roleplays", R.drawable.zuno_ic_t_sparkles),
     Vocabulary(R.string.drawer_vocabulary, "Vocabulary", R.drawable.zuno_ic_bookmark),
     Scheduled(R.string.drawer_scheduled, "Scheduled", R.drawable.zuno_ic_t_calendar),
+    Chats(R.string.chats_title, "Chats", R.drawable.zuno_ic_messages_square),
     LiveRooms(R.string.home_explore_live_rooms, "Live rooms", R.drawable.zuno_ic_radio),
     Community(R.string.home_explore_community, "Community & Partners", R.drawable.zuno_ic_t_users),
     Progress(R.string.drawer_progress, "Progress", R.drawable.zuno_ic_trending_up),
@@ -86,6 +87,7 @@ fun AppDrawer(
     modifier: Modifier = Modifier,
     vocabDueCount: Int = 14,
     scheduledTimeLabel: String? = "7:00 PM",
+    unreadChatsCount: Int = 2,
     activeLiveRoomsCount: Int = 2,
     partnersOnlineCount: Int = 12,
     leagueRank: Int = 5,
@@ -185,6 +187,24 @@ fun AppDrawer(
             )
 
             DrawerSectionEyebrow("Live & social")
+            ZunoMenuItem(
+                label = stringResource(DrawerDestination.Chats.labelRes),
+                icon = DrawerDestination.Chats.icon,
+                active = activeDestination == DrawerDestination.Chats,
+                trailing = if (unreadChatsCount > 0) {
+                    {
+                        Text(
+                            text = stringResource(R.string.drawer_unread_count, unreadChatsCount),
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            maxLines = 1,
+                        )
+                    }
+                } else {
+                    null
+                },
+                onClick = { onDestination(DrawerDestination.Chats) },
+            )
             ZunoMenuItem(
                 label = stringResource(DrawerDestination.LiveRooms.labelRes),
                 icon = DrawerDestination.LiveRooms.icon,

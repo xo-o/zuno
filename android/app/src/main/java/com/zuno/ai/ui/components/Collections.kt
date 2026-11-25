@@ -138,6 +138,62 @@ fun ZunoListGroup(modifier: Modifier = Modifier, content: @Composable ColumnScop
 }
 
 /**
+ * Topic Up Next Card (`7198:13088`): compact 2-line action callout card (`surface/strong`, `border/default`,
+ * `radius/2xl`) used on Topic detail (`Up next · Lesson N` -> `Continue`) and Community Preview screens.
+ */
+@Composable
+fun ZunoTopicUpNextCard(
+    eyebrow: String,
+    title: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    busy: Boolean = false,
+) {
+    val shape = RoundedCornerShape(ZunoRadius.xxl)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .zunoGlassElevated(
+                shape = shape,
+                fillColor = ZunoColors.SurfaceStrong,
+                borderBrush = SolidColor(ZunoColors.BorderDefault),
+            )
+            .clickable(enabled = !busy, role = Role.Button, onClick = onAction)
+            .padding(start = ZunoSpace.s16, end = ZunoSpace.s14, top = ZunoSpace.s14, bottom = ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+        ) {
+            Text(
+                text = eyebrow,
+                style = ZunoType.FootnoteRegular,
+                color = ZunoColors.TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = title,
+                style = ZunoType.BodyMediumStrong,
+                color = ZunoColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        ZunoButton(
+            label = actionLabel,
+            onClick = onAction,
+            variant = ZunoButtonVariant.Primary,
+            size = ZunoButtonSize.Small,
+            loading = busy,
+        )
+    }
+}
+
+/**
  * An overflow menu item. [icon] is a tintable `zuno_ic_t_*` glyph; [destructive] renders it red;
  * [dividerBefore] draws a rule above it (e.g. before Delete).
  */

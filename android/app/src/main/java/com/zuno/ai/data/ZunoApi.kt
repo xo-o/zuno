@@ -183,6 +183,13 @@ class ZunoApi(
     suspend fun setTopicPinned(id: String, pinned: Boolean): TopicDetail =
         send("PATCH", "/topics/$id", JSONObject().put("pinned", pinned)).getJSONObject("topic").toTopicDetail()
 
+    suspend fun updateTopic(id: String, title: String? = null, category: String? = null): TopicDetail {
+        val body = JSONObject()
+        title?.takeIf { it.isNotBlank() }?.let { body.put("title", it.trim()) }
+        category?.takeIf { it.isNotBlank() }?.let { body.put("category", it) }
+        return send("PATCH", "/topics/$id", body).getJSONObject("topic").toTopicDetail()
+    }
+
     suspend fun setTopicShare(id: String, public: Boolean): TopicShareResult =
         send("PUT", "/topics/$id/share", JSONObject().put("visibility", if (public) "public" else "private")).let {
             TopicShareResult(
@@ -273,10 +280,11 @@ class ZunoApi(
 
     suspend fun roleplay(id: String): Roleplay = get("/roleplays/$id").getJSONObject("roleplay").toRoleplay()
 
-    suspend fun discoverRoleplays(category: String = "all", query: String = ""): DiscoverRoleplaysResult {
+    suspend fun discoverRoleplays(category: String = "all", query: String = "", level: String = "all"): DiscoverRoleplaysResult {
         val encodedQ = java.net.URLEncoder.encode(query, "UTF-8")
         val encodedCat = java.net.URLEncoder.encode(category, "UTF-8")
-        val json = get("/roleplays/discover?category=$encodedCat&q=$encodedQ")
+        val encodedLevel = java.net.URLEncoder.encode(level, "UTF-8")
+        val json = get("/roleplays/discover?category=$encodedCat&q=$encodedQ&level=$encodedLevel")
         return DiscoverRoleplaysResult(
             official = json.listOf("official").map { it.toDiscoverRoleplay() },
             community = json.listOf("community").map { it.toDiscoverRoleplay() },
@@ -328,6 +336,21 @@ class ZunoApi(
 
     suspend fun setRoleplayPinned(id: String, pinned: Boolean): Roleplay =
         send("PATCH", "/roleplays/$id", JSONObject().put("pinned", pinned)).getJSONObject("roleplay").toRoleplay()
+
+    suspend fun updateRoleplay(
+        id: String,
+        title: String? = null,
+        category: String? = null,
+        userRole: String? = null,
+        aiRole: String? = null,
+    ): Roleplay {
+        val body = JSONObject()
+        title?.takeIf { it.isNotBlank() }?.let { body.put("title", it.trim()) }
+        category?.takeIf { it.isNotBlank() }?.let { body.put("category", it) }
+        userRole?.takeIf { it.isNotBlank() }?.let { body.put("userRole", it.trim()) }
+        aiRole?.takeIf { it.isNotBlank() }?.let { body.put("aiRole", it.trim()) }
+        return send("PATCH", "/roleplays/$id", body).getJSONObject("roleplay").toRoleplay()
+    }
 
     suspend fun setRoleplayShare(id: String, public: Boolean): RoleplayShareResult =
         send("PUT", "/roleplays/$id/share", JSONObject().put("visibility", if (public) "public" else "private")).let {
@@ -600,6 +623,143 @@ class ZunoApi(
         send("POST", "/tutor/hint", JSONObject().put("text", text)).let {
             if (it.isNull("hint")) null else it.optString("hint").takeIf(String::isNotBlank)
         }
+
+    // Account Privacy, Avatar Removal & Data Export
+
+    suspend fun deleteAvatar() {
+        send("DELETE", "/me/avatar")
+    }
+
+    suspend fun privacySettings(): PrivacySettings =
+        get("/me/privacy").getJSONObject("privacy").toPrivacySettings()
+
+    suspend fun updatePrivacySettings(
+        openToSpeak: Boolean? = null,
+        allowCallInvites: Boolean? = null,
+        whoCanMessage: String? = null,
+    ): PrivacySettings {
+        val body = JSONObject()
+        openToSpeak?.let { body.put("openToSpeak", it) }
+        allowCallInvites?.let { body.put("allowCallInvites", it) }
+        whoCanMessage?.let { body.put("whoCanMessage", it) }
+        return send("PATCH", "/me/privacy", body).getJSONObject("privacy").toPrivacySettings()
+    }
+
+    suspend fun unblockLearner(userId: String) {
+        send("DELETE", "/me/blocked/$userId")
+    }
+
+    suspend fun requestDataExport(): String =
+        send("POST", "/me/export").optString("email")
+
+    // 12 · Vocabulary SRS Library
+
+    suspend fun vocabulary(): VocabLibrary = get("/vocabulary").toVocabLibrary()
+
+    suspend fun previewVocabPhrase(phrase: String, contextNote: String? = null): VocabPreview {
+        val body = JSONObject().put("phrase", phrase.trim())
+        contextNote?.takeIf { it.isNotBlank() }?.let { body.put("contextNote", it.trim()) }
+        return send("POST", "/vocabulary/preview", body).toVocabPreview()
+    }
+
+    suspend fun addVocabPhrase(
+        phrase: String,
+        translation: String? = null,
+        source: String? = null,
+        contextNote: String? = null,
+    ): VocabPhrase {
+        val body = JSONObject().put("phrase", phrase.trim())
+        translation?.takeIf { it.isNotBlank() }?.let { body.put("translation", it.trim()) }
+        source?.takeIf { it.isNotBlank() }?.let { body.put("source", it.trim()) }
+        contextNote?.takeIf { it.isNotBlank() }?.let { body.put("contextNote", it.trim()) }
+        return send("POST", "/vocabulary", body).getJSONObject("phrase").toVocabPhrase()
+    }
+
+    suspend fun updateVocabPhrase(
+        id: String,
+        phrase: String? = null,
+        translation: String? = null,
+        contextNote: String? = null,
+    ): VocabPhrase {
+        val body = JSONObject()
+        phrase?.takeIf { it.isNotBlank() }?.let { body.put("phrase", it.trim()) }
+        translation?.takeIf { it.isNotBlank() }?.let { body.put("translation", it.trim()) }
+        if (contextNote != null) body.put("contextNote", contextNote.trim().ifBlank { JSONObject.NULL })
+        return send("PATCH", "/vocabulary/$id", body).getJSONObject("phrase").toVocabPhrase()
+    }
+
+    suspend fun reviewVocabPhrase(id: String, passed: Boolean): VocabPhrase =
+        send("POST", "/vocabulary/$id/review", JSONObject().put("passed", passed))
+            .getJSONObject("phrase")
+            .toVocabPhrase()
+
+    suspend fun captureVocabPhrases(phrases: List<Triple<String, String?, String?>>): List<VocabPhrase> {
+        val array = JSONArray().apply {
+            phrases.forEach { (phrase, translation, source) ->
+                put(
+                    JSONObject().apply {
+                        put("phrase", phrase.trim())
+                        translation?.takeIf { it.isNotBlank() }?.let { put("translation", it.trim()) }
+                        source?.takeIf { it.isNotBlank() }?.let { put("source", it.trim()) }
+                    },
+                )
+            }
+        }
+        return send("POST", "/vocabulary/capture", JSONObject().put("phrases", array))
+            .listOf("phrases")
+            .map { it.toVocabPhrase() }
+    }
+
+    suspend fun deleteVocabPhrase(id: String) {
+        send("DELETE", "/vocabulary/$id")
+    }
+
+    // 15 · Live Rooms
+
+    suspend fun liveRooms(): LiveRoomsBrowse = get("/live-rooms").toLiveRoomsBrowse()
+
+    suspend fun createLiveRoom(
+        title: String,
+        language: String,
+        level: String,
+        maxMembers: Int,
+        visibility: String,
+    ): LiveRoom = send(
+        "POST",
+        "/live-rooms",
+        JSONObject()
+            .put("title", title.trim())
+            .put("language", language)
+            .put("level", level)
+            .put("maxMembers", maxMembers.coerceIn(2, 4))
+            .put("visibility", visibility),
+    ).getJSONObject("room").toLiveRoom()
+
+    suspend fun liveRoom(id: String): LiveRoom = get("/live-rooms/$id").getJSONObject("room").toLiveRoom()
+
+    suspend fun joinLiveRoom(id: String): JoinLiveRoomResult =
+        send("POST", "/live-rooms/$id/join").toJoinLiveRoomResult()
+
+    suspend fun joinLiveRoomByCode(code: String): JoinLiveRoomResult =
+        send("POST", "/live-rooms/join-code", JSONObject().put("code", code.trim())).toJoinLiveRoomResult()
+
+    suspend fun startLiveRoom(id: String): JoinLiveRoomResult =
+        send("POST", "/live-rooms/$id/start").toJoinLiveRoomResult()
+
+    suspend fun updateLiveRoom(id: String, visibility: String? = null, nextQuestion: Boolean = false): LiveRoom {
+        val body = JSONObject()
+        visibility?.let { body.put("visibility", it) }
+        if (nextQuestion) body.put("nextQuestion", true)
+        return send("PATCH", "/live-rooms/$id", body).getJSONObject("room").toLiveRoom()
+    }
+
+    suspend fun leaveLiveRoom(id: String) {
+        send("POST", "/live-rooms/$id/leave")
+    }
+
+    suspend fun endLiveRoom(id: String) {
+        send("POST", "/live-rooms/$id/end")
+    }
 
     // Transport
 

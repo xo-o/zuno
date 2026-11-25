@@ -19,16 +19,23 @@ import com.zuno.ai.data.DiscoverRoleplaysResult
 import com.zuno.ai.data.DiscoverTopic
 import com.zuno.ai.data.DiscoverTopicsResult
 import com.zuno.ai.data.DraftStore
+import com.zuno.ai.data.JoinLiveRoomResult
 import com.zuno.ai.data.JoinPeerCallResult
+import com.zuno.ai.data.LiveRoom
+import com.zuno.ai.data.LiveRoomsBrowse
 import com.zuno.ai.data.MaterialPart
 import com.zuno.ai.data.PeerConversationThread
 import com.zuno.ai.data.PeerMessage
 import com.zuno.ai.data.PreparedFile
+import com.zuno.ai.data.PrivacySettings
 import com.zuno.ai.data.RoleplayDraft
 import com.zuno.ai.data.RoleplaySessionTicket
 import com.zuno.ai.data.RoleplayShareResult
 import com.zuno.ai.data.SavedDraftAttachment
 import com.zuno.ai.data.StartPeerCallResult
+import com.zuno.ai.data.VocabLibrary
+import com.zuno.ai.data.VocabPhrase
+import com.zuno.ai.data.VocabPreview
 import com.zuno.ai.data.Conversation
 import com.zuno.ai.data.ConversationThread
 import com.zuno.ai.data.Message
@@ -67,6 +74,14 @@ import kotlinx.coroutines.launch
 
 /** A list loaded from the API. [items] is null until the first successful load. */
 data class Loadable<T>(val items: T? = null, val loading: Boolean = false, val error: String? = null)
+
+/** Lifecycle of the signed-in learner's profile (`/api/me`), used as the single source of truth for post-auth routing. */
+sealed interface ProfileSyncState {
+    data object Idle : ProfileSyncState
+    data object Loading : ProfileSyncState
+    data class Ready(val profile: Profile) : ProfileSyncState
+    data class Failed(val message: String) : ProfileSyncState
+}
 
 data class ChatState(
     val conversation: Conversation,
@@ -151,8 +166,19 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     private val _profile = MutableStateFlow<Profile?>(null)
     val profile: StateFlow<Profile?> = _profile.asStateFlow()
 
-    private val _profileLoading = MutableStateFlow(false)
-    val profileLoading: StateFlow<Boolean> = _profileLoading.asStateFlow()
+    private val _profileSyncState = MutableStateFlow<ProfileSyncState>(ProfileSyncState.Idle)
+    val profileSyncState: StateFlow<ProfileSyncState> = _profileSyncState.asStateFlow()
+    private var profileJob: Job? = null
+
+    private fun setLoadedProfile(profile: Profile) {
+        _profile.value = profile
+        _profileSyncState.value = ProfileSyncState.Ready(profile)
+    }
+
+    private fun updateLoadedProfile(transform: (Profile) -> Profile) {
+        val current = _profile.value ?: return
+        setLoadedProfile(transform(current))
+    }
 
     private val _recent = MutableStateFlow<List<RecentSession>>(emptyList())
     val recent: StateFlow<List<RecentSession>> = _recent.asStateFlow()
@@ -204,6 +230,18 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _coachPrompts = MutableStateFlow(CoachPrompts())
     val coachPrompts: StateFlow<CoachPrompts> = _coachPrompts.asStateFlow()
+
+    private val _vocabLibrary = MutableStateFlow(Loadable<VocabLibrary>())
+    val vocabLibrary: StateFlow<Loadable<VocabLibrary>> = _vocabLibrary.asStateFlow()
+
+    private val _liveRooms = MutableStateFlow(Loadable<LiveRoomsBrowse>())
+    val liveRooms: StateFlow<Loadable<LiveRoomsBrowse>> = _liveRooms.asStateFlow()
+
+    private val _activeLiveRoom = MutableStateFlow<LiveRoom?>(null)
+    val activeLiveRoom: StateFlow<LiveRoom?> = _activeLiveRoom.asStateFlow()
+
+    private val _privacySettings = MutableStateFlow<PrivacySettings?>(null)
+    val privacySettings: StateFlow<PrivacySettings?> = _privacySettings.asStateFlow()
 
     /** True while a create/open request that leads to navigation is running. */
     private val _busy = MutableStateFlow(false)
@@ -368,7 +406,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     fun uploadAvatar(file: java.io.File, onDone: (Boolean) -> Unit) = viewModelScope.launch {
         try {
             val url = api.uploadAvatar(file, "image/jpeg")
-            _profile.update { it?.copy(imageUrl = url) }
+            updateLoadedProfile { it.copy(imageUrl = url) }
             onDone(true)
         } catch (e: ApiException) {
             handleAuth(e)
@@ -386,15 +424,33 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Loads everything the signed-in shell needs (drawer + home). */
     fun refreshAccount() {
-        _profileLoading.value = true
-        viewModelScope.launch {
-            try {
-                _profile.value = api.profile()
-            } catch (e: ApiException) {
-                handleAuth(e)
-                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
-            } finally {
-                _profileLoading.value = false
+        profileJob?.cancel()
+        if (_profile.value == null) {
+            _profileSyncState.value = ProfileSyncState.Loading
+        }
+        profileJob = viewModelScope.launch {
+            val delaysMs = longArrayOf(350L, 800L)
+            var attempt = 0
+            while (true) {
+                try {
+                    setLoadedProfile(api.profile())
+                    break
+                } catch (e: ApiException) {
+                    handleAuth(e)
+                    if (e.unauthorized) break
+                    if (_profile.value == null && attempt < delaysMs.size) {
+                        delay(delaysMs[attempt++])
+                        continue
+                    }
+                    if (_profile.value == null) {
+                        _profileSyncState.value = ProfileSyncState.Failed(
+                            e.message ?: "Check your connection and try again."
+                        )
+                    } else {
+                        e.message?.let { _messages.tryEmit(it) }
+                    }
+                    break
+                }
             }
         }
         refreshRecent()
@@ -434,7 +490,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             interests = interests,
             goalNote = goalNote,
         )
-        _profile.value = res.profile
+        setLoadedProfile(res.profile)
         cacheTopic(res.starterTopic)
         _topics.update { state ->
             val existing = state.items.orEmpty().filterNot { it.id == res.starterTopic.summary.id }
@@ -454,8 +510,8 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             val others = state.items.orEmpty().filterNot { it.id == topic.summary.id }
             state.copy(items = listOf(topic.summary) + others)
         }
-        _profile.update { current ->
-            current?.copy(recommendedTopics = current.recommendedTopics.filterNot { it.id == rec.id })
+        updateLoadedProfile { current ->
+            current.copy(recommendedTopics = current.recommendedTopics.filterNot { it.id == rec.id })
         }
         refreshRecent()
         onCreated(topic)
@@ -471,8 +527,10 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshRecent() = launchSafely(silent = true) { _recent.value = api.recentSessions() }
 
     fun clear() {
+        profileJob?.cancel()
+        profileJob = null
         _profile.value = null
-        _profileLoading.value = false
+        _profileSyncState.value = ProfileSyncState.Idle
         _notificationPrefs.value = null
         _schedules.value = Loadable()
         _scheduleTargets.value = Loadable()
@@ -492,6 +550,10 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _chatsOverview.value = Loadable()
         _peerChats.value = emptyMap()
         _coachPrompts.value = CoachPrompts()
+        _vocabLibrary.value = Loadable()
+        _liveRooms.value = Loadable()
+        _activeLiveRoom.value = null
+        _privacySettings.value = null
         _typingHint.value = null
         uploadJobs.values.forEach { it.cancel() }
         uploadJobs.clear()
@@ -508,32 +570,35 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         name: String? = null,
         appLanguage: AppLanguage? = null,
         accent: String? = null,
+        interests: List<String>? = null,
     ) {
         val fields = buildMap<String, Any> {
             level?.let { put("level", it) }
             name?.let { put("name", it) }
             appLanguage?.let { put("nativeLanguage", it.code) }
             accent?.let { put("accent", it) }
+            interests?.let { put("interests", org.json.JSONArray(it)) }
         }
         if (fields.isEmpty()) return
         // Optimistic: the settings screens reflect the change right away.
         val previous = _profile.value
-        _profile.update { current ->
-            current?.copy(
+        updateLoadedProfile { current ->
+            current.copy(
                 level = level ?: current.level,
                 name = name ?: current.name,
                 appLanguage = appLanguage ?: current.appLanguage,
                 accent = accent ?: current.accent,
+                interests = interests ?: current.interests,
                 levelChecked = current.levelChecked || level != null,
             )
         }
         viewModelScope.launch {
             try {
-                _profile.value = api.updateProfile(fields)
+                setLoadedProfile(api.updateProfile(fields))
                 if (appLanguage != null) _typingHint.value = null
             } catch (e: ApiException) {
                 handleAuth(e)
-                _profile.value = previous
+                if (previous != null) setLoadedProfile(previous)
                 if (!e.unauthorized && appLanguage == null) e.message?.let { _messages.tryEmit(it) }
             }
         }
@@ -544,7 +609,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         val previous = _profile.value ?: return
         val next = transform(previous.preferences)
         if (next == previous.preferences) return
-        _profile.value = previous.copy(preferences = next)
+        setLoadedProfile(previous.copy(preferences = next))
         val fields = buildMap<String, Any> {
             val old = previous.preferences
             if (next.tutorId != old.tutorId) put("tutorId", next.tutorId)
@@ -561,10 +626,10 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         if (!next.suggestReplies) clearHint()
         viewModelScope.launch {
             try {
-                _profile.value = api.updateProfile(fields)
+                setLoadedProfile(api.updateProfile(fields))
             } catch (e: ApiException) {
                 handleAuth(e)
-                _profile.update { it?.copy(preferences = previous.preferences) }
+                updateLoadedProfile { it.copy(preferences = previous.preferences) }
                 if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
             }
         }
@@ -576,7 +641,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun switchLearningLanguage(code: String, onSwitched: (com.zuno.ai.data.Profile) -> Unit) = runBusy {
         val profile = api.updateProfile(mapOf("targetLanguage" to code))
-        _profile.value = profile
+        setLoadedProfile(profile)
         _typingHint.value = null
         _topics.value = Loadable()
         _roleplays.value = Loadable()
@@ -806,6 +871,13 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onDone(updated.summary.pinned)
     }
 
+    fun updateTopic(id: String, title: String? = null, category: String? = null, onDone: (TopicDetail) -> Unit = {}) = runBusy {
+        val updated = api.updateTopic(id, title = title, category = category)
+        cacheTopic(updated)
+        refreshRecent()
+        onDone(updated)
+    }
+
     fun setTopicShare(id: String, public: Boolean, onDone: (TopicShareResult) -> Unit = {}) = runBusy {
         val res = api.setTopicShare(id, public)
         cacheTopic(res.topic)
@@ -829,6 +901,12 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadTopic(id: String) = launchSafely { cacheTopic(api.topic(id)) }
+
+    fun openTopicDetail(id: String, onLoaded: (TopicDetail) -> Unit) = runBusy {
+        val detail = api.topic(id)
+        cacheTopic(detail)
+        onLoaded(detail)
+    }
 
     fun deleteTopic(id: String) = launchSafely {
         api.deleteTopic(id)
@@ -1063,11 +1141,11 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onCreated(created)
     }
 
-    fun loadDiscoverRoleplays(category: String = "all", query: String = "") {
+    fun loadDiscoverRoleplays(category: String = "all", query: String = "", level: String = "all") {
         _discoverRoleplays.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             try {
-                _discoverRoleplays.value = Loadable(api.discoverRoleplays(category, query))
+                _discoverRoleplays.value = Loadable(api.discoverRoleplays(category, query, level))
             } catch (e: ApiException) {
                 handleAuth(e)
                 _discoverRoleplays.update { it.copy(loading = false, error = e.message) }
@@ -1125,6 +1203,26 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         loadRoleplays()
         refreshRecent()
         onDone(updated.pinned)
+    }
+
+    fun updateRoleplay(
+        id: String,
+        title: String? = null,
+        category: String? = null,
+        userRole: String? = null,
+        aiRole: String? = null,
+        onDone: (Roleplay) -> Unit = {},
+    ) = runBusy {
+        val updated = api.updateRoleplay(
+            id = id,
+            title = title,
+            category = category,
+            userRole = userRole,
+            aiRole = aiRole,
+        )
+        cacheRoleplay(updated)
+        refreshRecent()
+        onDone(updated)
     }
 
     fun setRoleplayShare(id: String, public: Boolean, onDone: (RoleplayShareResult) -> Unit = {}) = runBusy {
@@ -1215,6 +1313,12 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadConversation(id: String) = launchSafely { cacheThread(api.conversation(id)) }
+
+    fun openConversationThread(id: String, onLoaded: (ConversationThread) -> Unit) = runBusy {
+        val thread = api.conversation(id)
+        cacheThread(thread)
+        onLoaded(thread)
+    }
 
     fun deleteConversation(id: String, onDeleted: () -> Unit) = launchSafely {
         api.deleteConversation(id)
@@ -1337,9 +1441,9 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                     _messages.tryEmit("Lesson complete — nice work!")
                 }
                 result.levelAssessed?.let { level ->
-                    _profile.update { it?.copy(level = level, levelChecked = true) }
+                    updateLoadedProfile { it.copy(level = level, levelChecked = true) }
                     _levelAssessed.tryEmit(level)
-                    launchSafely(silent = true) { _profile.value = api.profile() }
+                    launchSafely(silent = true) { setLoadedProfile(api.profile()) }
                 }
                 refreshRecent()
             } catch (e: ApiException) {
@@ -1823,6 +1927,212 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     fun clearHint() {
         hintJob?.cancel()
         _typingHint.value = null
+    }
+
+    // ── Account: Remove Photo, Privacy & Data Export ────────────────────────
+
+    fun removeAvatar(onDone: (Boolean) -> Unit = {}) = viewModelScope.launch {
+        try {
+            api.deleteAvatar()
+            updateLoadedProfile { it.copy(imageUrl = null) }
+            onDone(true)
+        } catch (e: ApiException) {
+            handleAuth(e)
+            if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            onDone(false)
+        }
+    }
+
+    fun loadPrivacySettings() = launchSafely {
+        _privacySettings.value = api.privacySettings()
+    }
+
+    fun updatePrivacySettings(
+        openToSpeak: Boolean? = null,
+        allowCallInvites: Boolean? = null,
+        whoCanMessage: String? = null,
+    ) {
+        val prev = _privacySettings.value
+        if (prev != null) {
+            _privacySettings.value = prev.copy(
+                openToSpeak = openToSpeak ?: prev.openToSpeak,
+                allowCallInvites = allowCallInvites ?: prev.allowCallInvites,
+                whoCanMessage = whoCanMessage ?: prev.whoCanMessage,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val updated = api.updatePrivacySettings(openToSpeak, allowCallInvites, whoCanMessage)
+                _privacySettings.value = updated
+                if (openToSpeak != null) {
+                    _chatsOverview.update { s -> s.copy(items = s.items?.copy(openToSpeak = updated.openToSpeak)) }
+                }
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (prev != null) _privacySettings.value = prev
+                if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
+            }
+        }
+    }
+
+    fun unblockLearner(userId: String, onDone: () -> Unit = {}) = launchSafely {
+        api.unblockLearner(userId)
+        _privacySettings.update { prev ->
+            prev?.copy(blockedLearners = prev.blockedLearners.filterNot { it.id == userId })
+        }
+        onDone()
+    }
+
+    fun requestDataExport(onDone: (String) -> Unit) = runBusy {
+        val email = api.requestDataExport()
+        onDone(email)
+    }
+
+    // ── 12 · Vocabulary SRS Library ─────────────────────────────────────────
+
+    fun loadVocabulary(silent: Boolean = false) {
+        if (!silent) _vocabLibrary.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _vocabLibrary.value = Loadable(api.vocabulary())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!silent) _vocabLibrary.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    suspend fun previewVocabPhrase(phrase: String, contextNote: String? = null): VocabPreview? = try {
+        api.previewVocabPhrase(phrase, contextNote)
+    } catch (_: Exception) {
+        null
+    }
+
+    fun addVocabPhrase(
+        phrase: String,
+        translation: String? = null,
+        source: String? = null,
+        contextNote: String? = null,
+        onAdded: (VocabPhrase) -> Unit = {},
+    ) = runBusy {
+        val created = api.addVocabPhrase(phrase, translation, source, contextNote)
+        _savedVocabPhrases.update { it + created.phrase }
+        loadVocabulary(silent = true)
+        onAdded(created)
+    }
+
+    fun updateVocabPhrase(
+        id: String,
+        phrase: String? = null,
+        translation: String? = null,
+        contextNote: String? = null,
+        onUpdated: (VocabPhrase) -> Unit = {},
+    ) = runBusy {
+        val updated = api.updateVocabPhrase(id, phrase, translation, contextNote)
+        loadVocabulary(silent = true)
+        onUpdated(updated)
+    }
+
+    fun reviewVocabPhrase(id: String, passed: Boolean, onReviewed: (VocabPhrase) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val updated = api.reviewVocabPhrase(id, passed)
+                loadVocabulary(silent = true)
+                onReviewed(updated)
+            } catch (e: ApiException) {
+                handleAuth(e)
+            }
+        }
+    }
+
+    fun captureVocabPhrases(
+        phrases: List<Triple<String, String?, String?>>,
+        onDone: (List<VocabPhrase>) -> Unit = {},
+    ) = runBusy {
+        val saved = api.captureVocabPhrases(phrases)
+        _savedVocabPhrases.update { it + saved.map { p -> p.phrase } }
+        loadVocabulary(silent = true)
+        onDone(saved)
+    }
+
+    fun deleteVocabPhrase(id: String, onDone: () -> Unit = {}) = runBusy {
+        api.deleteVocabPhrase(id)
+        loadVocabulary(silent = true)
+        onDone()
+    }
+
+    // ── 15 · Live Rooms ─────────────────────────────────────────────────────
+
+    fun loadLiveRooms(silent: Boolean = false) {
+        if (!silent) _liveRooms.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _liveRooms.value = Loadable(api.liveRooms())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!silent) _liveRooms.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun createLiveRoom(
+        title: String,
+        language: String,
+        level: String,
+        maxMembers: Int,
+        visibility: String,
+        onCreated: (LiveRoom) -> Unit,
+    ) = runBusy {
+        val created = api.createLiveRoom(title, language, level, maxMembers, visibility)
+        _activeLiveRoom.value = created
+        loadLiveRooms(silent = true)
+        onCreated(created)
+    }
+
+    fun refreshLiveRoom(id: String) = launchSafely(silent = true) {
+        _activeLiveRoom.value = api.liveRoom(id)
+    }
+
+    fun joinLiveRoom(id: String, onJoined: (JoinLiveRoomResult) -> Unit) = runBusy {
+        val res = api.joinLiveRoom(id)
+        _activeLiveRoom.value = res.room
+        loadLiveRooms(silent = true)
+        onJoined(res)
+    }
+
+    fun joinLiveRoomByCode(code: String, onJoined: (JoinLiveRoomResult) -> Unit) = runBusy {
+        val res = api.joinLiveRoomByCode(code)
+        _activeLiveRoom.value = res.room
+        loadLiveRooms(silent = true)
+        onJoined(res)
+    }
+
+    fun startLiveRoom(id: String, onStarted: (JoinLiveRoomResult) -> Unit) = runBusy {
+        val res = api.startLiveRoom(id)
+        _activeLiveRoom.value = res.room
+        loadLiveRooms(silent = true)
+        onStarted(res)
+    }
+
+    fun updateLiveRoom(id: String, visibility: String? = null, nextQuestion: Boolean = false, onDone: (LiveRoom) -> Unit = {}) = runBusy {
+        val updated = api.updateLiveRoom(id, visibility, nextQuestion)
+        _activeLiveRoom.value = updated
+        loadLiveRooms(silent = true)
+        onDone(updated)
+    }
+
+    fun leaveLiveRoom(id: String, onDone: () -> Unit = {}) = launchSafely(silent = true) {
+        api.leaveLiveRoom(id)
+        _activeLiveRoom.value = null
+        loadLiveRooms(silent = true)
+        onDone()
+    }
+
+    fun endLiveRoom(id: String, onDone: () -> Unit = {}) = launchSafely(silent = true) {
+        api.endLiveRoom(id)
+        _activeLiveRoom.value = null
+        loadLiveRooms(silent = true)
+        onDone()
     }
 
     private fun cacheThread(thread: ConversationThread) {

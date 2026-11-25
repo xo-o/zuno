@@ -23,6 +23,8 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.zuno.ai.data.AppLanguage
+import com.zuno.ai.data.ChatsFilter
+import com.zuno.ai.data.ChatsOverview
 import com.zuno.ai.data.CoachPromptItem
 import com.zuno.ai.data.CoachPrompts
 import com.zuno.ai.data.LearningLanguages
@@ -32,9 +34,12 @@ import com.zuno.ai.data.RecentKind
 import com.zuno.ai.data.RecentSession
 import com.zuno.ai.data.Schedule
 import com.zuno.ai.data.ScheduleRepeat
+import com.zuno.ai.data.UnifiedChatItem
+import com.zuno.ai.data.UnifiedChatKind
 import com.zuno.ai.ui.components.ContinueSessionUi
 import com.zuno.ai.ui.components.ZunoDialog
 import com.zuno.ai.ui.screens.ChatScreen
+import com.zuno.ai.ui.screens.ChatsScreen
 import com.zuno.ai.ui.screens.CommunityScreen
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
@@ -43,6 +48,7 @@ import com.zuno.ai.ui.screens.PaywallScreen
 import com.zuno.ai.ui.screens.ProgressScreen
 import com.zuno.ai.ui.screens.ScheduledScreen
 import com.zuno.ai.ui.screens.SettingsAccountScreen
+import com.zuno.ai.ui.screens.SettingsLearningScreen
 import com.zuno.ai.ui.screens.SettingsOverviewScreen
 import com.zuno.ai.ui.screens.VocabularyScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
@@ -176,6 +182,7 @@ class HomeScreensUiTest {
         var stage by mutableStateOf("home_active")
         var showMicDialog by mutableStateOf(false)
         var resumedConversationId by mutableStateOf<String?>(null)
+        var chatsOpenedCount by mutableStateOf(0)
         var slowReplayCalledWith by mutableStateOf<String?>(null)
 
         val activeSession = ContinueSessionUi(
@@ -234,7 +241,7 @@ class HomeScreensUiTest {
                                     onAvatarClick = {},
                                     onDailyGoalContinue = {},
                                     onOpenTopics = {},
-                                    onOpenChats = {},
+                                    onOpenChats = { chatsOpenedCount += 1 },
                                     onOpenRoleplays = {},
                                     onOpenScheduled = {},
                                     onOpenSettings = {},
@@ -339,6 +346,19 @@ class HomeScreensUiTest {
                                 modifier = Modifier.fillMaxSize(),
                             )
 
+                            "learning" -> SettingsLearningScreen(
+                                profile = sampleProfile.copy(interests = listOf("Software", "Interviews")),
+                                appLanguage = AppLanguage.English,
+                                onOpenLanguages = {},
+                                onAccentChange = {},
+                                onLevelChange = {},
+                                onFindLevel = {},
+                                onPreferencesChange = {},
+                                onBack = {},
+                                onUpdateInterests = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
                             "scheduled" -> ScheduledScreen(
                                 schedules = Loadable(sampleSchedules),
                                 highlightId = null,
@@ -361,7 +381,6 @@ class HomeScreensUiTest {
                                     menu = emptyList(),
                                     sessionKindLabel = "Free talk",
                                     languageLevelLabel = "Spanish B1",
-                                    initialCaptionsOn = false,
                                     coachPrompts = CoachPrompts(
                                         answers = listOf(
                                             CoachPromptItem("Un café con leche, por favor.", "A coffee with milk, please."),
@@ -433,27 +452,13 @@ class HomeScreensUiTest {
                 }
             }
 
-            // 1. Home · 1 · Active — Continue with Zuno (Clean Foundations tokens + Next tasks)
-            waitForText("Hola, Noah")
+            // 1. Home · 1 · Active — Continue with Zuno (`7365:20293` Agent Horizon)
+            waitForText("22")
             waitForText("Spanish · B1")
-            waitForText("7 min left to reach today’s 15 min goal")
-            waitForText("8 / 15 min today")
-            waitForText("53%")
-            waitForText("Pick up where you left off")
-            waitForText("At the café")
-            waitForText("Spanish B1 · 2h ago")
-            waitForText("Resume")
-            waitForText("Next tasks")
-            waitForText("Practice vocabulary")
-            waitForText("12 due")
-            waitForText("Roleplay · Ordering food")
-            waitForText("5 min")
-            waitForText("Free talk with Zuno")
-            waitForText("Open")
+            waitForText("Hold the glow to talk")
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
+            waitForText("Type instead")
             saveScreenshot(scenario, "01_home_active")
-
-            tapText("Resume")
-            assertTrue("Expected Resume to open conversation", resumedConversationId == "conv-1")
 
             // 2. Home · 5 · Sidebar Drawer (BgElevated #1E1E1E overlay)
             tapText("Open navigation menu")
@@ -465,6 +470,8 @@ class HomeScreensUiTest {
             waitForText("Vocabulary")
             waitForText("12 due")
             waitForText("Live & social")
+            waitForText("Chats")
+            waitForText("2 unread")
             waitForText("Live rooms")
             waitForText("Community & Partners")
             waitForText("Progress")
@@ -473,8 +480,10 @@ class HomeScreensUiTest {
             waitForText("Settings")
             waitForText("New chat")
             saveScreenshot(scenario, "02_home_sidebar_drawer")
-            tapText("Close navigation menu")
-            waitForText("Hola, Noah")
+            tapText("Chats")
+            Thread.sleep(350)
+            assertTrue("Expected Chats drawer item to navigate to Chats", chatsOpenedCount == 1)
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
 
             // 3. Home · 8 · Mic Blocked → Dialog
             showMicDialog = true
@@ -483,18 +492,20 @@ class HomeScreensUiTest {
             tapText("Not now")
             Thread.sleep(200)
 
-            // 4. Home empty state (new user with no prior session)
+            // 4. Home empty state
             stage = "home_empty"
-            waitForText("Start practicing")
-            waitForText("Free talk")
-            waitForText("Start")
+            waitForText("Hold the glow to talk")
+            waitForText("Type instead")
             saveScreenshot(scenario, "04_home_empty")
 
-            // 5. Home · 6 · Speaking — No captions
+            // 5. Home · 6 · Speaking — No captions (`7383:13309` Agent Horizon)
             stage = "voice"
-            waitForText("Live · 00:", substring = true)
+            waitForText("Free talk · 00:", substring = true)
+            waitForText("ZunoAI")
+            waitForText("Speak anytime to interrupt")
             waitForText("End call")
             waitForText("Show captions")
+            Thread.sleep(950) // allow smooth Mono -> Cobalt transition to complete
             saveScreenshot(scenario, "05_voice_no_captions")
 
             // 6. Home · 7 · Speaking — Captions
@@ -574,10 +585,192 @@ class HomeScreensUiTest {
             waitForText("Privacy & visibility")
             saveScreenshot(scenario, "15_account")
 
+            stage = "learning"
+            waitForText("Learning")
+            waitForText("Interests")
+            waitForText("Software, Interviews")
+            saveScreenshot(scenario, "15b_learning")
+
             stage = "scheduled"
             waitForText("Scheduled")
             waitForText("Encuentra la parada de autobús")
             saveScreenshot(scenario, "16_scheduled")
+        }
+    }
+
+    @Test
+    fun drawerChatsNavigationWorks() {
+        var destination by mutableStateOf("home")
+        val now = System.currentTimeMillis()
+        val overview = ChatsOverview(
+            openToSpeak = true,
+            language = "es",
+            languageName = "Spanish",
+            level = "B1",
+            openSpeakers = emptyList(),
+            partners = emptyList(),
+            conversations = listOf(
+                UnifiedChatItem(
+                    id = "c1",
+                    kind = UnifiedChatKind.Ai,
+                    conversationId = "c1",
+                    peerConversationId = null,
+                    partnerId = null,
+                    title = "Pedir un café",
+                    badge = "AI",
+                    isVoice = false,
+                    openToSpeak = false,
+                    snippet = "Sofía · ¡Claro! Son tres euros.",
+                    unread = true,
+                    pinned = false,
+                    updatedAtMillis = now - 120_000L,
+                    avatarInitial = "S",
+                    avatarUrl = null,
+                ),
+                UnifiedChatItem(
+                    id = "p1",
+                    kind = UnifiedChatKind.Peer,
+                    conversationId = null,
+                    peerConversationId = "pc1",
+                    partnerId = "u2",
+                    title = "Lucía M.",
+                    badge = null,
+                    isVoice = false,
+                    openToSpeak = true,
+                    snippet = "¿Practicamos 5 min antes de la clase?",
+                    unread = true,
+                    pinned = false,
+                    updatedAtMillis = now - 840_000L,
+                    avatarInitial = "L",
+                    avatarUrl = null,
+                ),
+            ),
+        )
+        val unreadCount = overview.conversations.count { it.unread }
+        val recentSessions = listOf(
+            RecentSession("conv-1", RecentKind.FreeTalk, "Café en Madrid", "AI · Now", pinned = true, conversationId = "conv-1"),
+        )
+
+        ActivityScenario.launch(ComponentActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                    navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                )
+                activity.window.setBackgroundDrawableResource(R.color.background)
+                activity.setContent {
+                    ZunoTheme {
+                        when (destination) {
+                            "chats" -> ChatsScreen(
+                                overview = Loadable(overview),
+                                userInitial = "N",
+                                userImageUrl = null,
+                                initialFilter = ChatsFilter.All,
+                                onRetry = {},
+                                onToggleOpenToSpeak = {},
+                                onOpenAiConversation = {},
+                                onStartAiChat = {},
+                                onStartAiVoiceCall = {},
+                                onOpenRoleplays = {},
+                                onOpenPeerChat = {},
+                                onInvitePeerToTalk = {},
+                                onTogglePartner = { _, _ -> },
+                                onBack = { destination = "home" },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            "voice_new", "voice_resume" -> VoiceModeScreen(
+                                status = VoiceCallStatus.Listening,
+                                level = { 0.25f },
+                                startedAtMillis = now - 5_000L,
+                                tutorLine = "¡Hola! ¿De qué quieres hablar hoy?",
+                                isMuted = false,
+                                menu = emptyList(),
+                                sessionKindLabel = "Free talk",
+                                languageLevelLabel = "Spanish B1",
+                                initialCaptionsOn = true,
+                                onEnd = { destination = "home" },
+                                onInterrupt = {},
+                                onToggleMute = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            else -> HomeScreen(
+                                copy = HomeCopy.forLanguage(LearningLanguages.Spanish, "Noah"),
+                                userName = "Noah Carter",
+                                userInitial = "N",
+                                userImage = null,
+                                streakDays = 22,
+                                dailyGoalMinutesDone = 8,
+                                dailyGoalTargetMinutes = 15,
+                                level = "B1",
+                                showUpgrade = true,
+                                continueSession = null,
+                                recentSessions = recentSessions,
+                                unreadChatsCount = unreadCount,
+                                onStreakClick = {},
+                                onAvatarClick = {},
+                                onDailyGoalContinue = {},
+                                onOpenTopics = {},
+                                onOpenChats = { destination = "chats" },
+                                onOpenRoleplays = {},
+                                onOpenScheduled = {},
+                                onOpenSettings = {},
+                                onStartHomeVoice = { destination = "voice_new" },
+                                onStartFreeTalk = { destination = "voice_new" },
+                                onNewChat = { destination = "voice_new" },
+                                onOpenConversation = { destination = "voice_resume" },
+                                onOpenRecentSession = { destination = "voice_resume" },
+                                onUpgrade = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 1. Open drawer from Home, verify Chats + 2 unread, verify Free Talk stays on Home
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
+            tapText("Open navigation menu")
+            waitForText("Live & social")
+            waitForText("Chats")
+            waitForText("2 unread")
+
+            tapText("Free Talk")
+            Thread.sleep(400)
+            assertTrue("Expected Free Talk to stay on Home", destination == "home")
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
+
+            // 2. Re-open drawer, tap Chats -> navigates to ChatsScreen -> Back to Home
+            tapText("Open navigation menu")
+            waitForText("Chats")
+            tapText("Chats")
+            waitForText("Open to speak")
+            waitForText("Pedir un café")
+            waitForText("Lucía M.")
+            assertTrue("Expected navigation to ChatsScreen", destination == "chats")
+
+            tapText("Back")
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
+            assertTrue("Expected Back to return to Home", destination == "home")
+
+            // 3. Re-open drawer, tap + New chat -> opens directly in VoiceModeScreen -> End back to Home
+            tapText("Open navigation menu")
+            waitForText("New chat")
+            tapText("New chat")
+            waitForText("End call")
+            assertTrue("Expected New chat from drawer to open voice/video mode", destination == "voice_new")
+            tapText("End call")
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
+
+            // 4. Re-open drawer, tap recent session -> resumes directly in VoiceModeScreen
+            tapText("Open navigation menu")
+            waitForText("Café en Madrid")
+            tapText("Café en Madrid")
+            waitForText("End call")
+            assertTrue("Expected Resume from sidebar to open voice/video mode", destination == "voice_resume")
+            tapText("End call")
+            waitForText("Hola Noah, ¿qué practicamos hoy?")
         }
     }
 }

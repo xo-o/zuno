@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.net.Uri
 import android.util.Patterns
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zuno.ai.push.Push
@@ -14,6 +15,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+/** Extracts the single-use `token` query parameter from `/auth/verify` magic-link URIs. */
+fun extractMagicLinkToken(uri: Uri?): String? =
+    uri?.takeIf { it.path?.endsWith("/verify") == true }
+        ?.getQueryParameter("token")
+        ?.takeIf { it.isNotBlank() }
 
 sealed interface AuthState {
     data object SignedOut : AuthState
@@ -26,6 +33,8 @@ data class AuthFormState(
     val isBusy: Boolean = false,
     /** True while the busy action is Google sign-in rather than sending a magic link. */
     val isGoogleBusy: Boolean = false,
+    /** True once credentials succeeded and the app is loading `/api/me` to route post-auth. */
+    val isCompletingSignIn: Boolean = false,
     val linkSentTo: String? = null,
     val error: String? = null,
 )
@@ -34,6 +43,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val api = AuthApi()
     private val tokenStore = SessionTokenStore(application)
+    private val flowPrefs = application.applicationContext.getSharedPreferences(FLOW_PREFS_NAME, Context.MODE_PRIVATE)
     private var pollingJob: kotlinx.coroutines.Job? = null
     private var activeFlowId: String? = null
 
@@ -49,7 +59,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val sessionToken: String? get() = tokenStore.read()
 
     init {
-        refreshSession()
+        if (tokenStore.read() != null) {
+            clearSavedPendingFlow()
+            refreshSession()
+        } else {
+            restorePendingFlowIfValid()
+        }
     }
 
     fun sendMagicLink(rawEmail: String) {
@@ -62,17 +77,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         activeFlowId = flowId
         runFormAction {
             api.sendMagicLink(email, flowId)
+            savePendingFlow(flowId, email)
             _form.update { it.copy(linkSentTo = email) }
             startMagicLinkPolling(flowId)
         }
     }
 
-    private fun startMagicLinkPolling(flowId: String) {
+    private fun startMagicLinkPolling(flowId: String, startedAtMillis: Long = System.currentTimeMillis()) {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
-            val startTime = System.currentTimeMillis()
-            val timeoutMs = 5 * 60 * 1000L // 5 minutes timeout
-            while (isActive && (System.currentTimeMillis() - startTime) < timeoutMs) {
+            while (isActive && (System.currentTimeMillis() - startedAtMillis) < FLOW_POLL_TIMEOUT_MS) {
                 delay(2000L)
                 try {
                     when (val result = api.pollMagicLink(flowId)) {
@@ -80,7 +94,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                             completeSignIn(result.session)
                             break
                         }
-                        is MagicLinkPollResult.Expired -> break
+                        is MagicLinkPollResult.Expired -> {
+                            clearSavedPendingFlow()
+                            break
+                        }
                         is MagicLinkPollResult.Pending -> { /* keep waiting */ }
                     }
                 } catch (_: Exception) {
@@ -92,8 +109,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Handles https://<host>/auth/verify?token=… and zuno://auth/verify?token=… links. */
     fun handleMagicLink(uri: Uri?): Boolean {
-        val token = uri?.takeIf { it.path?.endsWith("/verify") == true }?.getQueryParameter("token")
-        if (token.isNullOrBlank()) return false
+        val token = extractMagicLinkToken(uri) ?: return false
         // Only the flow this app instance started is trusted, never one supplied by a link.
         val flowId = activeFlowId
         pollingJob?.cancel()
@@ -138,14 +154,24 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         pollingJob?.cancel()
         pollingJob = null
         activeFlowId = null
-        _form.update { it.copy(linkSentTo = null, error = null) }
+        clearSavedPendingFlow()
+        _form.update { it.copy(linkSentTo = null, isCompletingSignIn = false, error = null) }
     }
 
     fun clearError() = _form.update { it.copy(error = null) }
 
+    /** Clears transient sign-in form state once post-auth routing has left the Auth screen. */
+    fun onAuthFlowCompleted() {
+        if (_form.value != AuthFormState()) {
+            _form.value = AuthFormState()
+        }
+    }
+
     fun signOut() {
         pollingJob?.cancel()
         pollingJob = null
+        activeFlowId = null
+        clearSavedPendingFlow()
         val token = tokenStore.read()
         tokenStore.clear()
         _authState.value = AuthState.SignedOut
@@ -163,6 +189,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun forgetSession() {
         pollingJob?.cancel()
         pollingJob = null
+        activeFlowId = null
+        clearSavedPendingFlow()
         tokenStore.clear()
         _authState.value = AuthState.SignedOut
         _form.value = AuthFormState()
@@ -188,8 +216,43 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private fun completeSignIn(session: AuthSession) {
         tokenStore.write(session.token)
         activeFlowId = null
-        _form.value = AuthFormState()
+        clearSavedPendingFlow()
+        // Keep `linkSentTo` + `isCompletingSignIn` active while `/api/me` resolves so `4c` never flashes back to an empty form.
+        _form.update { current ->
+            current.copy(
+                isCompletingSignIn = true,
+                error = null,
+            )
+        }
         _authState.value = AuthState.SignedIn(session.user)
+    }
+
+    private fun savePendingFlow(flowId: String, email: String) {
+        flowPrefs.edit {
+            putString(KEY_PENDING_FLOW_ID, flowId)
+            putString(KEY_PENDING_EMAIL, email)
+            putLong(KEY_PENDING_SENT_AT, System.currentTimeMillis())
+        }
+    }
+
+    private fun clearSavedPendingFlow() {
+        flowPrefs.edit { clear() }
+    }
+
+    private fun restorePendingFlowIfValid() {
+        val savedFlowId = flowPrefs.getString(KEY_PENDING_FLOW_ID, null)
+        val savedEmail = flowPrefs.getString(KEY_PENDING_EMAIL, null)
+        val sentAt = flowPrefs.getLong(KEY_PENDING_SENT_AT, 0L)
+        val ageMs = System.currentTimeMillis() - sentAt
+        if (savedFlowId.isNullOrBlank() || savedEmail.isNullOrBlank() || sentAt <= 0L || ageMs >= MAGIC_LINK_TTL_MS) {
+            clearSavedPendingFlow()
+            return
+        }
+        activeFlowId = savedFlowId
+        _form.value = AuthFormState(linkSentTo = savedEmail)
+        if (ageMs < FLOW_POLL_TIMEOUT_MS) {
+            startMagicLinkPolling(savedFlowId, startedAtMillis = sentAt)
+        }
     }
 
     private fun runFormAction(allowWhileBusy: Boolean = false, google: Boolean = false, action: suspend () -> Unit) {
@@ -199,10 +262,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 action()
             } catch (e: AuthException) {
-                _form.update { it.copy(error = e.message) }
+                _form.update { it.copy(error = e.message, isCompletingSignIn = false) }
             } finally {
                 _form.update { it.copy(isBusy = false, isGoogleBusy = false) }
             }
         }
+    }
+
+    private companion object {
+        const val FLOW_PREFS_NAME = "zuno_magic_link_flow"
+        const val KEY_PENDING_FLOW_ID = "pending_flow_id"
+        const val KEY_PENDING_EMAIL = "pending_email"
+        const val KEY_PENDING_SENT_AT = "pending_sent_at"
+        const val FLOW_POLL_TIMEOUT_MS = 5 * 60 * 1000L
+        const val MAGIC_LINK_TTL_MS = 15 * 60 * 1000L
     }
 }

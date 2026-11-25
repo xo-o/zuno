@@ -52,13 +52,14 @@ val firebaseConfig: Map<String, String>? = file("google-services.json").takeIf {
 android {
     namespace = "com.zuno.ai"
     compileSdk = 36
+    ndkVersion = "27.1.12297006"
 
     defaultConfig {
         applicationId = "com.zuno.ai"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.0"
+        versionCode = 6
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -97,7 +98,11 @@ android {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -178,4 +183,63 @@ dependencies {
     // Android Core & AppCompat (for Per-App Language APIs)
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
+}
+
+// Automated Google Play Console upload tasks (via android/scripts/play-upload.mjs)
+val playScriptPath = rootProject.layout.projectDirectory.file("scripts/play-upload.mjs").asFile.absolutePath
+val playServiceAccountFile = providers.gradleProperty("zuno.play.serviceAccountFile").orNull
+    ?: providers.environmentVariable("ZUNO_PLAY_SERVICE_ACCOUNT_FILE").orNull
+val playTrack = providers.gradleProperty("zuno.play.track").getOrElse("internal")
+val playStatus = providers.gradleProperty("zuno.play.status").getOrElse("completed")
+val playReleaseName = providers.gradleProperty("zuno.play.releaseName").orNull
+val playReleaseNotes = providers.gradleProperty("zuno.play.releaseNotes").orNull
+val playDryRun = providers.gradleProperty("zuno.play.dryRun").map { it.toBoolean() }.getOrElse(false)
+val playChangesNotSentForReview = providers.gradleProperty("zuno.play.changesNotSentForReview").map { it.toBoolean() }.getOrElse(false)
+val playSkipBuild = providers.gradleProperty("zuno.play.skipBuild").map { it.toBoolean() }.getOrElse(false)
+val playVersionCode = providers.gradleProperty("zuno.play.versionCode").orNull
+val releaseAabFile = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
+
+tasks.register<Exec>("checkPlayAccess") {
+    group = "publishing"
+    description = "Verify Google Play Developer API OAuth credentials and Play Console access."
+    val args = mutableListOf("node", playScriptPath, "--check", "--package", "com.zuno.ai")
+    if (playServiceAccountFile != null) {
+        args += listOf("--service-account", playServiceAccountFile)
+    }
+    commandLine(args)
+}
+
+tasks.register<Exec>("publishPlayBundle") {
+    group = "publishing"
+    description = "Build (unless -Pzuno.play.skipBuild=true or -Pzuno.play.versionCode=...) and publish to Google Play Console."
+    if (!playSkipBuild && playVersionCode == null) {
+        dependsOn("bundleRelease")
+    }
+    val args = mutableListOf(
+        "node", playScriptPath,
+        "--package", "com.zuno.ai",
+        "--track", playTrack,
+        "--status", playStatus,
+    )
+    if (playVersionCode != null) {
+        args += listOf("--version-code", playVersionCode)
+    } else {
+        args += listOf("--aab", releaseAabFile.get().asFile.absolutePath)
+    }
+    if (playServiceAccountFile != null) {
+        args += listOf("--service-account", playServiceAccountFile)
+    }
+    if (playReleaseName != null) {
+        args += listOf("--release-name", playReleaseName)
+    }
+    if (playReleaseNotes != null) {
+        args += listOf("--release-notes", playReleaseNotes)
+    }
+    if (playDryRun) {
+        args += "--dry-run"
+    }
+    if (playChangesNotSentForReview) {
+        args += "--changes-not-sent-for-review"
+    }
+    commandLine(args)
 }

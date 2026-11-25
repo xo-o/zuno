@@ -2,6 +2,13 @@ package com.zuno.ai.ui.components
 
 import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
+import android.graphics.LinearGradient as NativeLinearGradient
+import android.graphics.Matrix as NativeMatrix
+import android.graphics.Paint as NativePaint
+import android.graphics.RadialGradient as NativeRadialGradient
+import android.graphics.Shader
+import android.os.Build
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -21,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -33,8 +41,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,9 +53,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.ui.theme.ZunoColors
-import com.zuno.ai.ui.theme.ZunoRadius
 import kotlin.math.PI
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -66,6 +76,11 @@ enum class AgentGlowState(val reactsToVoice: Boolean) {
     Speaking(true),
     Cancelling(false),
     Disabled(false),
+}
+
+enum class GlowTheme {
+    Mono,
+    Cobalt,
 }
 
 /**
@@ -91,7 +106,7 @@ private fun tuneFor(state: AgentGlowState): GlowTune = when (state) {
     AgentGlowState.Disabled -> GlowTune(0.4f, 0.000f, 0.45f, -0.10f, 0.00f, 0.00f, 0f)
 }
 
-/** Animated (650ms) view of a [GlowTune], so state changes ease instead of jumping. */
+/** Animated (850ms) view of a [GlowTune], so state changes ease smoothly instead of jumping. */
 private class AnimatedTune(
     val speed: State<Float>,
     val breath: State<Float>,
@@ -102,10 +117,13 @@ private class AnimatedTune(
     val pulse: State<Float>,
 )
 
+private val GlowStateEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
+private val GlowThemeEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+
 @Composable
 private fun animatedTune(state: AgentGlowState, intensity: Float = 1f): AnimatedTune {
     val tune = tuneFor(state)
-    val spec = tween<Float>(durationMillis = 650)
+    val spec = tween<Float>(durationMillis = 850, easing = GlowStateEasing)
     return AnimatedTune(
         speed = animateFloatAsState(tune.speed, spec, label = "glowSpeed"),
         breath = animateFloatAsState(tune.breath, spec, label = "glowBreath"),
@@ -137,10 +155,24 @@ private class GlowMotion {
     }
 }
 
+private val IS_EMULATOR: Boolean by lazy {
+    Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
+        Build.HARDWARE.contains("vbox", ignoreCase = true) ||
+        Build.HARDWARE.contains("ranchu", ignoreCase = true) ||
+        Build.PRODUCT.contains("vbox", ignoreCase = true) ||
+        Build.MANUFACTURER.contains("Genymobile", ignoreCase = true)
+}
+
 @Composable
-private fun rememberGlowMotion(state: AgentGlowState, tune: AnimatedTune, audioLevel: () -> Float): GlowMotion {
+private fun rememberGlowMotion(
+    state: AgentGlowState,
+    tune: AnimatedTune,
+    audioLevel: () -> Float,
+    activeTransition: Boolean = false,
+): GlowMotion {
     val currentState by rememberUpdatedState(state)
     val currentLevel by rememberUpdatedState(audioLevel)
+    val isTransitioning by rememberUpdatedState(activeTransition)
     val motion = remember { GlowMotion() }
     LaunchedEffect(motion) {
         var last = 0L
@@ -151,6 +183,11 @@ private fun rememberGlowMotion(state: AgentGlowState, tune: AnimatedTune, audioL
                 val target = if (currentState.reactsToVoice) currentLevel().coerceIn(0f, 1f) else 0f
                 motion.advance(dt, tune.speed.value, tune.bandSpeed.value, target)
             }
+            // Only throttle on emulators so slow GPU / UiAutomation.rootInActiveWindow stays responsive;
+            // real devices run at full native VSync (60/120fps) for silky-smooth gradient transitions.
+            if (IS_EMULATOR) {
+                delay(if (currentState == AgentGlowState.Idle && !isTransitioning) 32L else 16L)
+            }
         }
     }
     return motion
@@ -160,20 +197,47 @@ private const val TWO_PI = (2.0 * PI).toFloat()
 private const val BREATH_PERIOD = 7f
 private const val BAND_COUNT = 3
 
-// Figma Horizon frame is 386 x 600; blob geometry below is in those units.
-private const val DESIGN_WIDTH = 386f
-private val TopFadeTint = Color(0xFF0D0D0D)
-private val TopFadeStops = floatArrayOf(0f, 0.18f, 0.32f, 0.46f, 0.58f, 0.70f, 0.82f)
-private val TopFadeAlphas = floatArrayOf(1f, 0.97f, 0.85f, 0.62f, 0.36f, 0.14f, 0f)
+// Exact Figma Agent Horizon (`7297:11494`) Base gradient & Sheen stops for Mono (`7365:20294`) & Cobalt (`7383:13321`).
+private val MonoBaseOffsets = floatArrayOf(0f, 0.22f, 0.40f, 0.56f, 0.72f, 0.86f, 1.00f)
+private val MonoBaseColors = arrayOf(
+    Color(0x00242424),
+    Color(0x00242424),
+    Color(0x24242424), // 14%
+    Color(0x66292929), // 40%
+    Color(0xB83B3B3B), // 72%
+    Color(0xE64A4A4A), // 90%
+    Color(0xFF595959), // 100%
+)
+private val CobaltBaseColors = arrayOf(
+    Color(0x001A307A),
+    Color(0x001A307A),
+    Color(0x241F3D9E), // 14%
+    Color(0x66264FC7), // 40%
+    Color(0xB8305CE6), // 72%
+    Color(0xE63B69FA), // 90%
+    Color(0xFF4775FF), // 100%
+)
+
+private val MonoSheenInner = Color(0xFFCCCCCC)
+private val MonoSheenMid = Color(0x7A8A8A8A) // 48%
+private val MonoSheenOuter = Color(0x00595959)
+
+private val CobaltSheenInner = Color(0xFFB8E3FF)
+private val CobaltSheenMid = Color(0x7A54B5FF) // 48%
+private val CobaltSheenOuter = Color(0x003D6BFF)
+
+private const val BASE_SAMPLE_COUNT = 21
+private const val SHEEN_SAMPLE_COUNT = 17
 
 /**
- * Agent Horizon glow — mirrors the Figma "Horizon" component: a dark→gray base gradient, three
- * blurred blobs (left/right/center) along the bottom edge, a top fade into the canvas and a soft
- * white sheen. At rest it is exactly the Figma frame, drifting slowly; while someone talks the
- * gradient grows upward and lightens in proportion to the voice level.
+ * Agent Horizon glow — mirrors the Figma "Horizon" (`7297:11494`) component:
+ * 1) 7-stop vertical base gradient sampled smoothly with hardware dithering (`Mono`: `#242424`→`#595959`;
+ *    `Cobalt`: `#1A307A`→`#4775FF`).
+ * 2) Elliptical radial sheen anchored at bottom-center with cosine-eased stops & dithering
+ *    (`Mono`: `#CCCCCC`→`#8A8A8A`→`#595959`; `Cobalt`: `#B8E3FF`→`#54B5FF`→`#3D6BFF`).
  *
- * [audioLevel] is polled every frame (0..1); it should be cheap and must not trigger recomposition.
- * [intensity] scales overall brightness (e.g. lower behind chat text).
+ * Smoothly cross-fades all stops between [GlowTheme.Mono] and [GlowTheme.Cobalt], drifts gently
+ * at rest, and rises/brightens in proportion to [audioLevel] while talking.
  */
 @Composable
 fun ZunoAgentGlow(
@@ -181,118 +245,212 @@ fun ZunoAgentGlow(
     modifier: Modifier = Modifier,
     audioLevel: () -> Float = { 0f },
     intensity: Float = 1f,
+    theme: GlowTheme = GlowTheme.Mono,
+    @Suppress("UNUSED_PARAMETER") canvasColor: Color = ZunoColors.BgCanvas,
     shape: Shape = RoundedCornerShape(40.dp),
 ) {
     val tune = animatedTune(state, intensity)
-    val motion = rememberGlowMotion(state, tune, audioLevel)
+    val targetThemeFraction = if (theme == GlowTheme.Cobalt) 1f else 0f
+    val themeFraction = animateFloatAsState(
+        targetValue = targetThemeFraction,
+        animationSpec = tween(durationMillis = 1050, easing = GlowThemeEasing),
+        label = "glowThemeFraction",
+    )
+    val isTransitioning = kotlin.math.abs(themeFraction.value - targetThemeFraction) > 0.001f ||
+        kotlin.math.abs(tune.lift.value - tuneFor(state).lift) > 0.001f
+    val motion = rememberGlowMotion(state, tune, audioLevel, activeTransition = isTransitioning)
 
     Spacer(
         modifier
             .clip(shape)
             .drawWithCache {
-                val u = size.width / DESIGN_WIDTH
-                // Figma layer blur radius r renders as a Gaussian with sigma = r / 2.
-                val left = BlurredOval.create(280f * u, 220f * u, 35f * u)
-                val right = BlurredOval.create(270f * u, 230f * u, 35f * u)
-                val center = BlurredOval.create(220f * u, 110f * u, 23f * u)
+                val ditherPaint = NativePaint(NativePaint.ANTI_ALIAS_FLAG or NativePaint.DITHER_FLAG)
+                val sheenMatrix = NativeMatrix()
+                val basePositions = FloatArray(BASE_SAMPLE_COUNT)
+                val baseArgbs = IntArray(BASE_SAMPLE_COUNT)
+                val sheenPositions = FloatArray(SHEEN_SAMPLE_COUNT)
+                val sheenArgbs = IntArray(SHEEN_SAMPLE_COUNT)
                 onDrawBehind {
-                    drawHorizon(u, left, right, center, motion, tune)
+                    drawHorizon(
+                        motion = motion,
+                        tune = tune,
+                        themeFraction = themeFraction.value,
+                        paint = ditherPaint,
+                        sheenMatrix = sheenMatrix,
+                        basePositions = basePositions,
+                        baseArgbs = baseArgbs,
+                        sheenPositions = sheenPositions,
+                        sheenArgbs = sheenArgbs,
+                    )
                 }
-            }
+            },
     )
 }
 
-private fun DrawScope.drawHorizon(
+private fun smoothCosine(t: Float): Float = 0.5f - 0.5f * cos(t.coerceIn(0f, 1f) * PI.toFloat())
+
+/** Premultiplied sRGB interpolation so transparent stops blend without hue artifacts. */
+private fun lerpPremultiplied(a: Color, b: Color, t: Float): Color {
+    val u = t.coerceIn(0f, 1f)
+    val aa = a.alpha
+    val ba = b.alpha
+    val outA = aa + (ba - aa) * u
+    if (outA <= 0.0001f) {
+        return Color(
+            red = a.red + (b.red - a.red) * u,
+            green = a.green + (b.green - a.green) * u,
+            blue = a.blue + (b.blue - a.blue) * u,
+            alpha = 0f,
+        )
+    }
+    val ar = a.red * aa
+    val ag = a.green * aa
+    val ab = a.blue * aa
+    val br = b.red * ba
+    val bg = b.green * ba
+    val bb = b.blue * ba
+    return Color(
+        red = ((ar + (br - ar) * u) / outA).coerceIn(0f, 1f),
+        green = ((ag + (bg - ag) * u) / outA).coerceIn(0f, 1f),
+        blue = ((ab + (bb - ab) * u) / outA).coerceIn(0f, 1f),
+        alpha = outA.coerceIn(0f, 1f),
+    )
+}
+
+private fun sampleSmoothRamp(
+    offsets: FloatArray,
+    colors: Array<Color>,
     u: Float,
-    leftBlob: BlurredOval,
-    rightBlob: BlurredOval,
-    centerBlob: BlurredOval,
+): Color {
+    if (u <= offsets[0]) return colors[0]
+    val last = offsets.lastIndex
+    if (u >= offsets[last]) return colors[last]
+    for (i in 0 until last) {
+        val x0 = offsets[i]
+        val x1 = offsets[i + 1]
+        if (u <= x1) {
+            val local = ((u - x0) / (x1 - x0).coerceAtLeast(0.0001f)).coerceIn(0f, 1f)
+            return lerpPremultiplied(colors[i], colors[i + 1], smoothCosine(local))
+        }
+    }
+    return colors[last]
+}
+
+private fun DrawScope.drawHorizon(
     motion: GlowMotion,
     tune: AnimatedTune,
+    themeFraction: Float,
+    paint: NativePaint,
+    sheenMatrix: NativeMatrix,
+    basePositions: FloatArray,
+    baseArgbs: IntArray,
+    sheenPositions: FloatArray,
+    sheenArgbs: IntArray,
 ) {
     val w = size.width
     val h = size.height
     if (w <= 0f || h <= 0f) return
     val cx = w / 2f
     val t = motion.time
-    val e = motion.energy
+    val e = motion.energy.coerceIn(0f, 1f)
     val b = tune.brightness.value.coerceIn(0f, 1f)
     val pulse = tune.pulse.value
     val bandAlpha = tune.bandAlpha.value
 
     val breathing = sin(t * TWO_PI / BREATH_PERIOD)
-    val pulsing = 1f + pulse * 0.28f * sin(t * 3.2f)
-    val lift = h * (tune.lift.value + tune.breath.value * breathing + 0.10f * e)
-    // Blobs grow upward from the bottom edge (their centers rise by most of the added half-height).
-    val grow = 1f + 0.6f * e
-    val sideRise = 0.8f * 110f * u * (grow - 1f)
+    val pulsing = 1f + pulse * 0.18f * sin(t * 3.2f)
+    // Lift shifts the non-bottom gradient stops upward when speaking / breathing.
+    val rise = (tune.lift.value + tune.breath.value * breathing + 0.16f * e).coerceIn(-0.14f, 0.24f)
 
-    // 1. Base gradient: glow/deep until 55%, then glow/base at the bottom. The voice pulls the gray higher.
-    drawRect(
-        brush = Brush.verticalGradient(
-            0f to ZunoColors.GlowDeep,
-            lerpF(0.55f, 0.30f, e) to ZunoColors.GlowDeep,
-            1f to lerp(ZunoColors.GlowBase, ZunoColors.GlowAccent, 0.5f * e),
-        ),
-        alpha = b,
-    )
+    // 1. Base gradient: smooth C1-sampled Figma 7-stop ramp with hardware dithering.
+    val keyOffsets = FloatArray(MonoBaseOffsets.size) { i ->
+        val raw = MonoBaseOffsets[i]
+        if (i == 0 || i == MonoBaseOffsets.lastIndex) raw
+        else (raw - rise * (1f - raw * 0.45f)).coerceIn(0.04f, 0.96f)
+    }
+    val highlightColor = lerpPremultiplied(MonoSheenInner, CobaltSheenInner, themeFraction)
+    val keyColors = Array(MonoBaseOffsets.size) { i ->
+        val c = lerpPremultiplied(MonoBaseColors[i], CobaltBaseColors[i], themeFraction)
+        val brightened = if (e > 0.001f && i >= 3) {
+            lerpPremultiplied(c, highlightColor.copy(alpha = c.alpha), 0.18f * e)
+        } else {
+            c
+        }
+        brightened.copy(alpha = brightened.alpha * b)
+    }
+    for (s in 0 until BASE_SAMPLE_COUNT) {
+        val u = s.toFloat() / (BASE_SAMPLE_COUNT - 1)
+        basePositions[s] = u
+        baseArgbs[s] = sampleSmoothRamp(keyOffsets, keyColors, u).toArgb()
+    }
+    drawIntoCanvas { canvas ->
+        paint.shader = NativeLinearGradient(
+            0f,
+            0f,
+            0f,
+            h,
+            baseArgbs,
+            basePositions,
+            Shader.TileMode.CLAMP,
+        )
+        canvas.nativeCanvas.drawRect(0f, 0f, w, h, paint)
+    }
 
-    // 2. Side blobs, anchored like the Figma frame (left/right edges, bottom), each on its own slow drift.
-    val leftSway = 7f * u * sin(t * 0.55f)
-    val rightSway = 7f * u * sin(t * 0.43f + 1.7f)
-    drawBlob(
-        leftBlob, 50f * u + leftSway, h - 60f * u - lift - sideRise + 4f * u * sin(t * 0.31f), grow,
-        lerp(ZunoColors.GlowBase, ZunoColors.GlowAccent, e), 0.90f * b,
-    )
-    drawBlob(
-        rightBlob, w - 41f * u - rightSway, h - 75f * u - lift - sideRise + 4f * u * sin(t * 0.37f + 0.9f), grow,
-        lerp(ZunoColors.GlowAccent, ZunoColors.GlowHighlight, e), 0.95f * b,
-    )
-
-    // 3. Bands of light travelling upward (thinking only).
+    // 2. Thinking upward light bands (when connecting/thinking).
     if (bandAlpha > 0.001f) {
-        val travel = h * 0.45f + lift
+        val travel = h * 0.48f
         for (i in 0 until BAND_COUNT) {
             val phase = (motion.bandPhase + i.toFloat() / BAND_COUNT) % 1f
             glowEllipse(
                 center = Offset(cx, h - phase * travel),
-                rx = w * 0.78f,
-                ry = h * 0.11f,
-                color = ZunoColors.GlowHighlight,
-                alpha = bandAlpha * sin(phase * PI.toFloat()) * b,
+                rx = w * 0.68f,
+                ry = h * 0.09f,
+                color = highlightColor,
+                alpha = bandAlpha * 0.65f * sin(phase * PI.toFloat()) * b,
             )
         }
     }
 
-    // 4. Central highlight pool, growing up from the bottom edge.
-    val centerGrow = 1f + 0.5f * e
-    drawBlob(
-        centerBlob,
-        cx + 10f * u * sin(t * 0.37f + 0.4f),
-        h - 15f * u - lift * 0.6f - 0.8f * 55f * u * (centerGrow - 1f),
-        centerGrow * pulsing,
-        lerp(ZunoColors.GlowHighlight, Color.White, 0.7f * e),
-        0.95f * b,
-    )
+    // 3. Elliptical radial Sheen anchored at bottom-center (Figma transform: translate(193,600) scale(239.32,288)).
+    val rx = w * (239.32f / 386f) * (1f + 0.20f * e) * pulsing
+    val ry = h * (288f / 600f) * (1f + 0.34f * e + tune.lift.value * 0.8f + tune.breath.value * breathing) * pulsing
+    val sheenCenterX = cx + w * 0.022f * sin(t * 0.47f)
+    val sheenCenterY = h
+    val innerColor = lerpPremultiplied(MonoSheenInner, CobaltSheenInner, themeFraction)
+        .let { if (e > 0.01f) lerpPremultiplied(it, Color.White, 0.25f * e) else it }
+    val midColor = lerpPremultiplied(MonoSheenMid, CobaltSheenMid, themeFraction)
+    val outerColor = lerpPremultiplied(MonoSheenOuter, CobaltSheenOuter, themeFraction)
 
-    // 5. Top fade into the canvas; its clear point moves from 82% up to ~55% so the prompt stays readable.
-    val reach = lerpF(1f, 0.55f / 0.82f, e)
-    drawRect(
-        Brush.verticalGradient(
-            *Array(TopFadeStops.size) { i ->
-                val color = if (i == 0) ZunoColors.BgCanvas else TopFadeTint.copy(alpha = TopFadeAlphas[i])
-                TopFadeStops[i] * reach to color
-            }
+    if (rx > 0f && ry > 0f) {
+        val sheenAnchors = floatArrayOf(0f, 0.42f, 1.00f)
+        val sheenColors = arrayOf(
+            innerColor.copy(alpha = (0.88f + 0.12f * e).coerceIn(0f, 1f) * b),
+            midColor.copy(alpha = 0.42f * b),
+            outerColor,
         )
-    )
-
-    // 6. Bottom sheen.
-    drawRect(
-        Brush.verticalGradient(
-            0.70f to Color.White.copy(alpha = 0f),
-            1f to Color.White.copy(alpha = 0.08f + 0.14f * e),
-        )
-    )
+        for (s in 0 until SHEEN_SAMPLE_COUNT) {
+            val u = s.toFloat() / (SHEEN_SAMPLE_COUNT - 1)
+            sheenPositions[s] = u
+            sheenArgbs[s] = sampleSmoothRamp(sheenAnchors, sheenColors, u).toArgb()
+        }
+        drawIntoCanvas { canvas ->
+            val radial = NativeRadialGradient(
+                0f,
+                0f,
+                rx,
+                sheenArgbs,
+                sheenPositions,
+                Shader.TileMode.CLAMP,
+            )
+            sheenMatrix.reset()
+            sheenMatrix.setScale(1f, (ry / rx).coerceAtLeast(0.1f))
+            sheenMatrix.postTranslate(sheenCenterX, sheenCenterY)
+            radial.setLocalMatrix(sheenMatrix)
+            paint.shader = radial
+            canvas.nativeCanvas.drawRect(0f, 0f, w, h, paint)
+        }
+    }
+    paint.shader = null
 }
 
 // Tutor palette for the live indicator: green → teal → blue.

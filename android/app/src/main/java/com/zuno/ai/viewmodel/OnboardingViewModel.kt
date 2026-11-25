@@ -1,17 +1,18 @@
 package com.zuno.ai.viewmodel
 
 import androidx.lifecycle.ViewModel
+import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.LearningLanguage
 import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.OnboardingCompleteResult
 import com.zuno.ai.data.OnboardingTurnResult
-import com.zuno.ai.data.OnboardingVoiceTurnEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 enum class OnboardingStep(val wireName: String) {
+    UserLanguage("user_language"),
     Language("language"),
     Name("name"),
     Level("level"),
@@ -21,11 +22,6 @@ enum class OnboardingStep(val wireName: String) {
 
     val isConversational: Boolean
         get() = this == Name || this == Level || this == Goals
-}
-
-enum class OnboardingInputMode {
-    Voice,
-    Chat,
 }
 
 enum class OnboardingChatRole {
@@ -41,8 +37,8 @@ data class OnboardingChatItem(
 )
 
 data class OnboardingUiState(
-    val step: OnboardingStep = OnboardingStep.Language,
-    val inputMode: OnboardingInputMode = OnboardingInputMode.Voice,
+    val step: OnboardingStep = OnboardingStep.UserLanguage,
+    val selectedAppLanguage: AppLanguage = AppLanguage.English,
     val selectedLanguageCode: String = "es",
     val selectedAccentId: String? = LearningLanguages.Spanish.defaultAccent,
     val name: String = "",
@@ -69,12 +65,25 @@ class OnboardingViewModel : ViewModel() {
     private var messageSeq = 0
     private fun nextId(): String = "ob_${++messageSeq}"
 
-    fun reset(initialLanguageCode: String = "es") {
+    fun reset(
+        initialLanguageCode: String = "es",
+        initialAppLanguage: AppLanguage = AppLanguage.English,
+        initialAccentId: String? = null,
+    ) {
         val lang = LearningLanguages.find(initialLanguageCode)
         _state.value = OnboardingUiState(
+            selectedAppLanguage = initialAppLanguage,
             selectedLanguageCode = lang.code,
-            selectedAccentId = lang.defaultAccent,
+            selectedAccentId = initialAccentId ?: lang.defaultAccent,
         )
+    }
+
+    fun selectAppLanguage(appLanguage: AppLanguage) {
+        _state.update { it.copy(selectedAppLanguage = appLanguage) }
+    }
+
+    fun continueFromUserLanguage() {
+        _state.update { it.copy(step = OnboardingStep.Language) }
     }
 
     fun selectLanguage(language: LearningLanguage) {
@@ -91,29 +100,59 @@ class OnboardingViewModel : ViewModel() {
     }
 
     fun updateDraft(text: String) {
-        _state.update { it.copy(draftText = text) }
-    }
-
-    fun toggleGoalChip(chip: String) {
         _state.update { current ->
-            val next = if (chip in current.selectedGoalChips) {
-                current.selectedGoalChips - chip
-            } else {
-                current.selectedGoalChips + chip
+            val keptChips = current.selectedGoalChips.filterTo(mutableSetOf()) { chip ->
+                text.contains(chip, ignoreCase = true)
             }
-            current.copy(selectedGoalChips = next)
+            current.copy(
+                draftText = text,
+                selectedGoalChips = keptChips,
+            )
         }
     }
 
-    fun setInputMode(mode: OnboardingInputMode) {
-        _state.update { it.copy(inputMode = mode) }
+    fun selectLevelChip(label: String) {
+        val trimmed = label.trim()
+        if (trimmed.isEmpty()) return
+        _state.update { current ->
+            val nextDraft = if (current.draftText.trim().equals(trimmed, ignoreCase = true)) {
+                ""
+            } else {
+                trimmed
+            }
+            current.copy(draftText = nextDraft)
+        }
     }
 
-    fun continueFromLanguage(namePrompt: String, startInVoice: Boolean) {
+    fun toggleGoalChip(chip: String) {
+        val trimmedChip = chip.trim()
+        if (trimmedChip.isEmpty()) return
+        _state.update { current ->
+            val isSelected = current.selectedGoalChips.any { it.equals(trimmedChip, ignoreCase = true) } ||
+                splitCommaSegments(current.draftText).any { it.equals(trimmedChip, ignoreCase = true) }
+            if (isSelected) {
+                val nextDraft = removeChipFromDraft(current.draftText, trimmedChip)
+                val nextChips = current.selectedGoalChips
+                    .filterNot { it.equals(trimmedChip, ignoreCase = true) }
+                    .filterTo(mutableSetOf()) { nextDraft.contains(it, ignoreCase = true) }
+                current.copy(
+                    draftText = nextDraft,
+                    selectedGoalChips = nextChips,
+                )
+            } else {
+                val nextDraft = appendChipToDraft(current.draftText, trimmedChip)
+                current.copy(
+                    draftText = nextDraft,
+                    selectedGoalChips = current.selectedGoalChips + trimmedChip,
+                )
+            }
+        }
+    }
+
+    fun continueFromLanguage(namePrompt: String) {
         _state.update { current ->
             current.copy(
                 step = OnboardingStep.Name,
-                inputMode = if (startInVoice) OnboardingInputMode.Voice else OnboardingInputMode.Chat,
                 draftText = "",
                 chatHistory = listOf(
                     OnboardingChatItem(
@@ -127,14 +166,18 @@ class OnboardingViewModel : ViewModel() {
         }
     }
 
-    /** Returns true if handled internally, or false if already at the first step (`5a`). */
+    /** Returns true if handled internally, or false if already at the first step (`UserLanguage`). */
     fun stepBack(
         namePrompt: String,
         levelPrompt: (firstName: String) -> String,
     ): Boolean {
         val current = _state.value
         return when (current.step) {
-            OnboardingStep.Language -> false
+            OnboardingStep.UserLanguage -> false
+            OnboardingStep.Language -> {
+                _state.update { it.copy(step = OnboardingStep.UserLanguage, draftText = "") }
+                true
+            }
             OnboardingStep.Name -> {
                 _state.update { it.copy(step = OnboardingStep.Language, draftText = "") }
                 true
@@ -221,6 +264,7 @@ class OnboardingViewModel : ViewModel() {
                         step = OnboardingStep.Level,
                         chatHistory = updatedHistory,
                         draftText = "",
+                        selectedGoalChips = emptySet(),
                         submittingTurn = false,
                     )
                 }
@@ -234,6 +278,7 @@ class OnboardingViewModel : ViewModel() {
                         step = OnboardingStep.Goals,
                         chatHistory = updatedHistory,
                         draftText = "",
+                        selectedGoalChips = emptySet(),
                         submittingTurn = false,
                     )
                 }
@@ -245,6 +290,7 @@ class OnboardingViewModel : ViewModel() {
                         step = OnboardingStep.Preparing,
                         chatHistory = updatedHistory,
                         draftText = "",
+                        selectedGoalChips = emptySet(),
                         submittingTurn = false,
                         pathError = null,
                     )
@@ -252,38 +298,6 @@ class OnboardingViewModel : ViewModel() {
                 else -> current.copy(submittingTurn = false)
             }
         }
-    }
-
-    fun applyVoiceTurnEvent(
-        event: OnboardingVoiceTurnEvent,
-        levelPromptBuilder: (firstName: String) -> String,
-        goalsPromptBuilder: (firstName: String) -> String,
-    ) {
-        val step = when (event.step) {
-            "name" -> OnboardingStep.Name
-            "level" -> OnboardingStep.Level
-            "goals" -> OnboardingStep.Goals
-            else -> return
-        }
-        val current = _state.value
-        if (current.step != step) return
-
-        val synthetic = OnboardingTurnResult(
-            step = event.step,
-            valid = true,
-            name = event.name,
-            level = event.level.ifBlank { "B1" },
-            focus = event.focus.ifBlank { "conversation" },
-            interests = event.interests,
-            goalNote = event.goalNote,
-        )
-        applyParsedTurn(
-            step = step,
-            userDisplayText = event.transcript,
-            parsed = synthetic,
-            levelPromptBuilder = { fn -> event.nextPrompt.ifBlank { levelPromptBuilder(fn) } },
-            goalsPromptBuilder = { fn -> event.nextPrompt.ifBlank { goalsPromptBuilder(fn) } },
-        )
     }
 
     fun onPathBuilt(result: OnboardingCompleteResult) {
@@ -302,5 +316,30 @@ class OnboardingViewModel : ViewModel() {
 
     fun retryBuildPath() {
         _state.update { it.copy(pathError = null, step = OnboardingStep.Preparing) }
+    }
+}
+
+private fun splitCommaSegments(text: String): List<String> =
+    text.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun appendChipToDraft(draft: String, chip: String): String {
+    val trimmedEnd = draft.trimEnd()
+    return when {
+        trimmedEnd.isEmpty() -> chip
+        trimmedEnd.endsWith(",") -> "$trimmedEnd $chip"
+        else -> "$trimmedEnd, $chip"
+    }
+}
+
+private fun removeChipFromDraft(draft: String, chip: String): String {
+    val parts = draft.split(',')
+    val nonEmptyCount = parts.count { it.trim().isNotEmpty() }
+    val filtered = parts
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.equals(chip, ignoreCase = true) }
+    return if (filtered.size < nonEmptyCount) {
+        filtered.joinToString(", ")
+    } else {
+        draft
     }
 }

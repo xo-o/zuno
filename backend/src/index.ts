@@ -39,11 +39,13 @@ import { contactRoutes } from "./routes/contact.js";
 import { conversationRoutes, messageRoutes, reminderRoutes, tutorRoutes } from "./routes/conversations.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { lessonRoutes } from "./routes/lessons.js";
+import { liveRoomRoutes } from "./routes/liveRooms.js";
 import { profileRoutes } from "./routes/profile.js";
 import { ensureRoleplayGoals, roleplayRoutes } from "./routes/roleplays.js";
 import { scheduleRoutes } from "./routes/schedules.js";
 import { topicRoutes } from "./routes/topics.js";
 import { ttsRoutes } from "./routes/tts.js";
+import { vocabularyRoutes } from "./routes/vocabulary.js";
 
 const app = new Hono();
 
@@ -119,6 +121,8 @@ app.route("/api/attachments", attachmentRoutes);
 app.route("/api/devices", deviceRoutes);
 app.route("/api/reminders", reminderRoutes);
 app.route("/api/schedules", scheduleRoutes);
+app.route("/api/vocabulary", vocabularyRoutes);
+app.route("/api/live-rooms", liveRoomRoutes);
 
 // Public endpoints for the website (heyzuno.app): account deletion by email link and the contact form.
 app.route("/api/account/deletion", accountDeletionRoutes);

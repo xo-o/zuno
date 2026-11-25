@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -90,15 +91,18 @@ fun AuthScreen(
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
     isGoogleBusy: Boolean = false,
+    isCompletingSignIn: Boolean = false,
     linkSentTo: String? = null,
     errorMessage: String? = null,
     onUseDifferentEmail: () -> Unit = {},
 ) {
-    val isSendingLink = isBusy && !isGoogleBusy
+    val isSendingLink = isBusy && !isGoogleBusy && !isCompletingSignIn
+    val isWorking = isBusy || isCompletingSignIn
     if (linkSentTo != null) {
         MagicLinkSent(
             email = linkSentTo,
             isBusy = isBusy,
+            isCompletingSignIn = isCompletingSignIn,
             errorMessage = errorMessage,
             onBack = onUseDifferentEmail,
             onResend = { onSubmit(linkSentTo) },
@@ -110,6 +114,7 @@ fun AuthScreen(
 
     var email by rememberSaveable { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
+    val signingInLabel = stringResource(R.string.auth_signing_in)
 
     Column(
         modifier = modifier
@@ -119,7 +124,7 @@ fun AuthScreen(
             .navigationBarsPadding()
             .imePadding(),
     ) {
-        ZunoOnboardingTopBar(onBack = onBack)
+        ZunoOnboardingTopBar(onBack = { if (!isCompletingSignIn) onBack() })
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -137,11 +142,13 @@ fun AuthScreen(
                     label = "Email address",
                     placeholder = "name@example.com",
                     helper = if (isSendingLink) "We’ll send a magic link to this address." else null,
-                    enabled = !isBusy,
+                    enabled = !isWorking,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
-                        focusManager.clearFocus()
-                        onSubmit(email.trim())
+                        if (!isWorking && email.isNotBlank()) {
+                            focusManager.clearFocus()
+                            onSubmit(email.trim())
+                        }
                     }),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -157,28 +164,32 @@ fun AuthScreen(
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoButton(
-                label = if (isSendingLink) "Sending link…" else mode.primaryLabel,
+                label = when {
+                    isCompletingSignIn && !isGoogleBusy -> signingInLabel
+                    isSendingLink -> "Sending link…"
+                    else -> mode.primaryLabel
+                },
                 onClick = {
                     focusManager.clearFocus()
                     onSubmit(email.trim())
                 },
-                enabled = email.isNotBlank() && !isGoogleBusy,
-                loading = isSendingLink,
+                enabled = email.isNotBlank() && !isWorking,
+                loading = isSendingLink || (isCompletingSignIn && !isGoogleBusy),
                 modifier = Modifier.fillMaxWidth(),
             )
             ZunoDivider(label = "or")
             ZunoButton(
-                label = "Continue with Google",
+                label = if (isCompletingSignIn && isGoogleBusy) signingInLabel else "Continue with Google",
                 onClick = onContinueWithGoogle,
                 variant = ZunoButtonVariant.Secondary,
-                enabled = !isBusy,
-                loading = isGoogleBusy,
+                enabled = !isWorking,
+                loading = isGoogleBusy || (isCompletingSignIn && isGoogleBusy),
                 leadingIcon = R.drawable.zuno_ic_google,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(ZunoSpace.s4))
             Row(
-                modifier = Modifier.alpha(if (isBusy) 0.4f else 1f),
+                modifier = Modifier.alpha(if (isWorking) 0.4f else 1f),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -187,7 +198,7 @@ fun AuthScreen(
                     mode.footerAction,
                     style = ZunoType.LabelSmall,
                     color = ZunoColors.TextPrimary,
-                    modifier = Modifier.clickable(enabled = !isBusy, role = Role.Button, onClick = onSwitchMode),
+                    modifier = Modifier.clickable(enabled = !isWorking, role = Role.Button, onClick = onSwitchMode),
                 )
             }
         }
@@ -201,6 +212,7 @@ private const val RESEND_COOLDOWN_SECONDS = 30
 private fun MagicLinkSent(
     email: String,
     isBusy: Boolean,
+    isCompletingSignIn: Boolean,
     errorMessage: String?,
     onBack: () -> Unit,
     onResend: () -> Unit,
@@ -208,6 +220,8 @@ private fun MagicLinkSent(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val isWorking = isBusy || isCompletingSignIn
+    val signingInLabel = stringResource(R.string.auth_signing_in)
     var cooldown by rememberSaveable(email) { mutableIntStateOf(RESEND_COOLDOWN_SECONDS) }
     LaunchedEffect(email, cooldown > 0) {
         while (cooldown > 0) {
@@ -223,7 +237,7 @@ private fun MagicLinkSent(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoOnboardingTopBar(onBack = onBack)
+        ZunoOnboardingTopBar(onBack = { if (!isWorking) onBack() })
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -266,8 +280,10 @@ private fun MagicLinkSent(
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoButton(
-                label = "Open email app",
+                label = if (isCompletingSignIn) signingInLabel else "Open email app",
                 onClick = { openEmailApp(context) },
+                enabled = !isWorking,
+                loading = isCompletingSignIn,
                 modifier = Modifier.fillMaxWidth(),
             )
             ZunoButton(
@@ -277,11 +293,12 @@ private fun MagicLinkSent(
                     cooldown = RESEND_COOLDOWN_SECONDS
                 },
                 variant = ZunoButtonVariant.Ghost,
-                enabled = cooldown == 0 && !isBusy,
-                loading = isBusy,
+                enabled = cooldown == 0 && !isWorking,
+                loading = isBusy && !isCompletingSignIn,
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(
+                modifier = Modifier.alpha(if (isWorking) 0.4f else 1f),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -290,7 +307,7 @@ private fun MagicLinkSent(
                     "Use a different one",
                     style = ZunoType.LabelSmall,
                     color = ZunoColors.TextPrimary,
-                    modifier = Modifier.clickable(role = Role.Button, onClick = onUseDifferentEmail),
+                    modifier = Modifier.clickable(enabled = !isWorking, role = Role.Button, onClick = onUseDifferentEmail),
                 )
             }
         }

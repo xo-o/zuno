@@ -1,30 +1,26 @@
 package com.zuno.ai.ui.screens
 
-import android.content.Intent
-import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -42,54 +38,40 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zuno.ai.R
-import com.zuno.ai.avatar.audio.AvatarSpeechSink
-import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
-import com.zuno.ai.avatar.model.TutorAvatarProfile
-import com.zuno.ai.avatar.ui.TutorStageAvatar
 import com.zuno.ai.data.AppLanguage
-import com.zuno.ai.data.CartesiaAudioPlayer
 import com.zuno.ai.data.LearningLanguage
 import com.zuno.ai.data.LearningLanguages
+import com.zuno.ai.data.LessonState
 import com.zuno.ai.data.OnboardingCompleteResult
 import com.zuno.ai.data.OnboardingTurnResult
-import com.zuno.ai.data.RecommendedTopic
 import com.zuno.ai.data.TopicDetail
-import com.zuno.ai.model.AgentState
-import com.zuno.ai.model.Speaker
-import com.zuno.ai.ui.components.VoiceOrbState
+import com.zuno.ai.data.TopicLesson
+import com.zuno.ai.ui.components.LessonStatus
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
@@ -98,11 +80,15 @@ import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
+import com.zuno.ai.ui.components.ZunoLessonRow
+import com.zuno.ai.ui.components.ZunoListGroup
 import com.zuno.ai.ui.components.ZunoOnboardingTopBar
+import com.zuno.ai.ui.components.ZunoSectionHeader
 import com.zuno.ai.ui.components.ZunoSpinner
+import com.zuno.ai.ui.components.ZunoTopicUpNextCard
 import com.zuno.ai.ui.components.ZunoUserBubble
-import com.zuno.ai.ui.theme.Lexend
 import com.zuno.ai.ui.theme.ZunoColors
+import com.zuno.ai.ui.theme.ZunoGlassBorderElevatedBrush
 import com.zuno.ai.ui.theme.ZunoGlassBorderSubtleBrush
 import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
@@ -113,33 +99,24 @@ import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.viewmodel.OnboardingChatItem
 import com.zuno.ai.viewmodel.OnboardingChatRole
-import com.zuno.ai.viewmodel.OnboardingInputMode
 import com.zuno.ai.viewmodel.OnboardingStep
 import com.zuno.ai.viewmodel.OnboardingUiState
 import com.zuno.ai.viewmodel.OnboardingViewModel
-import com.zuno.ai.viewmodel.VoiceSessionViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val StarterCardTitleStyle: TextStyle
-    get() = ZunoType.TitleMedium
-
 /**
- * 01 · Onboarding (`5a` Target Language -> `5b` Name -> `5c` Level -> `5d` Goals -> `5e` Preparing -> `5f` Ready).
- * Supports seamless switching between real-time Voice Orb mode and Chat mode.
+ * 01 · Onboarding (`5a` Your Language -> `5b` Target Language -> `5c` Name -> `5d` Level -> `5e` Goals -> `5f` Preparing -> `5g` Starting Path Ready).
+ * Chat-only conversational onboarding with quick-option chips and synchronized localization.
  */
 @Composable
 fun OnboardingFlowScreen(
     onboardingViewModel: OnboardingViewModel,
-    voiceViewModel: VoiceSessionViewModel,
     languages: List<LearningLanguage>,
     appLanguage: AppLanguage,
     busy: Boolean,
-    micGranted: () -> Boolean,
-    requestVoicePermission: (onGranted: () -> Unit, onDeclined: () -> Unit) -> Unit,
-    ttsPlayer: CartesiaAudioPlayer,
-    sessionTokenProvider: () -> String?,
-    onSessionExpired: () -> Unit,
+    onSelectAppLanguage: (AppLanguage) -> Unit,
+    onConfirmAppLanguage: (AppLanguage) -> Unit,
     onParseTurn: suspend (step: String, answer: String, chips: List<String>, targetLanguage: String, nativeLanguage: String) -> OnboardingTurnResult,
     onCompleteOnboarding: suspend (
         name: String?,
@@ -151,20 +128,13 @@ fun OnboardingFlowScreen(
         interests: List<String>,
         goalNote: String?,
     ) -> OnboardingCompleteResult,
-    onStartFirstLesson: (TopicDetail) -> Unit,
-    onSelectRecommendedTopic: (RecommendedTopic) -> Unit,
+    onStartLesson: (TopicDetail, TopicLesson?) -> Unit,
     onGoHome: () -> Unit,
     onExitOnboarding: () -> Unit,
     onError: (String) -> Unit = {},
-    tutor: TutorAvatarProfile = TutorAvatarCatalog.DEFAULT_TUTOR,
     modifier: Modifier = Modifier,
 ) {
     val state by onboardingViewModel.state.collectAsStateWithLifecycle()
-    val agentState by voiceViewModel.agentState.collectAsStateWithLifecycle()
-    val voiceMessages by voiceViewModel.messages.collectAsStateWithLifecycle()
-    val ttsSpeaking by ttsPlayer.isSpeaking.collectAsStateWithLifecycle()
-
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selectedLanguage = remember(state.selectedLanguageCode, languages) {
         languages.firstOrNull { it.code == state.selectedLanguageCode }
@@ -172,7 +142,6 @@ fun OnboardingFlowScreen(
     }
     val targetDisplayName = selectedLanguage.displayName(appLanguage)
 
-    val voiceNamePrompt = stringResource(R.string.onboarding_prompt_name_voice)
     val namePrompt = stringResource(R.string.onboarding_prompt_name)
     val levelPromptTemplate = stringResource(R.string.onboarding_prompt_level, "%1\$s", targetDisplayName)
     val goalsPromptTemplate = stringResource(R.string.onboarding_prompt_goals, targetDisplayName, "%1\$s")
@@ -189,31 +158,6 @@ fun OnboardingFlowScreen(
         OnboardingStep.Goals -> state.chatHistory.lastOrNull { it.role == OnboardingChatRole.Assistant }?.text ?: buildGoalsPrompt(state.firstName)
         else -> ""
     }
-    val voicePrompt = if (state.step == OnboardingStep.Name && currentPrompt == namePrompt) {
-        voiceNamePrompt
-    } else {
-        currentPrompt
-    }
-
-    // ── Local Fallback Voice Driver (activates automatically if LiveKit worker isn't active) ──
-    var useLocalVoiceFallback by remember { mutableStateOf(false) }
-    var localListening by remember { mutableStateOf(false) }
-    var localTranscript by remember { mutableStateOf("") }
-
-    val speechRecognizer = remember(context) {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
-        } else null
-    }
-
-    DisposableEffect(ttsPlayer, voiceViewModel) {
-        ttsPlayer.setAvatarSpeechSink(voiceViewModel.avatarSpeechSink)
-        onDispose {
-            ttsPlayer.stop()
-            voiceViewModel.disconnect()
-            runCatching { speechRecognizer?.destroy() }
-        }
-    }
 
     suspend fun submitTurnViaApi(
         step: OnboardingStep,
@@ -223,24 +167,18 @@ fun OnboardingFlowScreen(
     ) {
         if (state.submittingTurn) return
         onboardingViewModel.setSubmittingTurn(true)
-        ttsPlayer.stop()
-        if (agentState != AgentState.DISCONNECTED) {
-            voiceViewModel.interrupt()
-        }
         try {
             val parsed = onParseTurn(
                 step.wireName,
                 rawAnswer,
                 chips,
                 state.selectedLanguageCode,
-                appLanguage.code,
+                state.selectedAppLanguage.code,
             )
             if (!parsed.valid) {
                 val retry = parsed.retryPrompt?.takeIf { it.isNotBlank() } ?: currentPrompt
                 onboardingViewModel.appendUserAndRetry(step, displayText, retry)
             } else {
-                voiceViewModel.clearMessages()
-                localTranscript = ""
                 onboardingViewModel.applyParsedTurn(
                     step = step,
                     userDisplayText = displayText,
@@ -248,167 +186,12 @@ fun OnboardingFlowScreen(
                     levelPromptBuilder = ::buildLevelPrompt,
                     goalsPromptBuilder = ::buildGoalsPrompt,
                 )
-                val updated = onboardingViewModel.state.value
-                if (updated.step.isConversational && agentState != AgentState.DISCONNECTED && !useLocalVoiceFallback) {
-                    voiceViewModel.sendOnboardingAction(
-                        action = "sync_step",
-                        extras = mapOf(
-                            "step" to updated.step.wireName,
-                            "name" to updated.name,
-                            "level" to updated.level,
-                            "targetLanguage" to updated.selectedLanguageCode,
-                            "paused" to (updated.inputMode != OnboardingInputMode.Voice),
-                            "speakPrompt" to (updated.inputMode == OnboardingInputMode.Voice),
-                        ),
-                    )
-                } else if (!updated.step.isConversational) {
-                    voiceViewModel.disconnect()
-                }
             }
         } catch (e: Exception) {
             Log.w("OnboardingFlow", "submitTurnViaApi failed on step=${step.wireName}", e)
             onboardingViewModel.setSubmittingTurn(false)
             onError(e.message ?: "Something went wrong. Please try again.")
         }
-    }
-
-    val latestSubmitTurn by rememberUpdatedState<(OnboardingStep, String) -> Unit> { step, text ->
-        scope.launch { submitTurnViaApi(step, text) }
-    }
-
-    fun startLocalListening() {
-        val recognizer = speechRecognizer ?: return
-        if (!micGranted() || state.submittingTurn || !state.step.isConversational || state.inputMode != OnboardingInputMode.Voice) return
-        val activeStep = state.step
-        recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { localListening = true }
-            override fun onBeginningOfSpeech() { localListening = true }
-            override fun onRmsChanged(rmsdB: Float) = Unit
-            override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() {
-                localListening = false
-            }
-            override fun onError(error: Int) {
-                localListening = false
-            }
-            override fun onPartialResults(partialResults: Bundle?) {
-                val partial = partialResults
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    .orEmpty()
-                if (partial.isNotBlank()) localTranscript = partial
-            }
-            override fun onResults(results: Bundle?) {
-                localListening = false
-                val spoken = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    ?.trim()
-                    .orEmpty()
-                if (spoken.isNotBlank()) {
-                    localTranscript = spoken
-                    latestSubmitTurn(activeStep, spoken)
-                }
-            }
-            override fun onEvent(eventType: Int, params: Bundle?) = Unit
-        })
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, appLanguage.bcp47)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        }
-        runCatching { recognizer.startListening(intent) }
-    }
-
-    // Listen for LiveKit voice-agent `onboarding_turn` packets
-    LaunchedEffect(voiceViewModel) {
-        voiceViewModel.onboardingEvents.collect { event ->
-            voiceViewModel.clearMessages()
-            onboardingViewModel.applyVoiceTurnEvent(
-                event = event,
-                levelPromptBuilder = ::buildLevelPrompt,
-                goalsPromptBuilder = ::buildGoalsPrompt,
-            )
-            if (onboardingViewModel.state.value.step == OnboardingStep.Preparing) {
-                voiceViewModel.disconnect()
-            }
-        }
-    }
-
-    // Manage Voice session lifecycle across `5b`–`5d`
-    LaunchedEffect(state.step, state.inputMode) {
-        localTranscript = ""
-        runCatching { speechRecognizer?.cancel() }
-        localListening = false
-
-        if (!state.step.isConversational) {
-            ttsPlayer.stop()
-            if (agentState != AgentState.DISCONNECTED) voiceViewModel.disconnect()
-            return@LaunchedEffect
-        }
-
-        if (state.inputMode == OnboardingInputMode.Chat) {
-            ttsPlayer.stop()
-            if (agentState != AgentState.DISCONNECTED) {
-                voiceViewModel.sendOnboardingAction("pause")
-            }
-            return@LaunchedEffect
-        }
-
-        // Voice Mode active on `5b`, `5c`, or `5d`
-        if (!micGranted()) return@LaunchedEffect
-
-        if (!useLocalVoiceFallback) {
-            if (agentState == AgentState.DISCONNECTED) {
-                voiceViewModel.connectOnboarding(
-                    sessionToken = sessionTokenProvider(),
-                    step = state.step.wireName,
-                    targetLanguage = state.selectedLanguageCode,
-                    nativeLanguage = appLanguage.code,
-                    accent = state.selectedAccentId,
-                    name = state.name,
-                    level = state.level,
-                    onSessionExpired = onSessionExpired,
-                )
-                // Wait up to 3.5s for LiveKit agent to speak/listen; otherwise smoothly engage direct Cartesia+STT fallback
-                delay(3_500)
-                val currentAgent = voiceViewModel.agentState.value
-                val hasAgentActivity = currentAgent == AgentState.SPEAKING ||
-                    currentAgent == AgentState.LISTENING ||
-                    voiceViewModel.messages.value.isNotEmpty()
-                if (!hasAgentActivity && onboardingViewModel.state.value.inputMode == OnboardingInputMode.Voice) {
-                    voiceViewModel.disconnect()
-                    useLocalVoiceFallback = true
-                }
-            } else {
-                voiceViewModel.sendOnboardingAction(
-                    action = "sync_step",
-                    extras = mapOf(
-                        "step" to state.step.wireName,
-                        "name" to state.name,
-                        "level" to state.level,
-                        "targetLanguage" to state.selectedLanguageCode,
-                        "paused" to false,
-                        "speakPrompt" to true,
-                    ),
-                )
-            }
-        }
-    }
-
-    // Drive direct Cartesia TTS + platform SpeechRecognizer when fallback is active
-    LaunchedEffect(useLocalVoiceFallback, state.step, state.inputMode, currentPrompt) {
-        if (!useLocalVoiceFallback || !state.step.isConversational || state.inputMode != OnboardingInputMode.Voice) {
-            return@LaunchedEffect
-        }
-        ttsPlayer.speak(
-            text = currentPrompt,
-            language = appLanguage.code,
-            nativeLanguage = appLanguage.code,
-            onFinished = {
-                startLocalListening()
-            },
-        )
     }
 
     // Execute `POST /api/me/onboarding` during `5e · Preparing Path`
@@ -419,7 +202,7 @@ fun OnboardingFlowScreen(
                 val res = onCompleteOnboarding(
                     state.name.takeIf { it.isNotBlank() },
                     state.selectedLanguageCode,
-                    appLanguage.code,
+                    state.selectedAppLanguage.code,
                     state.selectedAccentId,
                     state.level,
                     state.focus,
@@ -436,61 +219,17 @@ fun OnboardingFlowScreen(
     }
 
     fun handleBack() {
-        ttsPlayer.stop()
-        runCatching { speechRecognizer?.cancel() }
-        voiceViewModel.clearMessages()
-        localTranscript = ""
         val handled = onboardingViewModel.stepBack(
             namePrompt = namePrompt,
             levelPrompt = ::buildLevelPrompt,
         )
         if (!handled) {
-            voiceViewModel.disconnect()
             onExitOnboarding()
-        } else {
-            val updated = onboardingViewModel.state.value
-            if (!updated.step.isConversational) {
-                voiceViewModel.disconnect()
-            } else if (agentState != AgentState.DISCONNECTED && !useLocalVoiceFallback) {
-                voiceViewModel.sendOnboardingAction(
-                    action = "sync_step",
-                    extras = mapOf(
-                        "step" to updated.step.wireName,
-                        "name" to updated.name,
-                        "level" to updated.level,
-                        "targetLanguage" to updated.selectedLanguageCode,
-                        "paused" to (updated.inputMode != OnboardingInputMode.Voice),
-                        "speakPrompt" to (updated.inputMode == OnboardingInputMode.Voice),
-                    ),
-                )
-            }
         }
     }
 
     BackHandler(enabled = state.step != OnboardingStep.Preparing && state.step != OnboardingStep.Ready) {
         handleBack()
-    }
-
-    // Compute live orb state & level for `5b`–`5d` Voice Mode
-    val orbState: VoiceOrbState = when {
-        state.submittingTurn -> VoiceOrbState.Thinking
-        useLocalVoiceFallback -> when {
-            ttsSpeaking -> VoiceOrbState.Speaking
-            localListening -> VoiceOrbState.Listening
-            else -> VoiceOrbState.Idle
-        }
-        else -> when (agentState) {
-            AgentState.CONNECTING, AgentState.THINKING -> VoiceOrbState.Thinking
-            AgentState.SPEAKING -> VoiceOrbState.Speaking
-            AgentState.LISTENING -> VoiceOrbState.Listening
-            AgentState.IDLE, AgentState.DISCONNECTED -> if (micGranted()) VoiceOrbState.Listening else VoiceOrbState.Idle
-        }
-    }
-
-    val liveSpokenTranscript = if (useLocalVoiceFallback) {
-        localTranscript
-    } else {
-        voiceMessages.lastOrNull { it.speaker == Speaker.USER }?.text.orEmpty()
     }
 
     Box(
@@ -500,6 +239,19 @@ fun OnboardingFlowScreen(
     ) {
         Crossfade(targetState = state.step, label = "onboardingStep") { step ->
             when (step) {
+                OnboardingStep.UserLanguage -> UserLanguageStep(
+                    selectedAppLanguage = state.selectedAppLanguage,
+                    onSelectAppLanguage = { lang ->
+                        onboardingViewModel.selectAppLanguage(lang)
+                        onSelectAppLanguage(lang)
+                    },
+                    onBack = ::handleBack,
+                    onContinue = {
+                        onConfirmAppLanguage(state.selectedAppLanguage)
+                        onboardingViewModel.continueFromUserLanguage()
+                    },
+                )
+
                 OnboardingStep.Language -> TargetLanguageStep(
                     languages = languages,
                     selectedLanguage = selectedLanguage,
@@ -509,90 +261,23 @@ fun OnboardingFlowScreen(
                     onSelectAccent = onboardingViewModel::selectAccent,
                     onBack = ::handleBack,
                     onContinue = {
-                        if (micGranted()) {
-                            onboardingViewModel.continueFromLanguage(namePrompt, startInVoice = true)
-                        } else {
-                            requestVoicePermission(
-                                { onboardingViewModel.continueFromLanguage(namePrompt, startInVoice = true) },
-                                { onboardingViewModel.continueFromLanguage(namePrompt, startInVoice = false) },
-                            )
-                        }
+                        onboardingViewModel.continueFromLanguage(namePrompt)
                     },
                 )
 
-                OnboardingStep.Name, OnboardingStep.Level, OnboardingStep.Goals -> ConversationalOnboardingStep(
+                OnboardingStep.Name, OnboardingStep.Level, OnboardingStep.Goals -> ChatOnboardingStep(
                     state = state,
                     step = step,
-                    appLanguage = appLanguage,
-                    targetLanguageName = targetDisplayName,
-                    prompt = if (state.inputMode == OnboardingInputMode.Voice) voicePrompt else currentPrompt,
-                    liveTranscript = liveSpokenTranscript,
-                    orbState = orbState,
-                    tutor = tutor,
-                    avatarSpeechSink = voiceViewModel.avatarSpeechSink,
                     onBack = ::handleBack,
-                    onMicTap = {
-                        if (!micGranted()) {
-                            requestVoicePermission(
-                                { onboardingViewModel.setInputMode(OnboardingInputMode.Voice) },
-                                { onboardingViewModel.setInputMode(OnboardingInputMode.Chat) },
-                            )
-                        } else if (orbState == VoiceOrbState.Speaking) {
-                            if (useLocalVoiceFallback) {
-                                ttsPlayer.stop()
-                                startLocalListening()
-                            } else {
-                                voiceViewModel.interrupt()
-                            }
-                        } else if (useLocalVoiceFallback && !localListening) {
-                            startLocalListening()
-                        }
-                    },
-                    onNextInVoice = {
-                        val spoken = liveSpokenTranscript.trim()
-                        if (spoken.isNotEmpty()) {
-                            scope.launch {
-                                submitTurnViaApi(step = step, displayText = spoken)
-                            }
-                        }
-                    },
-                    onSwitchToChat = {
-                        ttsPlayer.stop()
-                        runCatching { speechRecognizer?.cancel() }
-                        onboardingViewModel.setInputMode(OnboardingInputMode.Chat)
-                    },
-                    onSwitchToVoice = {
-                        if (micGranted()) {
-                            onboardingViewModel.setInputMode(OnboardingInputMode.Voice)
-                        } else {
-                            requestVoicePermission(
-                                { onboardingViewModel.setInputMode(OnboardingInputMode.Voice) },
-                                {},
-                            )
-                        }
-                    },
                     onDraftChange = onboardingViewModel::updateDraft,
-                    onSelectLevelChip = { label, rawKey ->
-                        scope.launch {
-                            submitTurnViaApi(OnboardingStep.Level, displayText = label, rawAnswer = rawKey)
-                        }
-                    },
-                    onTapGoalChipInVoice = { label ->
-                        scope.launch {
-                            submitTurnViaApi(OnboardingStep.Goals, displayText = label, rawAnswer = label, chips = listOf(label))
-                        }
-                    },
-                    onToggleGoalChipInChat = onboardingViewModel::toggleGoalChip,
+                    onSelectLevelChip = onboardingViewModel::selectLevelChip,
+                    onToggleGoalChip = onboardingViewModel::toggleGoalChip,
                     onSubmitChat = {
                         val draft = state.draftText.trim()
+                        if (draft.isBlank()) return@ChatOnboardingStep
                         val chips = if (step == OnboardingStep.Goals) state.selectedGoalChips.toList() else emptyList()
-                        if (draft.isBlank() && chips.isEmpty()) return@ConversationalOnboardingStep
-                        val display = when {
-                            draft.isNotBlank() -> draft
-                            else -> chips.joinToString(", ")
-                        }
                         scope.launch {
-                            submitTurnViaApi(step = step, displayText = display, rawAnswer = draft, chips = chips)
+                            submitTurnViaApi(step = step, displayText = draft, rawAnswer = draft, chips = chips)
                         }
                     },
                 )
@@ -610,10 +295,12 @@ fun OnboardingFlowScreen(
                     if (result != null) {
                         StartingPathReadyStep(
                             firstName = state.firstName,
+                            selectedLanguage = selectedLanguage,
+                            selectedAccentId = state.selectedAccentId ?: selectedLanguage.defaultAccent,
+                            appLanguage = appLanguage,
                             result = result,
                             busy = busy,
-                            onStartFirstLesson = { onStartFirstLesson(result.starterTopic) },
-                            onSelectRecommended = onSelectRecommendedTopic,
+                            onStartLesson = { lesson -> onStartLesson(result.starterTopic, lesson) },
                             onGoHome = onGoHome,
                         )
                     } else {
@@ -625,7 +312,143 @@ fun OnboardingFlowScreen(
     }
 }
 
-// ── 5a · Target Language (`2544:20712`) ──────────────────────────────────────
+// ── User Language Step (Native / App language) ───────────────────────────────
+
+@Composable
+private fun UserLanguageStep(
+    selectedAppLanguage: AppLanguage,
+    onSelectAppLanguage: (AppLanguage) -> Unit,
+    onBack: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    val listState = rememberLazyListState()
+    val listShape = RoundedCornerShape(ZunoRadius.xxxxl)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        ZunoOnboardingTopBar(
+            title = stringResource(R.string.onboarding_top_title),
+            onBack = onBack,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+        ) {
+            Text(
+                text = stringResource(R.string.onboarding_user_language_title),
+                style = ZunoType.TitleLarge,
+                color = ZunoColors.TextPrimary,
+            )
+            Text(
+                text = stringResource(R.string.onboarding_user_language_subtitle),
+                style = ZunoType.BodySmall,
+                color = ZunoColors.TextSecondary,
+            )
+        }
+        Spacer(Modifier.height(ZunoSpace.s20))
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = ZunoSpace.s24),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zunoGlassSubtle(listShape),
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    itemsIndexed(AppLanguage.entries, key = { _, item -> item.code }) { index, language ->
+                        val isSelected = language == selectedAppLanguage
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (isSelected) ZunoColors.SurfaceDefault else Color.Transparent)
+                                .clickable(role = Role.RadioButton) {
+                                    onSelectAppLanguage(language)
+                                },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 62.dp)
+                                    .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s10),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                                ) {
+                                    Text(
+                                        text = language.nativeLabel,
+                                        style = ZunoType.BodyMediumStrong,
+                                        color = ZunoColors.TextPrimary,
+                                        maxLines = 1,
+                                    )
+                                    Text(
+                                        text = stringResource(language.subtitleRes),
+                                        style = ZunoType.CaptionRegular,
+                                        color = ZunoColors.TextTertiary,
+                                        maxLines = 1,
+                                    )
+                                }
+                                if (isSelected) {
+                                    ZunoIcon(
+                                        icon = R.drawable.zuno_ic_check,
+                                        size = 18.dp,
+                                        tint = ZunoColors.TextPrimary,
+                                    )
+                                }
+                            }
+                            if (index < AppLanguage.entries.lastIndex) {
+                                ZunoGlassHairline()
+                            }
+                        }
+                    }
+                }
+
+                if (listState.canScrollForward) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        ZunoColors.BgCanvas.copy(alpha = 0.96f),
+                                    ),
+                                ),
+                            ),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(ZunoSpace.s20))
+        ZunoButton(
+            label = stringResource(R.string.onboarding_continue),
+            onClick = onContinue,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+        )
+    }
+}
+
+// ── 5b · Target Language (`2544:20712`) ──────────────────────────────────────
 
 private val PopularLanguageOrder = listOf(
     "es", "fr", "de", "ja", "zh", "ko", "it", "ar", "pt", "en",
@@ -669,15 +492,24 @@ private fun TargetLanguageStep(
             title = stringResource(R.string.onboarding_top_title),
             onBack = onBack,
         )
-        Text(
-            text = stringResource(R.string.onboarding_choose_language),
-            style = ZunoType.TitleLarge,
-            color = ZunoColors.TextPrimary,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8),
-        )
-        Spacer(Modifier.height(ZunoSpace.s16))
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+        ) {
+            Text(
+                text = stringResource(R.string.onboarding_choose_language),
+                style = ZunoType.TitleLarge,
+                color = ZunoColors.TextPrimary,
+            )
+            Text(
+                text = stringResource(R.string.onboarding_target_language_subtitle),
+                style = ZunoType.BodySmall,
+                color = ZunoColors.TextSecondary,
+            )
+        }
+        Spacer(Modifier.height(ZunoSpace.s14))
 
         OnboardingLanguageSearchField(
             query = query,
@@ -696,76 +528,92 @@ private fun TargetLanguageStep(
                 .padding(horizontal = ZunoSpace.s24)
                 .zunoGlassSubtle(listShape),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                itemsIndexed(filtered, key = { _, item -> item.code }) { index, lang ->
-                    val isSelected = lang.code == selectedLanguage.code
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (isSelected) ZunoColors.SurfaceDefault else Color.Transparent)
-                            .clickable(role = Role.RadioButton) {
-                                focusManager.clearFocus()
-                                onSelectLanguage(lang)
-                            },
-                    ) {
-                        Row(
+            if (filtered.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(ZunoSpace.s24),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.onboarding_no_languages_match, query.trim()),
+                        style = ZunoType.BodySmall,
+                        color = ZunoColors.TextTertiary,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    itemsIndexed(filtered, key = { _, item -> item.code }) { index, lang ->
+                        val isSelected = lang.code == selectedLanguage.code
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(62.dp)
-                                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                                .background(if (isSelected) ZunoColors.SurfaceDefault else Color.Transparent)
+                                .clickable(role = Role.RadioButton) {
+                                    focusManager.clearFocus()
+                                    onSelectLanguage(lang)
+                                },
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 62.dp)
+                                    .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s10),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                             ) {
-                                Text(
-                                    text = lang.nativeName,
-                                    style = ZunoType.BodyMediumStrong,
-                                    color = ZunoColors.TextPrimary,
-                                    maxLines = 1,
-                                )
-                                Text(
-                                    text = lang.displayName(appLanguage),
-                                    style = ZunoType.CaptionRegular,
-                                    color = ZunoColors.TextTertiary,
-                                    maxLines = 1,
-                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                                ) {
+                                    Text(
+                                        text = lang.nativeName,
+                                        style = ZunoType.BodyMediumStrong,
+                                        color = ZunoColors.TextPrimary,
+                                        maxLines = 1,
+                                    )
+                                    Text(
+                                        text = lang.displayName(appLanguage),
+                                        style = ZunoType.CaptionRegular,
+                                        color = ZunoColors.TextTertiary,
+                                        maxLines = 1,
+                                    )
+                                }
+                                if (isSelected) {
+                                    ZunoIcon(
+                                        icon = R.drawable.zuno_ic_check,
+                                        size = 18.dp,
+                                        tint = ZunoColors.TextPrimary,
+                                    )
+                                }
                             }
-                            if (isSelected) {
-                                ZunoIcon(
-                                    icon = R.drawable.zuno_ic_check,
-                                    size = 18.dp,
-                                    tint = ZunoColors.TextPrimary,
-                                )
+                            if (index < filtered.lastIndex) {
+                                ZunoGlassHairline()
                             }
-                        }
-                        if (index < filtered.lastIndex) {
-                            ZunoGlassHairline()
                         }
                     }
                 }
-            }
 
-            if (listState.canScrollForward) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    ZunoColors.BgCanvas.copy(alpha = 0.96f),
+                if (listState.canScrollForward) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        ZunoColors.BgCanvas.copy(alpha = 0.96f),
+                                    ),
                                 ),
                             ),
-                        ),
-                )
+                    )
+                }
             }
         }
 
@@ -831,7 +679,11 @@ private fun OnboardingLanguageSearchField(
                         if (focused) {
                             Modifier.zunoGlassElevated(CircleShape, borderBrush = SolidColor(ZunoColors.BorderFocus))
                         } else {
-                            Modifier.zunoGlassSubtle(CircleShape, borderBrush = ZunoGlassBorderSubtleBrush)
+                            Modifier.zunoGlassSubtle(
+                                CircleShape,
+                                borderBrush = ZunoGlassBorderSubtleBrush,
+                                fillColor = ZunoColors.SurfaceDefault,
+                            )
                         },
                     )
                     .padding(start = ZunoSpace.s16, end = ZunoSpace.s8),
@@ -858,33 +710,23 @@ private fun OnboardingLanguageSearchField(
     )
 }
 
-// ── 5b / 5c / 5d · Conversational Onboarding (Voice Portrait HUD & Chat) ─────
+// ── 5c / 5d / 5e · Conversational Onboarding (Chat-only) ─────────────────────
 
 @Composable
-private fun ConversationalOnboardingStep(
+private fun ChatOnboardingStep(
     state: OnboardingUiState,
     step: OnboardingStep,
-    appLanguage: AppLanguage,
-    targetLanguageName: String,
-    prompt: String,
-    liveTranscript: String,
-    orbState: VoiceOrbState,
-    tutor: TutorAvatarProfile,
-    avatarSpeechSink: AvatarSpeechSink,
     onBack: () -> Unit,
-    onMicTap: () -> Unit,
-    onNextInVoice: () -> Unit,
-    onSwitchToChat: () -> Unit,
-    onSwitchToVoice: () -> Unit,
     onDraftChange: (String) -> Unit,
-    onSelectLevelChip: (label: String, rawKey: String) -> Unit,
-    onTapGoalChipInVoice: (label: String) -> Unit,
-    onToggleGoalChipInChat: (label: String) -> Unit,
+    onSelectLevelChip: (label: String) -> Unit,
+    onToggleGoalChip: (label: String) -> Unit,
     onSubmitChat: () -> Unit,
 ) {
-    val beginnerLabel = stringResource(R.string.onboarding_level_beginner)
-    val intermediateLabel = stringResource(R.string.onboarding_level_intermediate)
-    val advancedLabel = stringResource(R.string.onboarding_level_advanced)
+    val levelChips = listOf(
+        stringResource(R.string.onboarding_level_beginner),
+        stringResource(R.string.onboarding_level_intermediate),
+        stringResource(R.string.onboarding_level_advanced),
+    )
 
     val goalChips = listOf(
         stringResource(R.string.onboarding_goal_work),
@@ -905,308 +747,20 @@ private fun ConversationalOnboardingStep(
             onBack = onBack,
         )
 
-        Crossfade(
-            targetState = state.inputMode,
-            label = "onboardingInputMode",
+        ChatStepBody(
+            step = step,
+            history = state.chatHistory,
+            draftText = state.draftText,
+            submitting = state.submittingTurn,
+            selectedGoalChips = state.selectedGoalChips,
+            levelChips = levelChips,
+            goalChips = goalChips,
+            onDraftChange = onDraftChange,
+            onSelectLevelChip = onSelectLevelChip,
+            onToggleGoalChip = onToggleGoalChip,
+            onSend = onSubmitChat,
             modifier = Modifier.weight(1f),
-        ) { mode ->
-            when (mode) {
-                OnboardingInputMode.Voice -> VoiceStepBody(
-                    step = step,
-                    history = state.chatHistory,
-                    appLanguage = appLanguage,
-                    targetLanguageName = targetLanguageName,
-                    liveTranscript = liveTranscript,
-                    orbState = orbState,
-                    submitting = state.submittingTurn,
-                    tutor = tutor,
-                    avatarSpeechSink = avatarSpeechSink,
-                    levelChips = listOf(
-                        beginnerLabel to "beginner",
-                        intermediateLabel to "intermediate",
-                        advancedLabel to "advanced",
-                    ),
-                    goalChips = goalChips,
-                    onMicTap = onMicTap,
-                    onNext = onNextInVoice,
-                    onSelectLevelChip = onSelectLevelChip,
-                    onTapGoalChip = onTapGoalChipInVoice,
-                    onTypeInstead = onSwitchToChat,
-                )
-
-                OnboardingInputMode.Chat -> ChatStepBody(
-                    step = step,
-                    history = state.chatHistory,
-                    draftText = state.draftText,
-                    submitting = state.submittingTurn,
-                    selectedGoalChips = state.selectedGoalChips,
-                    levelChips = listOf(
-                        beginnerLabel to "beginner",
-                        intermediateLabel to "intermediate",
-                        advancedLabel to "advanced",
-                    ),
-                    goalChips = goalChips,
-                    onDraftChange = onDraftChange,
-                    onSelectLevelChip = onSelectLevelChip,
-                    onToggleGoalChip = onToggleGoalChipInChat,
-                    onSpeakInstead = onSwitchToVoice,
-                    onSend = onSubmitChat,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VoiceStepBody(
-    step: OnboardingStep,
-    history: List<OnboardingChatItem>,
-    appLanguage: AppLanguage,
-    targetLanguageName: String,
-    liveTranscript: String,
-    orbState: VoiceOrbState,
-    submitting: Boolean,
-    tutor: TutorAvatarProfile,
-    avatarSpeechSink: AvatarSpeechSink,
-    levelChips: List<Pair<String, String>>,
-    goalChips: List<String>,
-    onMicTap: () -> Unit,
-    onNext: () -> Unit,
-    onSelectLevelChip: (label: String, rawKey: String) -> Unit,
-    onTapGoalChip: (label: String) -> Unit,
-    onTypeInstead: () -> Unit,
-) {
-    val youHeader = if (step == OnboardingStep.Name) {
-        stringResource(R.string.onboarding_you_speaking_in, appLanguage.nativeLabel)
-    } else {
-        stringResource(R.string.onboarding_you_speaking)
-    }
-    val youNameLabel = stringResource(R.string.onboarding_hud_step_name)
-    val youLevelLabel = stringResource(R.string.onboarding_hud_step_level, targetLanguageName)
-    val tutorNameLabel = stringResource(R.string.onboarding_tutor_eyebrow_name, targetLanguageName)
-    val tutorLevelLabel = stringResource(R.string.onboarding_tutor_eyebrow_level, targetLanguageName)
-    val tutorGoalsLabel = stringResource(R.string.onboarding_tutor_eyebrow_goals)
-    val nameHelper = stringResource(R.string.onboarding_name_helper)
-    val canAdvance = !submitting && liveTranscript.isNotBlank()
-    val isMicActive = orbState == VoiceOrbState.Listening || orbState == VoiceOrbState.Speaking
-
-    val listState = rememberLazyListState()
-    val totalItems = history.size + if (liveTranscript.isNotBlank()) 1 else 0
-    LaunchedEffect(totalItems, step) {
-        if (totalItems > 0) {
-            delay(60)
-            listState.animateScrollToItem(totalItems - 1)
-        }
-    }
-
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val portraitHeight = (maxHeight * 0.36f).coerceIn(200.dp, 296.dp)
-
-        Column(Modifier.fillMaxSize()) {
-            // 1. Portrait Stage Card (`296dp` max, light 52dp bottom feather scrim)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(portraitHeight)
-                    .clip(RoundedCornerShape(0.dp)),
-            ) {
-                TutorStageAvatar(
-                    tutor = tutor,
-                    speechSink = avatarSpeechSink,
-                    contentDescription = stringResource(R.string.onboarding_sender_sofia),
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .height(28.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                0f to ZunoColors.BgCanvas.copy(alpha = 0.70f),
-                                0.5f to ZunoColors.BgCanvas.copy(alpha = 0.25f),
-                                1f to Color.Transparent,
-                            ),
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                0f to Color.Transparent,
-                                0.45f to ZunoColors.BgCanvas.copy(alpha = 0.22f),
-                                0.80f to ZunoColors.BgCanvas.copy(alpha = 0.68f),
-                                1f to ZunoColors.BgCanvas,
-                            ),
-                        ),
-                )
-            }
-
-            // 2. Top-aligned scrollable Conversation (bubbles appear progressively as user speaks)
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(
-                    start = ZunoSpace.s20,
-                    end = ZunoSpace.s20,
-                    top = ZunoSpace.s10,
-                    bottom = ZunoSpace.s8,
-                ),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-            ) {
-                itemsIndexed(history, key = { _, item -> item.id }) { index, item ->
-                    when (item.role) {
-                        OnboardingChatRole.Assistant -> {
-                            val sender = when (item.step) {
-                                OnboardingStep.Name -> tutorNameLabel
-                                OnboardingStep.Level -> tutorLevelLabel
-                                OnboardingStep.Goals -> tutorGoalsLabel
-                                else -> stringResource(R.string.onboarding_sender_sofia)
-                            }
-                            val helperTranslation = if (item.step == OnboardingStep.Name && index == 0) {
-                                nameHelper
-                            } else {
-                                null
-                            }
-                            ZunoAssistantBubble(
-                                message = item.text,
-                                translation = helperTranslation,
-                                senderLabel = sender,
-                            )
-                        }
-                        OnboardingChatRole.User -> {
-                            val userSender = when (item.step) {
-                                OnboardingStep.Name -> "You · $youNameLabel"
-                                OnboardingStep.Level -> "You · $youLevelLabel"
-                                else -> youHeader
-                            }
-                            val trimmed = item.text.trim()
-                            val quoted = if (trimmed.startsWith("“") && trimmed.endsWith("”")) trimmed else "“$trimmed”"
-                            ZunoUserBubble(
-                                message = quoted,
-                                senderLabel = userSender,
-                            )
-                        }
-                    }
-                }
-
-                if (liveTranscript.isNotBlank()) {
-                    item(key = "live_transcript") {
-                        ZunoUserBubble(
-                            message = "“${liveTranscript.trim()}”",
-                            senderLabel = youHeader,
-                        )
-                    }
-                }
-            }
-
-            // 3. Optional quick-tap chips for Level & Goals
-            when (step) {
-                OnboardingStep.Level -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        levelChips.forEach { (label, key) ->
-                            ZunoChip(
-                                label = label,
-                                onClick = { if (!submitting) onSelectLevelChip(label, key) },
-                            )
-                        }
-                    }
-                }
-                OnboardingStep.Goals -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        goalChips.forEach { chip ->
-                            ZunoChip(
-                                label = chip,
-                                onClick = { if (!submitting) onTapGoalChip(chip) },
-                            )
-                        }
-                    }
-                }
-                else -> Unit
-            }
-
-            Spacer(Modifier.height(ZunoSpace.s8))
-
-            // 4. Call controls (`Mic`, `Type instead`, `Next`)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16)
-                    .height(52.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .then(if (isMicActive) Modifier.zunoGlassElevated(CircleShape) else Modifier.zunoGlassSubtle(CircleShape))
-                        .clickable(role = Role.Button, onClick = onMicTap),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ZunoIcon(
-                        icon = R.drawable.zuno_ic_mic,
-                        size = 24.dp,
-                        tint = ZunoColors.IconPrimary,
-                        contentDescription = stringResource(
-                            if (orbState == VoiceOrbState.Speaking) R.string.onboarding_status_speaking
-                            else R.string.onboarding_badge_listening
-                        ),
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .height(44.dp)
-                        .zunoGlassSubtle(CircleShape)
-                        .clickable(role = Role.Button, onClick = onTypeInstead)
-                        .padding(horizontal = ZunoSpace.s20),
-                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ZunoIcon(R.drawable.zuno_ic_keyboard, 18.dp, tint = ZunoColors.IconPrimary)
-                    Text(
-                        text = stringResource(R.string.onboarding_type_instead),
-                        style = ZunoType.LabelLarge,
-                        color = ZunoColors.TextPrimary,
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .alpha(if (canAdvance) 1f else 0.4f)
-                        .zunoGlassSubtle(CircleShape)
-                        .clickable(enabled = canAdvance, role = Role.Button, onClick = onNext),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ZunoIcon(
-                        icon = R.drawable.zuno_ic_arrow_right,
-                        size = 24.dp,
-                        tint = ZunoColors.IconPrimary,
-                        contentDescription = stringResource(R.string.onboarding_next_step),
-                    )
-                }
-            }
-        }
+        )
     }
 }
 
@@ -1217,17 +771,19 @@ private fun ChatStepBody(
     draftText: String,
     submitting: Boolean,
     selectedGoalChips: Set<String>,
-    levelChips: List<Pair<String, String>>,
+    levelChips: List<String>,
     goalChips: List<String>,
     onDraftChange: (String) -> Unit,
-    onSelectLevelChip: (label: String, rawKey: String) -> Unit,
+    onSelectLevelChip: (label: String) -> Unit,
     onToggleGoalChip: (label: String) -> Unit,
-    onSpeakInstead: () -> Unit,
     onSend: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
-    val sofiaLabel = stringResource(R.string.onboarding_sender_sofia)
+    val focusManager = LocalFocusManager.current
+    val zunoLabel = stringResource(R.string.onboarding_sender_zuno)
+    val youLabel = stringResource(R.string.onboarding_sender_you)
     var listHeightPx by remember { mutableStateOf(0) }
 
     LaunchedEffect(history.size, step) {
@@ -1242,14 +798,16 @@ private fun ChatStepBody(
         }
     }
     LaunchedEffect(step) {
-        runCatching { focusRequester.requestFocus() }
+        if (step == OnboardingStep.Level) {
+            focusManager.clearFocus()
+        } else {
+            runCatching { focusRequester.requestFocus() }
+        }
     }
 
-    val canSend = !submitting && (
-        draftText.isNotBlank() || (step == OnboardingStep.Goals && selectedGoalChips.isNotEmpty())
-    )
+    val canSend = !submitting && draftText.isNotBlank()
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -1268,10 +826,11 @@ private fun ChatStepBody(
                 when (item.role) {
                     OnboardingChatRole.Assistant -> ZunoAssistantBubble(
                         message = item.text,
-                        senderLabel = sofiaLabel,
+                        senderLabel = zunoLabel,
                     )
                     OnboardingChatRole.User -> ZunoUserBubble(
                         message = item.text,
+                        senderLabel = youLabel,
                     )
                 }
             }
@@ -1286,10 +845,17 @@ private fun ChatStepBody(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8, Alignment.CenterHorizontally),
                 ) {
-                    levelChips.forEach { (label, key) ->
+                    levelChips.forEach { label ->
+                        val selected = draftText.trim().equals(label, ignoreCase = true)
                         ZunoChip(
                             label = label,
-                            onClick = { if (!submitting) onSelectLevelChip(label, key) },
+                            selected = selected,
+                            onClick = {
+                                if (!submitting) {
+                                    onSelectLevelChip(label)
+                                    runCatching { focusRequester.requestFocus() }
+                                }
+                            },
                         )
                     }
                 }
@@ -1303,10 +869,17 @@ private fun ChatStepBody(
                     horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8, Alignment.CenterHorizontally),
                 ) {
                     goalChips.forEach { chip ->
+                        val selected = selectedGoalChips.any { it.equals(chip, ignoreCase = true) } ||
+                            draftText.split(',').any { it.trim().equals(chip, ignoreCase = true) }
                         ZunoChip(
                             label = chip,
-                            selected = chip in selectedGoalChips,
-                            onClick = { if (!submitting) onToggleGoalChip(chip) },
+                            selected = selected,
+                            onClick = {
+                                if (!submitting) {
+                                    onToggleGoalChip(chip)
+                                    runCatching { focusRequester.requestFocus() }
+                                }
+                            },
                         )
                     }
                 }
@@ -1322,7 +895,6 @@ private fun ChatStepBody(
             submitting = submitting,
             enabled = !submitting,
             focusRequester = focusRequester,
-            onSpeakInstead = onSpeakInstead,
             onSend = onSend,
             modifier = Modifier.padding(
                 start = ZunoSpace.s16,
@@ -1343,15 +915,25 @@ private fun OnboardingComposer(
     submitting: Boolean,
     enabled: Boolean,
     focusRequester: FocusRequester,
-    onSpeakInstead: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.xxl)
+    var textFieldValue by remember {
+        mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
+    }
+    if (textFieldValue.text != value) {
+        textFieldValue = TextFieldValue(text = value, selection = TextRange(value.length))
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .zunoGlassElevated(shape)
+            .zunoGlassElevated(
+                shape = shape,
+                borderBrush = ZunoGlassBorderSubtleBrush,
+                fillColor = ZunoColors.SurfaceStrong,
+            )
             .padding(
                 start = ZunoSpace.s16,
                 end = ZunoSpace.s10,
@@ -1361,13 +943,18 @@ private fun OnboardingComposer(
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
     ) {
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = textFieldValue,
+            onValueChange = { updated ->
+                textFieldValue = updated
+                if (updated.text != value) {
+                    onValueChange(updated.text)
+                }
+            },
             enabled = enabled,
             maxLines = 4,
             textStyle = ZunoType.BodyMedium.copy(color = ZunoColors.TextPrimary),
             cursorBrush = SolidColor(ZunoColors.TextPrimary),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1385,31 +972,19 @@ private fun OnboardingComposer(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .height(36.dp)
-                    .clip(CircleShape)
-                    .clickable(enabled = enabled, role = Role.Button, onClick = onSpeakInstead)
-                    .padding(start = ZunoSpace.s4, end = ZunoSpace.s12),
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ZunoIcon(R.drawable.zuno_ic_mic, 16.dp, tint = ZunoColors.TextSecondary)
-                Text(
-                    text = stringResource(R.string.onboarding_speak_instead),
-                    style = ZunoType.LabelSmall,
-                    color = ZunoColors.TextSecondary,
-                )
-            }
-
+            val active = canSend || submitting
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .alpha(if (canSend || submitting) 1f else 0.4f)
-                    .zunoGlassElevated(CircleShape)
+                    .alpha(if (active) 1f else 0.4f)
+                    .zunoGlassElevated(
+                        shape = CircleShape,
+                        borderBrush = if (active) ZunoGlassBorderElevatedBrush else null,
+                        fillColor = if (active) ZunoColors.SurfaceStronger else ZunoColors.SurfaceDefault,
+                    )
                     .clickable(enabled = canSend, role = Role.Button, onClick = onSend),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1423,7 +998,7 @@ private fun OnboardingComposer(
     }
 }
 
-// ── 5e · Preparing Path (`2544:21444`) ───────────────────────────────────────
+// ── 5f · Preparing Path (`2544:21444`) ───────────────────────────────────────
 
 @Composable
 private fun PreparingPathStep(
@@ -1471,7 +1046,7 @@ private fun PreparingPathStep(
                 if (errorMessage != null) {
                     Spacer(Modifier.height(ZunoSpace.s8))
                     ZunoButton(
-                        label = stringResource(R.string.onboarding_continue),
+                        label = stringResource(R.string.common_try_again),
                         onClick = onRetry,
                         size = ZunoButtonSize.Medium,
                     )
@@ -1481,22 +1056,42 @@ private fun PreparingPathStep(
     }
 }
 
-// ── 5f · Starting Path Ready (`2544:21856`) ──────────────────────────────────
+// ── 5g · Starting Path Ready (`2544:21856`) ──────────────────────────────────
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StartingPathReadyStep(
     firstName: String,
+    selectedLanguage: LearningLanguage,
+    selectedAccentId: String?,
+    appLanguage: AppLanguage,
     result: OnboardingCompleteResult,
     busy: Boolean,
-    onStartFirstLesson: () -> Unit,
-    onSelectRecommended: (RecommendedTopic) -> Unit,
+    onStartLesson: (TopicLesson?) -> Unit,
     onGoHome: () -> Unit,
 ) {
     val starter = result.starterTopic
-    val starterObjective = starter.lessons.firstOrNull()?.objective?.takeIf { it.isNotBlank() }
-        ?: starter.summary.translation
-    val starterCardShape = RoundedCornerShape(ZunoRadius.xxxxl)
-    val recGroupShape = RoundedCornerShape(ZunoRadius.xxxxl)
+    val firstLesson = starter.nextLesson ?: starter.lessons.firstOrNull()
+    val totalLessons = starter.summary.totalLessons.coerceAtLeast(starter.lessons.size).coerceAtLeast(1)
+
+    val languageDisplay = selectedLanguage.displayName(appLanguage)
+    val languageChipLabel = if (selectedLanguage.accents.size > 1) {
+        val accent = selectedLanguage.accentLabel(selectedAccentId)
+        if (accent.isNotBlank()) "$languageDisplay · $accent" else languageDisplay
+    } else {
+        languageDisplay
+    }
+    val levelName = when (result.profile.level.uppercase()) {
+        "A1", "A2" -> stringResource(R.string.onboarding_level_beginner)
+        "C1", "C2" -> stringResource(R.string.onboarding_level_advanced)
+        else -> stringResource(R.string.onboarding_level_intermediate)
+    }
+    val levelChipLabel = "$levelName · ${result.profile.level}"
+
+    val baseSubtitle = result.pathSubtitle
+        .ifBlank { stringResource(R.string.onboarding_ready_subtitle_default) }
+        .trimEnd('.', ' ')
+    val subtitleText = "$baseSubtitle · ${stringResource(R.string.onboarding_starter_lessons_suffix, totalLessons)}"
 
     Column(
         modifier = Modifier
@@ -1504,140 +1099,121 @@ private fun StartingPathReadyStep(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoOnboardingTopBar(title = stringResource(R.string.onboarding_top_title))
+        ZunoOnboardingTopBar(
+            title = stringResource(R.string.onboarding_top_title),
+            onBack = if (!busy) onGoHome else null,
+        )
 
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s20),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s12),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = ZunoSpace.s8, bottom = ZunoSpace.s4),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                ) {
+                    ZunoChip(
+                        label = languageChipLabel,
+                        leadingIcon = R.drawable.zuno_ic_t_sparkles,
+                        leadingIconTint = ZunoColors.IconPrimary,
+                        selected = true,
+                        onClick = {},
+                    )
+                    ZunoChip(
+                        label = levelChipLabel,
+                        selected = false,
+                        onClick = {},
+                    )
+                }
+
                 Text(
                     text = if (firstName.isNotBlank()) {
                         stringResource(R.string.onboarding_ready_title_named, firstName)
                     } else {
                         stringResource(R.string.onboarding_ready_title)
                     },
-                    style = ZunoType.TitleLarge,
+                    style = ZunoType.Display,
                     color = ZunoColors.TextPrimary,
                 )
+
                 Text(
-                    text = result.pathSubtitle.ifBlank { stringResource(R.string.onboarding_ready_subtitle_default) },
+                    text = subtitleText,
                     style = ZunoType.BodySmall,
-                    color = ZunoColors.TextTertiary,
+                    color = ZunoColors.TextSecondary,
                 )
             }
 
-            // Starter Card
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .zunoGlassSubtle(starterCardShape)
-                    .padding(ZunoSpace.s16),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-            ) {
-                Text(
-                    text = stringResource(R.string.onboarding_starter_eyebrow, starter.summary.totalLessons),
-                    style = ZunoType.FootnoteStrong,
-                    color = ZunoColors.TextTertiary,
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4)) {
-                    Text(
-                        text = starter.summary.title,
-                        style = StarterCardTitleStyle,
-                        color = ZunoColors.TextPrimary,
-                    )
-                    Text(
-                        text = starterObjective,
-                        style = ZunoType.BodySmall,
-                        color = ZunoColors.TextSecondary,
-                    )
-                }
-                ZunoButton(
-                    label = stringResource(R.string.onboarding_start_first_lesson),
-                    onClick = onStartFirstLesson,
-                    size = ZunoButtonSize.Medium,
-                    enabled = !busy,
-                    loading = busy,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            ZunoTopicUpNextCard(
+                eyebrow = stringResource(
+                    R.string.onboarding_up_next_eyebrow,
+                    firstLesson?.position ?: 1,
+                    totalLessons,
+                ),
+                title = starter.summary.title,
+                actionLabel = stringResource(R.string.onboarding_up_next_start),
+                busy = busy,
+                onAction = { if (!busy) onStartLesson(firstLesson) },
+            )
 
-            // Recommended next
-            if (result.recommendedTopics.isNotEmpty()) {
+            if (starter.lessons.isNotEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 ) {
-                    Text(
-                        text = stringResource(R.string.onboarding_recommended_next),
-                        style = ZunoType.LabelSmall,
-                        color = ZunoColors.TextTertiary,
-                        modifier = Modifier.padding(start = ZunoSpace.s8),
+                    ZunoSectionHeader(
+                        title = stringResource(R.string.onboarding_syllabus_header, starter.lessons.size),
                     )
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .zunoGlassSubtle(recGroupShape),
-                    ) {
-                        val visibleRecommendations = result.recommendedTopics.take(2)
-                        visibleRecommendations.forEachIndexed { index, rec ->
-                            val categoryTag = rec.reason.ifBlank { rec.translation }
-                            val lessonsLabel = stringResource(R.string.onboarding_lessons_count, 5)
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !busy, role = Role.Button) { onSelectRecommended(rec) },
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
-                                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
-                                    ) {
-                                        Text(
-                                            text = rec.title,
-                                            style = ZunoType.BodyMediumStrong,
-                                            color = ZunoColors.TextPrimary,
-                                        )
-                                        Text(
-                                            text = "$categoryTag · $lessonsLabel",
-                                            style = ZunoType.CaptionRegular,
-                                            color = ZunoColors.TextTertiary,
-                                        )
-                                    }
-                                    ZunoIcon(
-                                        icon = R.drawable.zuno_ic_chevron_right_muted,
-                                        size = 16.dp,
-                                    )
-                                }
-                                if (index < visibleRecommendations.lastIndex) {
-                                    ZunoGlassHairline()
-                                }
-                            }
+                    ZunoListGroup {
+                        starter.lessons.forEachIndexed { index, lesson ->
+                            val isCurrent = lesson.state == LessonState.Current ||
+                                (starter.nextLesson == null && index == 0)
+                            ZunoLessonRow(
+                                number = lesson.position,
+                                title = lesson.title,
+                                status = when {
+                                    lesson.state == LessonState.Done -> LessonStatus.Done
+                                    isCurrent -> LessonStatus.Current
+                                    else -> LessonStatus.Upcoming
+                                },
+                                meta = when {
+                                    lesson.state == LessonState.Done -> stringResource(R.string.topics_lesson_done_meta)
+                                    isCurrent -> stringResource(R.string.onboarding_lesson_up_next)
+                                    else -> stringResource(R.string.topics_lesson_est_min)
+                                },
+                                showDivider = index > 0,
+                                onClick = { if (!busy) onStartLesson(lesson) },
+                            )
                         }
                     }
                 }
             }
         }
 
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
-            contentAlignment = Alignment.Center,
+                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {
+            ZunoButton(
+                label = stringResource(R.string.onboarding_start_first_lesson),
+                onClick = { onStartLesson(firstLesson) },
+                size = ZunoButtonSize.Large,
+                enabled = !busy,
+                loading = busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
             ZunoButton(
                 label = stringResource(R.string.onboarding_go_home),
                 onClick = onGoHome,

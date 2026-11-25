@@ -61,6 +61,7 @@ import com.zuno.ai.data.UnifiedChatKind
 import com.zuno.ai.ui.components.HomeNavTab
 import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.ui.components.ZunoAiTutorAvatar
+import com.zuno.ai.ui.components.ZunoAvatar
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
@@ -152,6 +153,11 @@ fun ChatsScreen(
             (selectedFilter == ChatsFilter.People && data.partners.isNotEmpty())
         )) || searchVisible
 
+    val isAllEmpty = data != null &&
+        selectedFilter == ChatsFilter.All &&
+        data.conversations.isEmpty() &&
+        query.isEmpty()
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -186,17 +192,19 @@ fun ChatsScreen(
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s6, bottom = ZunoSpace.s32),
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+                    verticalArrangement = Arrangement.spacedBy(if (isAllEmpty) ZunoSpace.s20 else ZunoSpace.s14),
                 ) {
-                    item(key = "open-toggle") {
-                        OpenToSpeakToggleCard(
-                            userInitial = userInitial,
-                            userImageUrl = userImageUrl,
-                            openToSpeak = data.openToSpeak,
-                            languageName = data.languageName,
-                            level = data.level,
-                            onToggle = onToggleOpenToSpeak,
-                        )
+                    if (!isAllEmpty) {
+                        item(key = "open-toggle") {
+                            OpenToSpeakToggleCard(
+                                userInitial = userInitial,
+                                userImageUrl = userImageUrl,
+                                openToSpeak = data.openToSpeak,
+                                languageName = data.languageName,
+                                level = data.level,
+                                onToggle = onToggleOpenToSpeak,
+                            )
+                        }
                     }
 
                     if (searchVisible) {
@@ -250,20 +258,13 @@ fun ChatsScreen(
                             ChatsFilter.All -> {
                                 if (filteredConversations.isEmpty()) {
                                     item(key = "empty-all") {
-                                        ChatsEmptySection(
-                                            icon = R.drawable.zuno_ic_messages_square,
-                                            title = stringResource(R.string.chats_empty_all_title),
-                                            description = stringResource(R.string.chats_empty_all_body),
-                                            quickStartsTitle = stringResource(R.string.chats_ways_to_start),
-                                            quickStarts = {
-                                                QuickStartAiRow(onClick = onStartAiChat)
-                                                if (data.openSpeakers.isNotEmpty()) {
-                                                    QuickStartOpenSpeakersRow(
-                                                        speakers = data.openSpeakers,
-                                                        onClick = { selectedFilter = ChatsFilter.Open },
-                                                    )
-                                                }
-                                            },
+                                        ChatsEmptyAllSection(
+                                            openSpeakersCount = data.openSpeakers.size,
+                                            level = data.level,
+                                            openToSpeak = data.openToSpeak,
+                                            onStartAiChat = onStartAiChat,
+                                            onBrowseSpeakers = { selectedFilter = ChatsFilter.Open },
+                                            onToggleOpenToSpeak = onToggleOpenToSpeak,
                                         )
                                     }
                                 } else {
@@ -505,20 +506,19 @@ private fun OpenToSpeakToggleCard(
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ZunoOpenToSpeakAvatar(
+        ZunoAvatar(
             initial = userInitial,
             imageUrl = userImageUrl,
-            size = 38.dp,
-            openToSpeak = openToSpeak,
-            inverseInner = true,
+            size = 40.dp,
+            textStyle = ZunoType.LabelMedium,
         )
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
         ) {
             Text(
                 text = stringResource(R.string.chats_open_to_speak),
-                style = ZunoType.LabelMedium,
+                style = ZunoType.BodyMediumStrong,
                 color = ZunoColors.TextPrimary,
                 maxLines = 1,
             )
@@ -529,7 +529,7 @@ private fun OpenToSpeakToggleCard(
                     stringResource(R.string.chats_open_to_speak_off_sub)
                 },
                 style = ZunoType.FootnoteRegular,
-                color = ZunoColors.TextTertiary,
+                color = if (openToSpeak) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -712,7 +712,7 @@ private fun UnifiedConversationRow(
                 initial = item.avatarInitial,
                 imageUrl = item.avatarUrl,
                 size = 44.dp,
-                openToSpeak = item.openToSpeak,
+                openToSpeak = false,
             )
         }
         Column(
@@ -737,31 +737,28 @@ private fun UnifiedConversationRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    item.badge?.let { badgeLabel ->
-                        val badgeIcon = when {
-                            item.kind == UnifiedChatKind.Ai && item.isVoice -> R.drawable.zuno_ic_t_audio_lines
-                            item.kind == UnifiedChatKind.Ai && badgeLabel == "Text" -> R.drawable.zuno_ic_messages_square
-                            item.kind == UnifiedChatKind.Ai -> R.drawable.zuno_ic_t_sparkles
-                            else -> null
-                        }
-                        Row(
+                    if (item.kind == UnifiedChatKind.Ai) {
+                        Box(
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(if (item.kind == UnifiedChatKind.Ai) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault)
-                                .padding(horizontal = 7.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .background(ZunoColors.SurfaceStrong)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            if (badgeIcon != null) {
-                                ZunoIcon(badgeIcon, 10.dp, tint = ZunoColors.IconSecondary)
-                            }
                             Text(
-                                text = badgeLabel,
+                                text = "AI",
                                 style = ZunoType.Micro,
-                                color = if (item.kind == UnifiedChatKind.Ai) ZunoColors.TextSecondary else ZunoColors.TextPrimary,
+                                color = ZunoColors.TextSecondary,
                                 maxLines = 1,
                             )
                         }
+                    } else if (item.openToSpeak) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.StatusSpeaking),
+                        )
                     }
                 }
                 Row(
@@ -908,23 +905,37 @@ private fun LearnerActionRow(
             initial = learner.initial,
             imageUrl = learner.imageUrl,
             size = 40.dp,
-            openToSpeak = learner.openToSpeak,
+            openToSpeak = false,
         )
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
         ) {
-            Text(
-                text = learner.name,
-                style = ZunoType.BodyMediumStrong,
-                color = ZunoColors.TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = learner.name,
+                    style = ZunoType.BodyMediumStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (learner.openToSpeak) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(ZunoColors.StatusSpeaking),
+                    )
+                }
+            }
             Text(
                 text = subtitle,
                 style = ZunoType.FootnoteRegular,
-                color = ZunoColors.TextTertiary,
+                color = if (learner.openToSpeak) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -963,133 +974,203 @@ private fun ChatsEmptyHero(
 }
 
 @Composable
-private fun ChatsEmptySection(
-    @DrawableRes icon: Int,
-    title: String,
-    description: String,
-    quickStartsTitle: String,
-    quickStarts: @Composable () -> Unit,
+private fun ChatsEmptyAllSection(
+    openSpeakersCount: Int,
+    level: String,
+    openToSpeak: Boolean,
+    onStartAiChat: () -> Unit,
+    onBrowseSpeakers: () -> Unit,
+    onToggleOpenToSpeak: (Boolean) -> Unit,
 ) {
+    val activeTutor = LocalActiveTutor.current
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s48),
-        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s40),
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = ZunoSpace.s12, bottom = ZunoSpace.s4),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         ) {
-            ZunoEmptyState(icon = icon, title = title, description = description)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
             Text(
-                text = quickStartsTitle,
-                style = ZunoType.LabelMedium,
+                text = stringResource(R.string.chats_empty_all_title),
+                style = ZunoType.TitleMedium,
+                color = ZunoColors.TextPrimary,
+            )
+            Text(
+                text = stringResource(R.string.chats_empty_all_body, activeTutor.displayName),
+                style = ZunoType.BodySmall,
                 color = ZunoColors.TextSecondary,
-                modifier = Modifier.padding(start = ZunoSpace.s4),
             )
-            val cardShape = RoundedCornerShape(ZunoRadius.xl)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .zunoGlassSubtle(cardShape),
-            ) {
-                quickStarts()
-            }
         }
-    }
-}
 
-@Composable
-private fun QuickStartAiRow(onClick: () -> Unit) {
-    QuickStartRow(
-        leading = { ZunoAiTutorAvatar(size = 44.dp) },
-        title = stringResource(R.string.chats_start_ai_title),
-        badge = stringResource(R.string.chats_filter_ai_tutor),
-        trailing = "Anytime",
-        subtitle = stringResource(R.string.chats_sofia_call_or_chat),
-        onClick = onClick,
-    )
-}
-
-@Composable
-private fun QuickStartOpenSpeakersRow(speakers: List<PeerLearner>, onClick: () -> Unit) {
-    ZunoGlassHairline()
-    val first = speakers.firstOrNull()
-    QuickStartRow(
-        leading = {
-            ZunoOpenToSpeakAvatar(
-                initial = first?.initial ?: "L",
-                size = 44.dp,
-                openToSpeak = true,
-            )
-        },
-        title = "${speakers.size} learners online",
-        badge = stringResource(R.string.chats_open_to_speak_badge),
-        trailing = "Live",
-        subtitle = "${first?.languageName ?: "Spanish"} · Ready for 1:1 practice",
-        onClick = onClick,
-    )
-}
-
-@Composable
-private fun QuickStartRow(
-    leading: @Composable () -> Unit,
-    title: String,
-    badge: String?,
-    trailing: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        leading()
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        // Card · Sofía (`3091:14353`)
+        val sofiaShape = RoundedCornerShape(ZunoRadius.xxl)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .zunoGlassSubtle(sofiaShape, borderBrush = SolidColor(ZunoColors.BorderStrong))
+                .clickable(role = Role.Button, onClick = onStartAiChat)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = title,
-                    style = ZunoType.BodyMediumStrong,
-                    color = ZunoColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (badge != null) {
+                ZunoAiTutorAvatar(size = 44.dp, tutor = activeTutor)
+                Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
                     Text(
-                        text = badge,
-                        style = ZunoType.Micro,
-                        color = ZunoColors.TextSecondary,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(ZunoColors.SurfaceStrong)
-                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        text = stringResource(R.string.chats_start_ai_title),
+                        style = ZunoType.Headline,
+                        color = ZunoColors.TextPrimary,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = stringResource(R.string.chats_empty_all_tutor_sub),
+                        style = ZunoType.FootnoteRegular,
+                        color = ZunoColors.TextTertiary,
                         maxLines = 1,
                     )
                 }
-                Spacer(Modifier.weight(1f))
+            }
+            ZunoButton(
+                label = stringResource(R.string.chats_empty_all_start_chatting),
+                onClick = onStartAiChat,
+                leadingIcon = R.drawable.zuno_ic_t_sparkles,
+                leadingIconTint = ZunoColors.IconOnInverse,
+                variant = ZunoButtonVariant.Primary,
+                size = ZunoButtonSize.Medium,
+                modifier = Modifier.fillMaxWidth().height(40.dp),
+            )
+        }
+
+        // Card · Learners (`3091:14362`)
+        val learnersShape = RoundedCornerShape(ZunoRadius.xxl)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .zunoGlassSubtle(
+                    shape = learnersShape,
+                    fillColor = ZunoColors.SurfaceSubtle,
+                    borderBrush = SolidColor(ZunoColors.BorderDefault),
+                )
+                .clickable(role = Role.Button, onClick = onBrowseSpeakers)
+                .padding(ZunoSpace.s16),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .zunoGlassSubtle(
+                        shape = CircleShape,
+                        borderBrush = SolidColor(ZunoColors.BorderDefault),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                ZunoIcon(R.drawable.zuno_ic_users, 19.dp, tint = ZunoColors.IconPrimary)
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
                 Text(
-                    text = trailing,
-                    style = ZunoType.FootnoteRegular,
-                    color = ZunoColors.TextTertiary,
+                    text = stringResource(R.string.chats_empty_all_meet_partner),
+                    style = ZunoType.BodyMediumStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(ZunoColors.StatusSpeaking),
+                    )
+                    Text(
+                        text = stringResource(R.string.chats_empty_all_learners_online, openSpeakersCount, level),
+                        style = ZunoType.FootnoteRegular,
+                        color = ZunoColors.TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .height(32.dp)
+                    .zunoGlassSubtle(
+                        shape = CircleShape,
+                        fillColor = ZunoColors.SurfaceSubtle,
+                        borderBrush = SolidColor(ZunoColors.BorderDefault),
+                    )
+                    .clickable(role = Role.Button, onClick = onBrowseSpeakers)
+                    .padding(horizontal = ZunoSpace.s16),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.chats_empty_all_browse),
+                    style = ZunoType.LabelSmall,
+                    color = ZunoColors.TextSecondary,
                     maxLines = 1,
                 )
             }
+        }
+
+        // Availability (`3091:14373`)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = ZunoSpace.s4),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+        ) {
             Text(
-                text = subtitle,
-                style = ZunoType.FootnoteRegular,
-                color = ZunoColors.TextTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                text = stringResource(R.string.chats_empty_all_availability),
+                style = ZunoType.LabelSmall,
+                color = ZunoColors.TextSecondary,
             )
+            val availabilityShape = RoundedCornerShape(ZunoRadius.xxl)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zunoGlassSubtle(
+                        shape = availabilityShape,
+                        fillColor = ZunoColors.SurfaceSubtle,
+                    )
+                    .clickable(role = Role.Switch, onClick = { onToggleOpenToSpeak(!openToSpeak) })
+                    .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+                ) {
+                    Text(
+                        text = stringResource(R.string.chats_open_to_speak),
+                        style = ZunoType.LabelMedium,
+                        color = ZunoColors.TextPrimary,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = stringResource(R.string.chats_empty_all_availability_sub),
+                        style = ZunoType.FootnoteRegular,
+                        color = ZunoColors.TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                ZunoSwitch(
+                    checked = openToSpeak,
+                    onCheckedChange = onToggleOpenToSpeak,
+                )
+            }
         }
     }
 }
@@ -1263,7 +1344,7 @@ fun MemberProfileSheet(
                 initial = member.initial,
                 imageUrl = member.imageUrl,
                 size = 72.dp,
-                openToSpeak = member.openToSpeak,
+                openToSpeak = false,
             )
 
             Row(

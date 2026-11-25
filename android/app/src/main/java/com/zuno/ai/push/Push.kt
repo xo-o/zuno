@@ -1,6 +1,7 @@
 package com.zuno.ai.push
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -63,7 +64,7 @@ object Push {
         Messages("messages", NotificationManager.IMPORTANCE_HIGH),
         CallInvites("call_invites", NotificationManager.IMPORTANCE_HIGH),
         Progress("progress", NotificationManager.IMPORTANCE_DEFAULT),
-        News("news", NotificationManager.IMPORTANCE_LOW),
+        News("news_v2", NotificationManager.IMPORTANCE_DEFAULT),
     }
 
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -157,6 +158,7 @@ object Push {
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
+        runCatching { manager.deleteNotificationChannel("news") }
         Channel.entries.forEach { channel ->
             if (manager.getNotificationChannel(channel.id) != null) return@forEach
             val (name, description) = when (channel) {
@@ -167,7 +169,16 @@ object Push {
                 Channel.Progress -> context.getString(R.string.push_channel_progress) to context.getString(R.string.push_channel_progress_desc)
                 Channel.News -> context.getString(R.string.push_channel_news) to context.getString(R.string.push_channel_news_desc)
             }
-            manager.createNotificationChannel(NotificationChannel(channel.id, name, channel.importance).apply { this.description = description })
+            manager.createNotificationChannel(
+                NotificationChannel(channel.id, name, channel.importance).apply {
+                    this.description = description
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    if (channel == Channel.News) {
+                        setSound(null, null)
+                        enableVibration(false)
+                    }
+                },
+            )
         }
     }
 
@@ -234,6 +245,7 @@ object Push {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setPriority(if (channel.importance >= NotificationManager.IMPORTANCE_HIGH) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(category)
             .setContentIntent(PendingIntent.getActivity(context, notificationId, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
 

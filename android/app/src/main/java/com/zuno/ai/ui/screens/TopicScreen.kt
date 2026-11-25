@@ -50,6 +50,7 @@ import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOverflowMenu
 import com.zuno.ai.ui.components.ZunoSectionHeader
+import com.zuno.ai.ui.components.ZunoTopicUpNextCard
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
@@ -98,6 +99,14 @@ fun TopicScreen(
             return@Column
         }
 
+        val upNextLesson = topic.nextLesson ?: topic.lessons.firstOrNull()
+        val summary = topic.summary
+        val remainingLessons = if (summary.status != TopicStatus.Completed && upNextLesson != null) {
+            topic.lessons.filterNot { it.id == upNextLesson.id }
+        } else {
+            topic.lessons
+        }
+
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -107,46 +116,64 @@ fun TopicScreen(
                 .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
         ) {
-            TopicHero(
-                topic = topic,
-                busy = busy,
-                onPrimaryClick = {
-                    val target = topic.nextLesson ?: topic.lessons.firstOrNull()
-                    if (!busy && target != null) onStartLesson(target)
-                },
-            )
+            TopicHero(topic = topic)
 
-            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
-                Box(Modifier.padding(bottom = ZunoSpace.s4)) {
-                    ZunoSectionHeader(title = "Lessons")
+            Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16)) {
+                if (upNextLesson != null) {
+                    val eyebrow = when (summary.status) {
+                        TopicStatus.Completed -> stringResource(R.string.topics_review_eyebrow)
+                        TopicStatus.NotStarted -> stringResource(R.string.topics_start_eyebrow, upNextLesson.position)
+                        TopicStatus.InProgress -> stringResource(R.string.topics_up_next_eyebrow, upNextLesson.position)
+                    }
+                    val actionLabel = when (summary.status) {
+                        TopicStatus.Completed -> "Review"
+                        TopicStatus.NotStarted -> "Start"
+                        TopicStatus.InProgress -> "Continue"
+                    }
+                    ZunoTopicUpNextCard(
+                        eyebrow = eyebrow,
+                        title = upNextLesson.title,
+                        actionLabel = actionLabel,
+                        busy = busy,
+                        onAction = { if (!busy) onStartLesson(upNextLesson) },
+                    )
                 }
-                ZunoListGroup {
-                    topic.lessons.forEachIndexed { index, lesson ->
-                        ZunoLessonRow(
-                            number = lesson.position,
-                            title = lesson.title,
-                            status = when (lesson.state) {
-                                LessonState.Done -> LessonStatus.Done
-                                LessonState.Current -> LessonStatus.Current
-                                LessonState.Upcoming -> LessonStatus.Upcoming
-                            },
-                            meta = when (lesson.state) {
-                                LessonState.Done -> "Done"
-                                LessonState.Current ->
-                                    if (topic.summary.status == TopicStatus.NotStarted) "Start here" else "Up next"
-                                LessonState.Upcoming -> null
-                            },
-                            showDivider = index > 0,
-                            onClick = {
-                                if (!busy) {
-                                    when (lesson.state) {
-                                        LessonState.Current -> onStartLesson(lesson)
-                                        LessonState.Done -> onOpenEvaluation(lesson)
-                                        LessonState.Upcoming -> jumpAheadLesson = lesson
-                                    }
-                                }
-                            },
+
+                if (remainingLessons.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
+                        Text(
+                            text = stringResource(R.string.topics_all_lessons_header),
+                            style = ZunoType.LabelSmall,
+                            color = ZunoColors.TextTertiary,
                         )
+                        ZunoListGroup {
+                            remainingLessons.forEachIndexed { index, lesson ->
+                                ZunoLessonRow(
+                                    number = lesson.position,
+                                    title = lesson.title,
+                                    status = when (lesson.state) {
+                                        LessonState.Done -> LessonStatus.Done
+                                        LessonState.Current -> LessonStatus.Current
+                                        LessonState.Upcoming -> LessonStatus.Upcoming
+                                    },
+                                    meta = when (lesson.state) {
+                                        LessonState.Done -> stringResource(R.string.topics_lesson_done_meta)
+                                        LessonState.Current -> stringResource(R.string.topics_lesson_est_min)
+                                        LessonState.Upcoming -> stringResource(R.string.topics_lesson_est_min)
+                                    },
+                                    showDivider = index > 0,
+                                    onClick = {
+                                        if (!busy) {
+                                            when (lesson.state) {
+                                                LessonState.Current -> onStartLesson(lesson)
+                                                LessonState.Done -> onOpenEvaluation(lesson)
+                                                LessonState.Upcoming -> jumpAheadLesson = lesson
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -168,11 +195,7 @@ fun TopicScreen(
 }
 
 @Composable
-private fun TopicHero(
-    topic: TopicDetail,
-    busy: Boolean,
-    onPrimaryClick: () -> Unit,
-) {
+private fun TopicHero(topic: TopicDetail) {
     val summary = topic.summary
     val baseMeta = when (summary.status) {
         TopicStatus.Completed -> "Completed · ${summary.totalLessons} lessons"
@@ -182,11 +205,6 @@ private fun TopicHero(
         "$baseMeta · ${stringResource(R.string.topics_public_badge)}"
     } else {
         baseMeta
-    }
-    val ctaLabel = when (summary.status) {
-        TopicStatus.NotStarted -> "Start topic"
-        TopicStatus.InProgress -> "Continue"
-        TopicStatus.Completed -> "Practice again"
     }
 
     Column(
@@ -210,19 +228,10 @@ private fun TopicHero(
             style = ZunoType.BodySmall,
             color = ZunoColors.TextTertiary,
         )
-        Spacer(Modifier.height(ZunoSpace.s12))
-        ZunoButton(
-            label = ctaLabel,
-            onClick = onPrimaryClick,
-            variant = if (summary.status == TopicStatus.Completed) ZunoButtonVariant.Secondary else ZunoButtonVariant.Primary,
-            size = ZunoButtonSize.Large,
-            loading = busy,
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
-// ── 09 · Topics — Community Preview (`2998:13198`) ──────────────────────────
+// ── 09 · Topics — Community Preview (`2998:13198`, `7210:11885`, `7210:11928`) ──
 
 @Composable
 fun CommunityTopicPreviewScreen(
@@ -233,6 +242,7 @@ fun CommunityTopicPreviewScreen(
     onAddOrOpen: (DiscoverTopic) -> Unit,
     onShare: (DiscoverTopic) -> Unit,
     onReport: (DiscoverTopic) -> Unit,
+    onCopyLink: (DiscoverTopic) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val item = preview.items
@@ -248,12 +258,44 @@ fun CommunityTopicPreviewScreen(
             onBack = onBack,
             trailing = if (item != null) {
                 {
-                    ZunoIconButton(
-                        icon = R.drawable.zuno_ic_t_share,
-                        onClick = { onShare(item) },
+                    ZunoOverflowMenu(
+                        actions = buildList {
+                            add(
+                                ZunoMenuAction(
+                                    label = stringResource(
+                                        if (item.alreadySaved) R.string.topics_preview_open_cta else R.string.topics_preview_menu_add,
+                                    ),
+                                    icon = if (item.alreadySaved) R.drawable.zuno_ic_t_play_circle else R.drawable.zuno_ic_plus,
+                                    onClick = { if (!busy) onAddOrOpen(item) },
+                                ),
+                            )
+                            add(
+                                ZunoMenuAction(
+                                    label = stringResource(R.string.share_action),
+                                    icon = R.drawable.zuno_ic_t_share,
+                                    onClick = { onShare(item) },
+                                ),
+                            )
+                            add(
+                                ZunoMenuAction(
+                                    label = stringResource(R.string.share_copy_link),
+                                    icon = R.drawable.zuno_ic_t_link,
+                                    onClick = { onCopyLink(item) },
+                                ),
+                            )
+                            if (!item.isOfficial) {
+                                add(
+                                    ZunoMenuAction(
+                                        label = stringResource(R.string.topics_preview_menu_report),
+                                        icon = R.drawable.zuno_ic_t_flag,
+                                        destructive = true,
+                                        dividerBefore = true,
+                                        onClick = { onReport(item) },
+                                    ),
+                                )
+                            }
+                        },
                         size = ZunoIconButtonSize.Large,
-                        tint = ZunoColors.IconPrimary,
-                        contentDescription = stringResource(R.string.share_action),
                     )
                 }
             } else {
@@ -293,19 +335,25 @@ fun CommunityTopicPreviewScreen(
                     )
                 }
                 Text(attribution, style = ZunoType.BodySmall, color = ZunoColors.TextTertiary)
-                Spacer(Modifier.height(ZunoSpace.s12))
-                ZunoButton(
-                    label = stringResource(
-                        if (item.alreadySaved) R.string.topics_preview_open_cta else R.string.topics_preview_add_cta,
-                    ),
-                    onClick = { onAddOrOpen(item) },
-                    size = ZunoButtonSize.Large,
-                    leadingIcon = if (item.alreadySaved) null else R.drawable.zuno_ic_plus_inverse,
-                    leadingIconTint = null,
-                    loading = busy,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
+
+            ZunoTopicUpNextCard(
+                eyebrow = if (item.alreadySaved) {
+                    stringResource(R.string.topics_preview_saved_eyebrow, 1)
+                } else {
+                    stringResource(R.string.topics_preview_card_eyebrow)
+                },
+                title = if (item.alreadySaved) {
+                    item.lessons.firstOrNull()?.title ?: item.title
+                } else {
+                    stringResource(R.string.topics_preview_card_title)
+                },
+                actionLabel = stringResource(
+                    if (item.alreadySaved) R.string.topics_preview_start_button else R.string.topics_preview_add_button,
+                ),
+                busy = busy,
+                onAction = { onAddOrOpen(item) },
+            )
 
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
                 Box(Modifier.padding(bottom = ZunoSpace.s4)) {
@@ -329,7 +377,7 @@ fun CommunityTopicPreviewScreen(
     }
 }
 
-// ── Roleplays · 6 · Community Preview (`2999:13467`) ────────────────────────
+// ── Roleplays · 6, 12, 13 · Community Preview (`2999:13467`, `7210:12308`, `7210:12358`) ──
 
 @Composable
 fun CommunityRoleplayPreviewScreen(
@@ -342,6 +390,7 @@ fun CommunityRoleplayPreviewScreen(
     onSave: (DiscoverRoleplay) -> Unit,
     onShare: (DiscoverRoleplay) -> Unit,
     onReport: (DiscoverRoleplay) -> Unit,
+    onCopyLink: (DiscoverRoleplay) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val item = preview.items
@@ -352,13 +401,26 @@ fun CommunityRoleplayPreviewScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        ZunoCompactTitleTopBar(
+        ZunoBackTitleTopBar(
             title = stringResource(R.string.roleplays_preview_title),
             onBack = onBack,
-            trailing = {
-                if (item != null) {
+            trailing = if (item != null) {
+                {
                     ZunoOverflowMenu(
                         actions = buildList {
+                            add(
+                                ZunoMenuAction(
+                                    label = stringResource(
+                                        if (item.alreadySaved) R.string.roleplays_preview_start_cta else R.string.roleplays_preview_menu_add,
+                                    ),
+                                    icon = if (item.alreadySaved) R.drawable.zuno_ic_t_audio_lines else R.drawable.zuno_ic_plus,
+                                    onClick = {
+                                        if (!busy) {
+                                            if (item.alreadySaved) onStartLive(item) else onSave(item)
+                                        }
+                                    },
+                                ),
+                            )
                             add(
                                 ZunoMenuAction(
                                     label = stringResource(R.string.share_action),
@@ -366,18 +428,30 @@ fun CommunityRoleplayPreviewScreen(
                                     onClick = { onShare(item) },
                                 ),
                             )
+                            add(
+                                ZunoMenuAction(
+                                    label = stringResource(R.string.share_copy_link),
+                                    icon = R.drawable.zuno_ic_t_link,
+                                    onClick = { onCopyLink(item) },
+                                ),
+                            )
                             if (!item.isOfficial) {
                                 add(
                                     ZunoMenuAction(
-                                        label = stringResource(R.string.chat_menu_report),
+                                        label = stringResource(R.string.roleplays_preview_menu_report),
                                         icon = R.drawable.zuno_ic_t_flag,
+                                        destructive = true,
+                                        dividerBefore = true,
                                         onClick = { onReport(item) },
                                     ),
                                 )
                             }
                         },
+                        size = ZunoIconButtonSize.Large,
                     )
                 }
+            } else {
+                null
             },
         )
 
@@ -393,13 +467,14 @@ fun CommunityRoleplayPreviewScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s16),
+                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
                     ZunoChip(
                         label = "${stringResource(R.string.topics_public_badge)} · ${item.level}",
+                        selected = true,
                         onClick = {},
                     )
                     ZunoChip(
@@ -421,7 +496,7 @@ fun CommunityRoleplayPreviewScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(cardShape)
+                    .zunoGlassSubtle(cardShape, fillColor = ZunoColors.SurfaceDefault)
                     .padding(horizontal = ZunoSpace.s16, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
             ) {
@@ -461,50 +536,26 @@ fun CommunityRoleplayPreviewScreen(
                     Text(item.aiRole, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
                 }
             }
-        }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s16),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-        ) {
-            ZunoButton(
-                label = stringResource(R.string.roleplays_preview_start_cta),
-                onClick = { onStartLive(item) },
-                size = ZunoButtonSize.Large,
-                leadingIcon = R.drawable.zuno_ic_t_audio_lines,
-                leadingIconTint = ZunoColors.IconOnInverse,
-                loading = busy,
-                modifier = Modifier.fillMaxWidth(),
+            ZunoTopicUpNextCard(
+                eyebrow = if (item.alreadySaved) {
+                    stringResource(R.string.roleplays_preview_saved_eyebrow)
+                } else {
+                    stringResource(R.string.roleplays_preview_card_eyebrow)
+                },
+                title = if (item.alreadySaved) {
+                    stringResource(R.string.roleplays_preview_saved_title)
+                } else {
+                    stringResource(R.string.topics_preview_card_title)
+                },
+                actionLabel = stringResource(
+                    if (item.alreadySaved) R.string.topics_preview_start_button else R.string.roleplays_preview_add_button,
+                ),
+                busy = busy,
+                onAction = {
+                    if (item.alreadySaved) onStartLive(item) else onSave(item)
+                },
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ZunoButton(
-                    label = stringResource(
-                        if (item.alreadySaved) R.string.roleplays_preview_saved_cta else R.string.roleplays_preview_save_cta,
-                    ),
-                    onClick = { if (!item.alreadySaved && !busy) onSave(item) },
-                    variant = ZunoButtonVariant.Secondary,
-                    size = ZunoButtonSize.Medium,
-                    leadingIcon = if (item.alreadySaved) R.drawable.zuno_ic_check_small else R.drawable.zuno_ic_plus,
-                    leadingIconTint = null,
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                )
-                ZunoButton(
-                    label = stringResource(R.string.share_action),
-                    onClick = { onShare(item) },
-                    variant = ZunoButtonVariant.Secondary,
-                    size = ZunoButtonSize.Medium,
-                    leadingIcon = R.drawable.zuno_ic_t_share,
-                    leadingIconTint = ZunoColors.IconPrimary,
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
     }
 }
