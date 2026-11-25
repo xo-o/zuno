@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins/bearer";
 import { magicLink } from "better-auth/plugins/magic-link";
 import { db } from "../db/index.js";
+import { randomPresetAvatarUrl } from "./avatars.js";
 import { sendMagicLinkEmail } from "./email.js";
 import { registerFlow } from "./magic-link-flows.js";
 
@@ -59,6 +60,18 @@ export const auth = betterAuth({
     accountLinking: {
       enabled: true,
       trustedProviders: ["google", "apple"],
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (createdUser) => ({
+          data: {
+            ...createdUser,
+            image: randomPresetAvatarUrl(),
+          },
+        }),
+      },
     },
   },
   socialProviders,

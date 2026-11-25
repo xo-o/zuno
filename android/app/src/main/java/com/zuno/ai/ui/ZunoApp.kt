@@ -224,7 +224,7 @@ sealed interface ZunoRoute {
     data class RoleplaySettings(val id: String) : ZunoRoute
     data class Chat(val conversationId: String) : ZunoRoute
     /** Live voice call for a conversation (voice mode). */
-    data class Voice(val conversationId: String) : ZunoRoute
+    data class Voice(val conversationId: String, val initialCaptionsOn: Boolean = false) : ZunoRoute
     /** 03a–03f interactive 5-stage voice lesson. */
     data class VoiceLesson(
         val topicId: String,
@@ -284,7 +284,7 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.NewRoleplay -> "new-roleplay"
     is ZunoRoute.RoleplaySettings -> "roleplay-settings:$id"
     is ZunoRoute.Chat -> "chat:$conversationId"
-    is ZunoRoute.Voice -> "voice:$conversationId"
+    is ZunoRoute.Voice -> "voice:$conversationId:$initialCaptionsOn"
     is ZunoRoute.VoiceLesson -> "voice-lesson:$topicId:$lessonId:$conversationId:$position:$totalLessons"
     is ZunoRoute.LessonEvaluation -> "lesson-eval:$topicId:$lessonId"
     ZunoRoute.Settings -> "settings"
@@ -366,7 +366,13 @@ private fun decodeRoute(value: String): ZunoRoute = when {
         val parts = value.removePrefix("lesson-eval:").split(':')
         if (parts.size >= 2) ZunoRoute.LessonEvaluation(parts[0], parts[1]) else ZunoRoute.Topics
     }
-    value.startsWith("voice:") -> ZunoRoute.Voice(value.removePrefix("voice:"))
+    value.startsWith("voice:") -> {
+        val parts = value.removePrefix("voice:").split(':')
+        ZunoRoute.Voice(
+            conversationId = parts[0],
+            initialCaptionsOn = parts.getOrNull(1)?.toBooleanStrictOrNull() ?: false,
+        )
+    }
     value == "settings" -> ZunoRoute.Settings
     value == "settings:preferences" -> ZunoRoute.SettingsPreferences
     value == "settings:tutor" -> ZunoRoute.SettingsTutor
@@ -647,6 +653,7 @@ fun ZunoApp(
         conversationId: String,
         speakLastReply: Boolean = false,
         enableCamera: Boolean = false,
+        initialCaptionsOn: Boolean = false,
     ) {
         runWithVoicePermissions {
             tts.stop()
@@ -663,7 +670,7 @@ fun ZunoApp(
                 targetLanguage = language.code,
                 contextLabel = chats[conversationId]?.conversation?.title,
             )
-            navigate(ZunoRoute.Voice(conversationId))
+            navigate(ZunoRoute.Voice(conversationId, initialCaptionsOn = initialCaptionsOn))
             if (viewModel.agentState.value == AgentState.DISCONNECTED) {
                 viewModel.connect(
                     sessionToken = authViewModel.sessionToken,
@@ -1076,7 +1083,7 @@ fun ZunoApp(
                     voiceConversationId = ticket.conversationId
                     callStartedAt = null
                     callUsedVideo = false
-                    val dest = ZunoRoute.Voice(ticket.conversationId)
+                    val dest = ZunoRoute.Voice(ticket.conversationId, initialCaptionsOn = true)
                     if (replaceCurrent) replace(dest) else navigate(dest)
                     viewModel.connectRoleplay(ticket)
                 }
@@ -1094,7 +1101,33 @@ fun ZunoApp(
         if (voiceConversationId != null) endVoice()
         zunoViewModel.startFreeTalk(viaVoice = true) { conversation ->
             voiceFromHome = conversation.id
-            startVoice(conversation.id, enableCamera = enableCamera)
+            startVoice(conversation.id, enableCamera = enableCamera, initialCaptionsOn = false)
+        }
+    }
+
+    /** Hold-to-talk on Home monochrome orb: opens a Free Talk voice call (no captions by default) and replies aloud to [spoken]. */
+    fun startHomeCallWithSpoken(spoken: String) {
+        withMicrophoneOrFallback(onDeclined = { startFreeTalk(spoken) }) {
+            if (voiceConversationId != null) endVoice()
+            var pendingConversationId: String? = null
+            zunoViewModel.startFreeTalk(
+                firstMessage = spoken,
+                viaVoice = true,
+                onReplied = { ok ->
+                    val targetId = pendingConversationId ?: return@startFreeTalk
+                    if (backStack.lastOrNull() == ZunoRoute.Home) {
+                        voiceFromHome = targetId
+                        startVoice(
+                            conversationId = targetId,
+                            speakLastReply = ok,
+                            enableCamera = false,
+                            initialCaptionsOn = false,
+                        )
+                    }
+                },
+            ) { conversation ->
+                pendingConversationId = conversation.id
+            }
         }
     }
 
@@ -1112,12 +1145,23 @@ fun ZunoApp(
     fun resumeConversationVoice(conversationId: String) {
         withMicrophoneOrFallback(onDeclined = { openChat(conversationId) }) {
             if (voiceConversationId != null) endVoice()
+            val captionsDefault = { kind: ConversationKind ->
+                kind == ConversationKind.Lesson || kind == ConversationKind.Roleplay
+            }
             val cached = chats[conversationId]
             if (cached != null) {
-                startVoice(conversationId, enableCamera = shouldRestoreVideo(cached.messages))
+                startVoice(
+                    conversationId,
+                    enableCamera = shouldRestoreVideo(cached.messages),
+                    initialCaptionsOn = captionsDefault(cached.conversation.kind),
+                )
             } else {
                 zunoViewModel.openConversationThread(conversationId) { thread ->
-                    startVoice(conversationId, enableCamera = shouldRestoreVideo(thread.messages))
+                    startVoice(
+                        conversationId,
+                        enableCamera = shouldRestoreVideo(thread.messages),
+                        initialCaptionsOn = captionsDefault(thread.conversation.kind),
+                    )
                 }
             }
         }
@@ -1969,7 +2013,7 @@ fun ZunoApp(
                         onOpenSettings = { navigate(ZunoRoute.Settings) },
                         onStartHomeVoice = { startFreeTalkVoiceOrChat() },
                         onStartFreeTalk = { startFreeTalk(null) },
-                        onStartFreeTalkWithText = { spoken -> startFreeTalk(spoken) },
+                        onStartFreeTalkWithText = { spoken -> startHomeCallWithSpoken(spoken) },
                         onNewChat = { startFreeTalkVoiceOrChat() },
                         onOpenConversation = { id ->
                             if (latestChatSession?.kind == RecentKind.Roleplay) {
@@ -2583,8 +2627,15 @@ fun ZunoApp(
                         savedDraft = { zunoViewModel.draftText(screen.conversationId) },
                         onSaveDraft = { zunoViewModel.saveDraftText(screen.conversationId, it) },
                         onStartVoice = {
-                            if (chat?.pendingText == null) withMicrophone { startVoice(screen.conversationId) }
-                            else toast(str(R.string.chat_still_replying))
+                            if (chat?.pendingText == null) {
+                                withMicrophone {
+                                    val kind = chat?.conversation?.kind
+                                    startVoice(
+                                        screen.conversationId,
+                                        initialCaptionsOn = kind == ConversationKind.Lesson || kind == ConversationKind.Roleplay,
+                                    )
+                                }
+                            } else toast(str(R.string.chat_still_replying))
                         },
                         onListen = { text ->
                             tts.speak(
@@ -2651,7 +2702,7 @@ fun ZunoApp(
                         sessionKindLabel = sessionKindLabel,
                         languageLevelLabel = langLevelLabel,
                         learnerLevel = profile?.level ?: "B1",
-                        initialCaptionsOn = true,
+                        initialCaptionsOn = screen.initialCaptionsOn,
                         userName = userName,
                         userInitial = userInitial,
                         isCameraOn = isCameraOn,
