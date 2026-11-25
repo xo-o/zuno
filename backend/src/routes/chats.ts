@@ -11,6 +11,7 @@ import {
   getChatsOverview,
   getPeerConversationDetail,
   joinPeerCall,
+  markPeerConversationRead,
   pingPeerCall,
   reportPeerUser,
   sendPeerMessage,
@@ -90,6 +91,11 @@ export const chatRoutes = new Hono<AuthEnv>()
     const detail = await getPeerConversationDetail(c.get("user").id, c.req.param("conversationId"));
     if (!detail) throw new HTTPException(404, { message: "Conversation not found" });
     return c.json(detail);
+  })
+  .post("/people/:conversationId/read", async (c) => {
+    const ok = await markPeerConversationRead(c.get("user").id, c.req.param("conversationId"));
+    if (!ok) throw new HTTPException(404, { message: "Conversation not found" });
+    return c.body(null, 204);
   })
   .post("/people/:conversationId/messages", messageLimit, async (c) => {
     const { text } = await parseBody(c, peerMessageSchema);

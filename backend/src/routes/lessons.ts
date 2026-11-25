@@ -12,6 +12,7 @@ import {
   type LessonCurriculum,
 } from "../db/app-schema.js";
 import { db } from "../db/index.js";
+import { recordPracticeActivity } from "../lib/activity.js";
 import { createConversation } from "../lib/conversations.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { languageName } from "../lib/languages.js";
@@ -261,6 +262,10 @@ export const lessonRoutes = new Hono<AuthEnv>()
       .set({ completedAt: new Date() })
       .where(and(eq(topicLesson.id, lesson.id), isNull(topicLesson.completedAt)));
     await db.update(topic).set({ updatedAt: new Date() }).where(eq(topic.id, parent.id));
+    await recordPracticeActivity(user.id, parent.language, {
+      spokenSec: body.durationSec,
+      lessonsCompleted: 1,
+    }).catch((err) => console.warn("recordPracticeActivity(lesson) failed:", err));
     await checkTopicCompleted(parent.id);
 
     const freshParent = await db.query.topic.findFirst({

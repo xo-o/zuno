@@ -726,9 +726,7 @@ async def entrypoint(ctx: JobContext) -> None:
     native_language = str(meta.get("nativeLanguage") or "en")
     native_language_name = str(meta.get("nativeLanguageName") or "English")
     teach_in_target = bool(meta.get("teachInTarget", False))
-    conversation_kind = str(
-        meta.get("conversationKind") or ("peer_partner" if mode == "peer_partner" else "freetalk")
-    )
+    conversation_kind = str(meta.get("conversationKind") or "freetalk")
 
     is_bilingual_free_talk = (
         mode == "conversation"
@@ -741,41 +739,6 @@ async def entrypoint(ctx: JobContext) -> None:
         f"Initialized session: mode={mode}, kind={conversation_kind}, provider=elevenlabs, "
         f"voice={current_voice}, target_lang={current_language}, native_lang={native_language}, accent={current_accent}"
     )
-
-    if mode == "peer_partner":
-        partner_name = str(meta.get("partnerName") or "Lucía M.")
-        partner_level = str(meta.get("partnerLevel") or "B1")
-        partner_interests = ", ".join(meta.get("partnerInterests") or ["Travel", "Daily life"])
-        tutor_instructions = (
-            f"You are {partner_name}, a friendly fellow language learner practicing {target_language_name} "
-            f"at CEFR level {partner_level}. Your interests include {partner_interests}. "
-            f"You just joined a 1:1 peer practice voice call with another learner. "
-            f"Talk naturally like a friendly practice partner (NOT as a teacher or AI assistant). "
-            f"Greet them warmly in {target_language_name} and ask how their day is going or what they want to practice."
-        )
-        ping_event = asyncio.Event()
-
-        @ctx.room.on("data_received")
-        def _on_wait_data(packet: rtc.DataPacket) -> None:
-            try:
-                msg = json.loads(packet.data.decode("utf-8"))
-                if msg.get("type") == "ping_partner":
-                    ping_event.set()
-            except Exception:
-                pass
-
-        try:
-            await asyncio.wait_for(ping_event.wait(), timeout=2.5)
-        except asyncio.TimeoutError:
-            pass
-
-        try:
-            await ctx.room.local_participant.publish_data(
-                json.dumps({"type": "partner_joined", "partnerName": partner_name}).encode("utf-8"),
-                reliable=True,
-            )
-        except Exception as e:
-            logger.debug(f"Failed to broadcast partner_joined: {e}")
 
     multi_stt_supported = can_use_multi_stt(current_language, native_language)
     if mode == "onboarding":
@@ -791,7 +754,7 @@ async def entrypoint(ctx: JobContext) -> None:
         stt_accent = current_accent
 
     vad = silero.VAD.load(min_speech_duration=0.10, min_silence_duration=0.45)
-    use_multilingual_stt = mode in ("lesson", "roleplay", "conversation", "peer_partner")
+    use_multilingual_stt = mode in ("lesson", "roleplay", "conversation")
     stt = create_stt(
         stt_lang,
         stt_accent,
@@ -918,11 +881,7 @@ async def entrypoint(ctx: JobContext) -> None:
     if onboarding_orchestrator is not None:
         onboarding_orchestrator.session = session
 
-    agent_display_name = (
-        str(meta.get("partnerName") or tutor_name)
-        if mode == "peer_partner"
-        else tutor_name
-    )
+    agent_display_name = tutor_name
     user_identity = participant.identity
     user_display_name = participant.name or "You"
     agent_identity = ctx.room.local_participant.identity

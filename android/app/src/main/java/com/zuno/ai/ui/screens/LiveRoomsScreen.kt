@@ -73,6 +73,7 @@ import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
 import com.zuno.ai.ui.components.ZunoDivider
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButtonSize
+import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOverflowMenu
 import com.zuno.ai.ui.components.ZunoSectionTopBar
@@ -97,71 +98,6 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.delay
 
-private val FallbackFeaturedRoom = LiveRoom(
-    id = "sys-featured-es",
-    title = "Café culture & morning routines",
-    description = "System-guided topic room. Zuno prompts the group with live questions and helpful phrases.",
-    language = "es",
-    level = "B1",
-    maxMembers = 4,
-    visibility = "public",
-    sourceKind = "system",
-    status = "live",
-    hostName = "Zuno",
-    discussionPrompts = listOf(
-        "Your go-to morning coffee order and routine",
-        "Favorite neighborhood cafés in your city",
-        "Comparing café culture across Spanish-speaking cities",
-    ),
-    members = listOf(
-        LiveRoomMember("m1", "Zuno", "Z", isHost = true),
-        LiveRoomMember("m2", "Mateo R.", "M"),
-        LiveRoomMember("m3", "Sofía", "S"),
-    ),
-)
-
-private val FallbackMoreRooms = listOf(
-    LiveRoom(
-        id = "sys-remote-es",
-        title = "Remote work vs. office life",
-        description = "Compare async collaboration, focus routines, and commute trade-offs.",
-        language = "es",
-        level = "B2",
-        maxMembers = 4,
-        visibility = "public",
-        sourceKind = "system",
-        status = "live",
-        hostName = "Zuno",
-        members = listOf(LiveRoomMember("m1", "Zuno", "Z", isHost = true), LiveRoomMember("m2", "Priya S.", "P")),
-    ),
-    LiveRoom(
-        id = "pub-food-es",
-        title = "Favorite street food & markets",
-        description = "Share local street food favorites and ordering phrases.",
-        language = "es",
-        level = "B1",
-        maxMembers = 4,
-        visibility = "public",
-        sourceKind = "user",
-        status = "lobby",
-        hostName = "Lucía M.",
-        members = listOf(LiveRoomMember("m1", "Lucía M.", "L", isHost = true), LiveRoomMember("m2", "Mateo R.", "M")),
-    ),
-    LiveRoom(
-        id = "pub-travel-es",
-        title = "Weekend travel stories",
-        description = "Tell the group about a memorable weekend getaway.",
-        language = "es",
-        level = "A2",
-        maxMembers = 4,
-        visibility = "public",
-        sourceKind = "user",
-        status = "lobby",
-        hostName = "Diego R.",
-        members = listOf(LiveRoomMember("m1", "Diego R.", "D", isHost = true)),
-    ),
-)
-
 /**
  * `15 · Live Rooms` (`3091:14069` Browse & `2704:12642` Private Code Sheet).
  */
@@ -173,6 +109,7 @@ fun LiveRoomsScreen(
     onJoinRoom: (String) -> Unit,
     onCreateRoom: () -> Unit,
     browse: Loadable<LiveRoomsBrowse> = Loadable(),
+    onRetry: () -> Unit = {},
     busy: Boolean = false,
     onOpenRoom: (LiveRoom) -> Unit = { onJoinRoom(it.title) },
     onJoinByCode: (String) -> Unit = {},
@@ -184,11 +121,12 @@ fun LiveRoomsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var showCodeSheet by rememberSaveable { mutableStateOf(false) }
 
-    val featured = browse.items?.featured ?: FallbackFeaturedRoom
-    val allMoreRooms = browse.items?.rooms ?: FallbackMoreRooms
+    val browseData = browse.items
+    val featured = browseData?.featured
+    val allMoreRooms = browseData?.rooms.orEmpty()
 
     val q = query.trim().lowercase()
-    val showFeatured = selectedTab != 2 && selectedTab != 3 && (q.isEmpty() || featured.title.lowercase().contains(q))
+    val featuredToShow = featured?.takeIf { selectedTab != 2 && selectedTab != 3 && (q.isEmpty() || it.title.lowercase().contains(q)) }
     val filteredRooms = allMoreRooms.filter { room ->
         val matchesTab = when (selectedTab) {
             1 -> room.isSystem
@@ -236,6 +174,11 @@ fun LiveRoomsScreen(
             )
         }
 
+        if (browseData == null && selectedTab != 3) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                ZunoLoadState(error = browse.error, onRetry = onRetry)
+            }
+        } else {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
@@ -252,7 +195,8 @@ fun LiveRoomsScreen(
                 }
             }
 
-            if (showFeatured) {
+            if (featuredToShow != null) {
+                val featuredRoom = featuredToShow
                 item(key = "featured") {
                     Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10)) {
                         Text(stringResource(R.string.live_rooms_featured_label), style = ZunoType.LabelSmall, color = ZunoColors.TextSecondary)
@@ -264,7 +208,7 @@ fun LiveRoomsScreen(
                                     fillColor = ZunoColors.SurfaceDefault,
                                     borderBrush = SolidColor(ZunoColors.BorderStrong),
                                 )
-                                .clickable(role = Role.Button, onClick = { onOpenRoom(featured) })
+                                .clickable(role = Role.Button, onClick = { onOpenRoom(featuredRoom) })
                                 .padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
                         ) {
@@ -285,20 +229,24 @@ fun LiveRoomsScreen(
                                         modifier = Modifier
                                             .size(6.dp)
                                             .clip(CircleShape)
-                                            .background(ZunoColors.StatusSpeaking),
+                                            .background(if (featuredRoom.members.isNotEmpty()) ZunoColors.StatusSpeaking else ZunoColors.TextTertiary),
                                     )
                                     Text(
-                                        text = stringResource(R.string.live_rooms_seats_live, featured.members.size, featured.maxMembers),
+                                        text = if (featuredRoom.members.isNotEmpty()) {
+                                            stringResource(R.string.live_rooms_seats_live, featuredRoom.members.size, featuredRoom.maxMembers)
+                                        } else {
+                                            "${featuredRoom.members.size}/${featuredRoom.maxMembers} · Open"
+                                        },
                                         style = ZunoType.FootnoteStrong,
                                         color = ZunoColors.TextPrimary,
                                     )
                                 }
-                                Text("$languageName · ${featured.level}", style = ZunoType.FootnoteRegular, color = ZunoColors.TextSecondary)
+                                Text("$languageName · ${featuredRoom.level}", style = ZunoType.FootnoteRegular, color = ZunoColors.TextSecondary)
                             }
 
                             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4)) {
                                 Text(
-                                    text = featured.title,
+                                    text = featuredRoom.title,
                                     style = ZunoType.TitleMedium,
                                     color = ZunoColors.TextPrimary,
                                 )
@@ -309,34 +257,45 @@ fun LiveRoomsScreen(
                                 )
                             }
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                val stack = featured.members.take(3)
-                                Box(modifier = Modifier.width((28 + (stack.size - 1).coerceAtLeast(0) * 18).dp)) {
-                                    stack.asReversed().forEachIndexed { revIdx, m ->
-                                        val offsetDp = ((stack.size - 1 - revIdx) * 18).dp
-                                        SmallRoomAvatar(
-                                            initial = m.initial,
-                                            inverse = m.initial == "Z",
-                                            modifier = Modifier.offset(x = offsetDp),
-                                        )
+                            if (featuredRoom.members.isNotEmpty()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    val stack = featuredRoom.members.take(3)
+                                    Box(modifier = Modifier.width((28 + (stack.size - 1).coerceAtLeast(0) * 18).dp)) {
+                                        stack.asReversed().forEachIndexed { revIdx, m ->
+                                            val offsetDp = ((stack.size - 1 - revIdx) * 18).dp
+                                            Box(modifier = Modifier.offset(x = offsetDp)) {
+                                                ZunoAvatar(
+                                                    initial = m.initial,
+                                                    imageUrl = m.imageUrl,
+                                                    size = 28.dp,
+                                                    textStyle = ZunoType.Micro,
+                                                )
+                                            }
+                                        }
                                     }
+                                    val names = stack.joinToString(", ") { it.name.substringBefore(" ") }
+                                    Text(
+                                        text = stringResource(R.string.live_rooms_speakers_line, names),
+                                        style = ZunoType.FootnoteRegular,
+                                        color = ZunoColors.TextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
-                                val names = stack.joinToString(", ") { it.name.substringBefore(" ") }
+                            } else {
                                 Text(
-                                    text = stringResource(R.string.live_rooms_speakers_line, names),
+                                    text = "Room is open — be the first to start speaking",
                                     style = ZunoType.FootnoteRegular,
-                                    color = ZunoColors.TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    color = ZunoColors.TextTertiary,
                                 )
                             }
 
                             ZunoButton(
                                 label = stringResource(R.string.live_rooms_join_cta),
-                                onClick = { onOpenRoom(featured) },
+                                onClick = { onOpenRoom(featuredRoom) },
                                 size = ZunoButtonSize.Large,
                                 modifier = Modifier.fillMaxWidth().padding(top = ZunoSpace.s2),
                             )
@@ -372,6 +331,32 @@ fun LiveRoomsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                    } else if (filteredRooms.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl))
+                                .padding(ZunoSpace.s16),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+                        ) {
+                            Text(
+                                text = if (selectedTab == 2) "No public rooms open yet" else "No matching rooms",
+                                style = ZunoType.BodyMediumStrong,
+                                color = ZunoColors.TextPrimary,
+                            )
+                            Text(
+                                text = "Start a room and invite partners or let other $languageName learners join.",
+                                style = ZunoType.FootnoteRegular,
+                                color = ZunoColors.TextTertiary,
+                            )
+                            ZunoButton(
+                                label = stringResource(R.string.live_rooms_create_action),
+                                onClick = onCreateRoom,
+                                variant = ZunoButtonVariant.Secondary,
+                                size = ZunoButtonSize.Small,
+                            )
+                        }
                     } else {
                         Column(
                             modifier = Modifier
@@ -380,10 +365,13 @@ fun LiveRoomsScreen(
                         ) {
                             filteredRooms.forEachIndexed { idx, room ->
                                 if (idx > 0) ZunoGlassHairline()
-                                val sub = if (room.isLive) {
-                                    "${room.hostName} · ${room.level} · ${room.members.size}/${room.maxMembers} live"
-                                } else {
-                                    "${room.hostName} · ${room.level} · Waiting ${room.members.size}/${room.maxMembers}"
+                                val sub = when {
+                                    room.isLive && room.members.isNotEmpty() ->
+                                        "${room.hostName} · ${room.level} · ${room.members.size}/${room.maxMembers} live"
+                                    room.isLive ->
+                                        "${room.hostName} · ${room.level} · ${room.members.size}/${room.maxMembers} open"
+                                    else ->
+                                        "${room.hostName} · ${room.level} · Waiting ${room.members.size}/${room.maxMembers}"
                                 }
                                 Row(
                                     modifier = Modifier
@@ -437,6 +425,7 @@ fun LiveRoomsScreen(
                     }
                 }
             }
+        }
         }
     }
 
@@ -1039,9 +1028,6 @@ fun ActiveLiveRoomScreen(
         roomData.members.ifEmpty {
             listOf(
                 LiveRoomMember("you", userName, userInitial, isHost = roomData.isHost, isYou = true),
-                LiveRoomMember("m2", "Lucía M.", "L"),
-                LiveRoomMember("m3", "Mateo R.", "M"),
-                LiveRoomMember("m4", "Yuki T.", "Y"),
             )
         }
     }
@@ -1135,7 +1121,7 @@ fun ActiveLiveRoomScreen(
         } else {
             // `Live Rooms · 7 · Active Room` (`2704:12814`)
             val promptText = roomData.discussionPrompts.getOrNull((roomData.currentRound - 1).coerceAtLeast(0))
-                ?: "¿Cuál es tu comida callejera favorita y por qué?"
+                ?: roomData.title
             val listState = rememberLazyListState()
             val displayTurns = remember(turns, promptText) {
                 if (turns.isNotEmpty()) turns
@@ -1253,19 +1239,19 @@ fun ActiveLiveRoomScreen(
                             maxLines = 1,
                         )
                     }
+                    val starters = roomData.starterPhrases.take(2)
                     Row(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                     ) {
-                        ZunoChip(
-                            label = "“Siempre pido…”",
-                            selected = true,
-                            onClick = { onSpeakStarter("Siempre pido") },
-                        )
-                        ZunoChip(
-                            label = "“Me gusta…”",
-                            onClick = { onSpeakStarter("Me gusta") },
-                        )
+                        starters.forEachIndexed { idx, starter ->
+                            val cleanSpeak = starter.trim('“', '”', '…', ' ')
+                            ZunoChip(
+                                label = "“$starter”",
+                                selected = idx == 0,
+                                onClick = { onSpeakStarter(cleanSpeak) },
+                            )
+                        }
                         ZunoChip(
                             label = stringResource(R.string.lesson_bubble_hint),
                             leadingIcon = R.drawable.zuno_ic_sparkles,

@@ -14,6 +14,7 @@ import {
   sendUserMessage,
 } from "../lib/conversations.js";
 import { attachmentsForSend, collectConversationFiles, MAX_ATTACHMENTS_PER_MESSAGE } from "../lib/attachments.js";
+import { recordPracticeActivity } from "../lib/activity.js";
 import { sendEmail } from "../lib/email.js";
 import { cancelJob, enqueue, pollSoon } from "../lib/jobs.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
@@ -126,6 +127,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
         conversationId: row.id,
         title: row.title,
         meta: "Free Talk",
+        unread: row.unreadCount > 0,
         at: row.updatedAt,
         pinnedAt: row.pinnedAt,
       })),
@@ -137,6 +139,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
           conversationId: pins[0]?.id ?? null,
           title: row.title,
           meta: `Topic · ${topicProgressLabel(row.lessons)}`,
+          unread: false,
           at: row.updatedAt,
           pinnedAt: latestPin([...pins, { pinnedAt: row.pinnedAt }]),
         };
@@ -149,6 +152,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
           conversationId: pins[0]?.id ?? null,
           title: row.title,
           meta: "Roleplay",
+          unread: false,
           at: row.updatedAt,
           pinnedAt: latestPin([...pins, { pinnedAt: row.pinnedAt }]),
         };
@@ -191,6 +195,9 @@ export const conversationRoutes = new Hono<AuthEnv>()
   })
   .get("/:id", async (c) => {
     const row = await requireConversation(c.get("user").id, c.req.param("id"));
+    if (row.unreadCount > 0) {
+      await db.update(conversation).set({ unreadCount: 0, lastReadAt: new Date() }).where(eq(conversation.id, row.id));
+    }
     const messages = await listMessages(row.id);
     return c.json({ conversation: serializeConversation(row), messages: await serializeMessages(messages) });
   })
@@ -299,6 +306,14 @@ export const conversationRoutes = new Hono<AuthEnv>()
     const body = await parseBody(c, messageSchema);
     const attachments = await attachmentsForSend(userId, body.attachmentIds);
     const result = await sendUserMessage(row, await getProfile(userId), body.text, body.viaVoice ?? false, attachments);
+    if (row.unreadCount > 0) {
+      await db.update(conversation).set({ unreadCount: 0, lastReadAt: new Date() }).where(eq(conversation.id, row.id));
+    }
+    await recordPracticeActivity(userId, row.language, {
+      messagesCount: 1,
+      spokenSec: body.viaVoice ? 15 : 0,
+      lessonsCompleted: result.lessonCompleted ? 1 : 0,
+    }).catch((err) => console.warn("recordPracticeActivity(message) failed:", err));
     if (result.lessonCompleted && row.topicId) await checkTopicCompleted(row.topicId);
     await db.delete(conversationDraft).where(eq(conversationDraft.conversationId, row.id));
     return c.json({
@@ -310,13 +325,21 @@ export const conversationRoutes = new Hono<AuthEnv>()
     });
   })
   .post("/:id/transcript", async (c) => {
-    const row = await requireConversation(c.get("user").id, c.req.param("id"));
+    const userId = c.get("user").id;
+    const row = await requireConversation(userId, c.req.param("id"));
     const { turns } = await parseBody(c, transcriptSchema);
     const saved = await appendTranscript(row, turns);
+    const userTurns = turns.filter((t) => t.role === "user").length;
+    if (userTurns > 0) {
+      await recordPracticeActivity(userId, row.language, { messagesCount: userTurns }).catch((err) =>
+        console.warn("recordPracticeActivity(transcript) failed:", err),
+      );
+    }
     return c.json({ messages: await serializeMessages(saved) });
   })
   .post("/:id/call-summary", async (c) => {
-    const row = await requireConversation(c.get("user").id, c.req.param("id"));
+    const userId = c.get("user").id;
+    const row = await requireConversation(userId, c.req.param("id"));
     const body = await parseBody(c, callSummarySchema);
     const mins = Math.floor(body.durationSec / 60);
     const secs = body.durationSec % 60;
@@ -338,7 +361,12 @@ export const conversationRoutes = new Hono<AuthEnv>()
         },
       })
       .returning();
-    await db.update(conversation).set({ updatedAt: sql`now()` }).where(eq(conversation.id, row.id));
+    await db.update(conversation).set({ updatedAt: sql`now()`, unreadCount: 0, lastReadAt: new Date() }).where(eq(conversation.id, row.id));
+    if (body.durationSec > 0) {
+      await recordPracticeActivity(userId, row.language, { spokenSec: body.durationSec }).catch((err) =>
+        console.warn("recordPracticeActivity(call-summary) failed:", err),
+      );
+    }
     return c.json({ message: await serializeMessage(saved) }, 201);
   });
 

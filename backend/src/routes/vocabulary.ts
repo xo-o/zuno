@@ -5,6 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { vocabPhrase } from "../db/app-schema.js";
 import { db } from "../db/index.js";
+import { recordPracticeActivity } from "../lib/activity.js";
 import { generateJson } from "../lib/gemini.js";
 import { parseBody, requireAuth, type AuthEnv } from "../lib/http.js";
 import { languageName } from "../lib/languages.js";
@@ -260,6 +261,10 @@ export const vocabularyRoutes = new Hono<AuthEnv>()
       .set({ streak: nextStreak, intervalDays, bucket, dueAt })
       .where(and(eq(vocabPhrase.id, id), eq(vocabPhrase.userId, userId)))
       .returning();
+
+    await recordPracticeActivity(userId, existing.language, { vocabReviewed: 1 }).catch((err) =>
+      console.warn("recordPracticeActivity(vocab) failed:", err),
+    );
 
     return c.json({ phrase: serializePhrase(updated) });
   })

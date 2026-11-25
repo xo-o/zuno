@@ -230,6 +230,7 @@ internal fun LiveRoomsRouteHost(
                 languageName = language.displayName(appLanguage),
                 level = profile?.level ?: "B1",
                 browse = liveRooms,
+                onRetry = { zunoViewModel.loadLiveRooms() },
                 busy = busy,
                 onBack = pop,
                 onJoinRoom = { roomTitle ->
@@ -293,8 +294,11 @@ internal fun LiveRoomsRouteHost(
 
         is ZunoRoute.LiveRoomLobby -> {
             LaunchedEffect(screen.roomId) {
+                var ticks = 0
                 while (true) {
+                    if (ticks % 5 == 0) zunoViewModel.pingLiveRoom(screen.roomId)
                     zunoViewModel.refreshLiveRoom(screen.roomId)
+                    ticks++
                     delay(3_000)
                 }
             }
@@ -368,6 +372,13 @@ internal fun LiveRoomsRouteHost(
         }
 
         is ZunoRoute.ActiveLiveRoom -> {
+            LaunchedEffect(screen.roomId) {
+                while (true) {
+                    zunoViewModel.pingLiveRoom(screen.roomId)
+                    zunoViewModel.refreshLiveRoom(screen.roomId)
+                    delay(15_000)
+                }
+            }
             val roomObj = activeLiveRoom?.takeIf { it.id == screen.roomId }
                 ?: liveRooms.items?.featured?.takeIf { it.id == screen.roomId }
                 ?: liveRooms.items?.rooms?.firstOrNull { it.id == screen.roomId }
@@ -429,10 +440,11 @@ internal fun LiveRoomsRouteHost(
                         )
                     },
                     onEndRoom = {
+                        val elapsedSec = callStartedAt?.let { ((System.currentTimeMillis() - it) / 1000L).toInt().coerceAtLeast(0) } ?: 0
                         voiceViewModel.disconnect()
                         onSetActiveRoom(null, null)
                         CallNotification.cancel(context)
-                        zunoViewModel.endLiveRoom(roomObj.id) { pop() }
+                        zunoViewModel.endLiveRoom(roomObj.id, durationSec = elapsedSec) { pop() }
                     },
                     status = when (agentState) {
                         AgentState.DISCONNECTED, AgentState.CONNECTING -> VoiceCallStatus.Connecting

@@ -3,6 +3,7 @@ import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import type { z } from "zod";
 import { auth } from "./auth.js";
+import { touchPresence } from "./presence.js";
 
 export type AuthEnv = {
   Variables: {
@@ -15,6 +16,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) throw new HTTPException(401, { message: "Unauthorized" });
   c.set("user", session.user);
+  touchPresence(session.user.id, c.req.header("x-timezone"));
   await next();
 });
 

@@ -67,6 +67,15 @@ data class Preferences(
 /** Where the learner is in a language they've studied (restored when switching back). */
 data class LanguageProgress(val language: String, val level: String, val accent: String?, val levelChecked: Boolean)
 
+/** Real practice summary stats returned by `GET /api/me`. */
+data class UserStatsSummary(
+    val streakDays: Int = 0,
+    val dailyMinutesDone: Int = 0,
+    val activeDaysTotal: Int = 0,
+    val weeklyXp: Int = 0,
+    val leagueRank: Int? = null,
+)
+
 data class Profile(
     val name: String,
     val email: String,
@@ -87,6 +96,7 @@ data class Profile(
     val imageUrl: String? = null,
     val providers: List<String> = emptyList(),
     val languages: List<LanguageProgress> = emptyList(),
+    val stats: UserStatsSummary = UserStatsSummary(),
 ) {
     /** Empty when the account has no name (e.g. magic-link sign-ups), so greetings can omit it. */
     val firstName: String get() = name.trim().substringBefore(' ')
@@ -562,6 +572,7 @@ data class RecentSession(
     val title: String,
     val meta: String,
     val pinned: Boolean = false,
+    val unread: Boolean = false,
     /** The pinned conversation behind a topic or roleplay row. */
     val conversationId: String? = null,
 )
@@ -719,6 +730,15 @@ internal fun JSONObject.toProfile(): Profile {
         languages = optJSONArray("languages")?.objects()?.map {
             LanguageProgress(it.optString("language"), it.optString("level", "B1"), it.optStringOrNull("accent"), it.optBoolean("levelChecked"))
         }.orEmpty(),
+        stats = optJSONObject("stats")?.let { s ->
+            UserStatsSummary(
+                streakDays = s.optInt("streakDays", 0),
+                dailyMinutesDone = s.optInt("dailyMinutesDone", 0),
+                activeDaysTotal = s.optInt("activeDaysTotal", 0),
+                weeklyXp = s.optInt("weeklyXp", 0),
+                leagueRank = if (s.isNull("leagueRank") || !s.has("leagueRank")) null else s.optInt("leagueRank").takeIf { it > 0 },
+            )
+        } ?: UserStatsSummary(),
     )
 }
 
@@ -1040,6 +1060,7 @@ internal fun JSONObject.toRecentSession() = RecentSession(
     title = optString("title"),
     meta = optString("meta"),
     pinned = optBoolean("pinned"),
+    unread = optBoolean("unread", false),
     conversationId = optStringOrNull("conversationId"),
 )
 
@@ -1254,6 +1275,7 @@ data class PeerLearner(
     val sessionsCount: Int,
     val interests: List<String>,
     val openToSpeak: Boolean,
+    val online: Boolean = false,
     val isPartner: Boolean,
     val activeLabel: String,
     val isSeeded: Boolean = false,
@@ -1284,6 +1306,8 @@ data class ChatsOverview(
     val language: String,
     val languageName: String,
     val level: String,
+    val unreadCount: Int = 0,
+    val onlineSpeakersCount: Int = 0,
     val openSpeakers: List<PeerLearner>,
     val partners: List<PeerLearner>,
     val conversations: List<UnifiedChatItem>,
@@ -1367,10 +1391,11 @@ internal fun JSONObject.toPeerLearner() = PeerLearner(
     languageName = optString("languageName", "Spanish"),
     level = optString("level", "B1"),
     nativeLanguage = optString("nativeLanguage", "English"),
-    streakDays = optInt("streakDays", 7),
-    sessionsCount = optInt("sessionsCount", 12),
+    streakDays = optInt("streakDays", 0),
+    sessionsCount = optInt("sessionsCount", 0),
     interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
     openToSpeak = optBoolean("openToSpeak", false),
+    online = optBoolean("online", false),
     isPartner = optBoolean("isPartner", false),
     activeLabel = optString("activeLabel"),
     isSeeded = optBoolean("isSeeded", false),
@@ -1394,15 +1419,21 @@ internal fun JSONObject.toUnifiedChatItem() = UnifiedChatItem(
     avatarUrl = optStringOrNull("avatarUrl"),
 )
 
-internal fun JSONObject.toChatsOverview() = ChatsOverview(
-    openToSpeak = optBoolean("openToSpeak", true),
-    language = optString("language", "es"),
-    languageName = optString("languageName", "Spanish"),
-    level = optString("level", "B1"),
-    openSpeakers = optJSONArray("openSpeakers")?.objects()?.map { it.toPeerLearner() }.orEmpty(),
-    partners = optJSONArray("partners")?.objects()?.map { it.toPeerLearner() }.orEmpty(),
-    conversations = optJSONArray("conversations")?.objects()?.map { it.toUnifiedChatItem() }.orEmpty(),
-)
+internal fun JSONObject.toChatsOverview(): ChatsOverview {
+    val speakers = optJSONArray("openSpeakers")?.objects()?.map { it.toPeerLearner() }.orEmpty()
+    val convs = optJSONArray("conversations")?.objects()?.map { it.toUnifiedChatItem() }.orEmpty()
+    return ChatsOverview(
+        openToSpeak = optBoolean("openToSpeak", true),
+        language = optString("language", "es"),
+        languageName = optString("languageName", "Spanish"),
+        level = optString("level", "B1"),
+        unreadCount = if (has("unreadCount")) optInt("unreadCount", 0) else convs.count { it.unread },
+        onlineSpeakersCount = if (has("onlineSpeakersCount")) optInt("onlineSpeakersCount", 0) else speakers.size,
+        openSpeakers = speakers,
+        partners = optJSONArray("partners")?.objects()?.map { it.toPeerLearner() }.orEmpty(),
+        conversations = convs,
+    )
+}
 
 internal fun JSONObject.toPeerMessage(): PeerMessage {
     val meta = optJSONObject("metadata")
@@ -1611,17 +1642,20 @@ data class LiveRoom(
     val hostName: String = "Zuno",
     val isHost: Boolean = false,
     val discussionPrompts: List<String> = emptyList(),
+    val starterPhrases: List<String> = emptyList(),
     val currentRound: Int = 1,
     val members: List<LiveRoomMember> = emptyList(),
 ) {
     val isSystem: Boolean get() = sourceKind == "system"
     val isPublic: Boolean get() = visibility == "public"
     val isLive: Boolean get() = status == "live"
+    val hasActiveParticipants: Boolean get() = isLive && members.isNotEmpty()
 }
 
 data class LiveRoomsBrowse(
     val featured: LiveRoom?,
     val rooms: List<LiveRoom>,
+    val activeRoomsCount: Int = 0,
 )
 
 data class JoinLiveRoomResult(
@@ -1656,16 +1690,181 @@ internal fun JSONObject.toLiveRoom() = LiveRoom(
     discussionPrompts = optJSONArray("discussionPrompts")?.let { arr ->
         List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() }
     }.orEmpty(),
+    starterPhrases = optJSONArray("starterPhrases")?.let { arr ->
+        List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() }
+    }.orEmpty(),
     currentRound = optInt("currentRound", 1),
     members = optJSONArray("members")?.objects()?.map { it.toLiveRoomMember() }.orEmpty(),
 )
 
-internal fun JSONObject.toLiveRoomsBrowse() = LiveRoomsBrowse(
-    featured = optJSONObject("featured")?.toLiveRoom(),
-    rooms = optJSONArray("rooms")?.objects()?.map { it.toLiveRoom() }.orEmpty(),
-)
+internal fun JSONObject.toLiveRoomsBrowse(): LiveRoomsBrowse {
+    val featured = optJSONObject("featured")?.toLiveRoom()
+    val rooms = optJSONArray("rooms")?.objects()?.map { it.toLiveRoom() }.orEmpty()
+    val computedActive = (if (featured?.hasActiveParticipants == true) 1 else 0) + rooms.count { it.hasActiveParticipants }
+    return LiveRoomsBrowse(
+        featured = featured,
+        rooms = rooms,
+        activeRoomsCount = if (has("activeRoomsCount")) optInt("activeRoomsCount", computedActive) else computedActive,
+    )
+}
 
 internal fun JSONObject.toJoinLiveRoomResult() = JoinLiveRoomResult(
     room = getJSONObject("room").toLiveRoom(),
     livekit = optJSONObject("livekit")?.toLivekitTicket(),
+)
+
+// ── 13 · Progress & 14 · Community League ───────────────────────────────────
+
+data class ProgressDailyGoal(
+    val id: String,
+    val title: String,
+    val current: Int,
+    val target: Int,
+    val unit: String = "",
+) {
+    val progress: Float get() = if (target <= 0) 0f else (current.toFloat() / target.toFloat()).coerceIn(0f, 1f)
+    val valueLabel: String get() = "$current / $target$unit"
+}
+
+data class SkillBreakdown(
+    val hasData: Boolean = false,
+    val pronunciation: Int = 0,
+    val listening: Int = 0,
+    val vocabulary: Int = 0,
+    val fluency: Int = 0,
+    val grammar: Int = 0,
+    val wordStress: Int = 0,
+    val focusArea: String? = null,
+    val focusScore: Int? = null,
+)
+
+data class WeeklyBarDay(
+    val dayLabel: String,
+    val date: String,
+    val minutes: Int,
+    val xp: Int,
+    val isToday: Boolean = false,
+)
+
+data class HeatmapDay(
+    val date: String,
+    val level: Int,
+    val minutes: Int,
+)
+
+data class ProgressOverview(
+    val language: String,
+    val level: String,
+    val cefrProgressPercent: Int,
+    val streakDays: Int,
+    val totalSpokenMinutes: Int,
+    val wordsCount: Int,
+    val hoursUntilReset: Int,
+    val dailyGoals: List<ProgressDailyGoal>,
+    val skills: SkillBreakdown,
+    val weeklyXp: Int,
+    val avgMinutesPerDay: Int,
+    val weeklyBars: List<WeeklyBarDay>,
+    val activeDaysLast12Weeks: Int,
+    val heatmapMonths: List<String>,
+    val heatmapDays: List<HeatmapDay>,
+)
+
+data class LeagueStanding(
+    val rank: Int,
+    val userId: String,
+    val name: String,
+    val initial: String,
+    val imageUrl: String?,
+    val minutesSpoken: Int,
+    val xp: Int,
+    val isYou: Boolean = false,
+)
+
+data class LeagueOverview(
+    val language: String,
+    val weekStartDate: String,
+    val resetsAtMillis: Long?,
+    val myRank: Int?,
+    val myXp: Int,
+    val myMinutesSpoken: Int,
+    val totalParticipants: Int,
+    val standings: List<LeagueStanding>,
+)
+
+internal fun JSONObject.toProgressOverview(): ProgressOverview {
+    val skillsObj = optJSONObject("skills")
+    return ProgressOverview(
+        language = optString("language", "es"),
+        level = optString("level", "B1"),
+        cefrProgressPercent = optInt("cefrProgressPercent", 0),
+        streakDays = optInt("streakDays", 0),
+        totalSpokenMinutes = optInt("totalSpokenMinutes", 0),
+        wordsCount = optInt("wordsCount", 0),
+        hoursUntilReset = optInt("hoursUntilReset", 24),
+        dailyGoals = optJSONArray("dailyGoals")?.objects()?.map {
+            ProgressDailyGoal(
+                id = it.optString("id"),
+                title = it.optString("title"),
+                current = it.optInt("current", 0),
+                target = it.optInt("target", 1),
+                unit = it.optString("unit"),
+            )
+        }.orEmpty(),
+        skills = if (skillsObj != null) {
+            SkillBreakdown(
+                hasData = skillsObj.optBoolean("hasData", false),
+                pronunciation = skillsObj.optInt("pronunciation", 0),
+                listening = skillsObj.optInt("listening", 0),
+                vocabulary = skillsObj.optInt("vocabulary", 0),
+                fluency = skillsObj.optInt("fluency", 0),
+                grammar = skillsObj.optInt("grammar", 0),
+                wordStress = skillsObj.optInt("wordStress", 0),
+                focusArea = skillsObj.optStringOrNull("focusArea"),
+                focusScore = if (skillsObj.isNull("focusScore") || !skillsObj.has("focusScore")) null else skillsObj.optInt("focusScore"),
+            )
+        } else SkillBreakdown(),
+        weeklyXp = optInt("weeklyXp", 0),
+        avgMinutesPerDay = optInt("avgMinutesPerDay", 0),
+        weeklyBars = optJSONArray("weeklyBars")?.objects()?.map {
+            WeeklyBarDay(
+                dayLabel = it.optString("dayLabel"),
+                date = it.optString("date"),
+                minutes = it.optInt("minutes", 0),
+                xp = it.optInt("xp", 0),
+                isToday = it.optBoolean("isToday", false),
+            )
+        }.orEmpty(),
+        activeDaysLast12Weeks = optInt("activeDaysLast12Weeks", 0),
+        heatmapMonths = optJSONArray("heatmapMonths")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
+        heatmapDays = optJSONArray("heatmapDays")?.objects()?.map {
+            HeatmapDay(
+                date = it.optString("date"),
+                level = it.optInt("level", 0),
+                minutes = it.optInt("minutes", 0),
+            )
+        }.orEmpty(),
+    )
+}
+
+internal fun JSONObject.toLeagueOverview() = LeagueOverview(
+    language = optString("language", "es"),
+    weekStartDate = optString("weekStartDate"),
+    resetsAtMillis = parseInstant(optStringOrNull("resetsAt")),
+    myRank = if (isNull("myRank") || !has("myRank")) null else optInt("myRank").takeIf { it > 0 },
+    myXp = optInt("myXp", 0),
+    myMinutesSpoken = optInt("myMinutesSpoken", 0),
+    totalParticipants = optInt("totalParticipants", 0),
+    standings = optJSONArray("standings")?.objects()?.map {
+        LeagueStanding(
+            rank = it.optInt("rank", 0),
+            userId = it.optString("userId"),
+            name = it.optString("name"),
+            initial = it.optString("initial", "L"),
+            imageUrl = it.optStringOrNull("imageUrl"),
+            minutesSpoken = it.optInt("minutesSpoken", 0),
+            xp = it.optInt("xp", 0),
+            isYou = it.optBoolean("isYou", false),
+        )
+    }.orEmpty(),
 )

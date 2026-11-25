@@ -284,12 +284,13 @@ fun ChatsScreen(
                                                     languageName = data.languageName,
                                                     level = data.level,
                                                     nativeLanguage = "English",
-                                                    streakDays = 7,
-                                                    sessionsCount = 12,
+                                                    streakDays = 0,
+                                                    sessionsCount = 0,
                                                     interests = emptyList(),
                                                     openToSpeak = item.openToSpeak,
+                                                    online = item.openToSpeak,
                                                     isPartner = false,
-                                                    activeLabel = if (item.openToSpeak) "Open to speak" else "Online",
+                                                    activeLabel = if (item.openToSpeak) "Open to speak" else "",
                                                 )
                                             onOpenPeerChat(partner)
                                         }
@@ -385,12 +386,13 @@ fun ChatsScreen(
                                                                 languageName = data.languageName,
                                                                 level = data.level,
                                                                 nativeLanguage = "English",
-                                                                streakDays = 7,
-                                                                sessionsCount = 12,
+                                                                streakDays = 0,
+                                                                sessionsCount = 0,
                                                                 interests = emptyList(),
                                                                 openToSpeak = item.openToSpeak,
+                                                                online = item.openToSpeak,
                                                                 isPartner = false,
-                                                                activeLabel = if (item.openToSpeak) "Open to speak" else "Online",
+                                                                activeLabel = if (item.openToSpeak) "Open to speak" else "",
                                                             )
                                                         onOpenPeerChat(partner)
                                                     }

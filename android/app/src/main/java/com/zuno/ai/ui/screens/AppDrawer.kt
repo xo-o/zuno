@@ -85,12 +85,12 @@ fun AppDrawer(
     onSettings: () -> Unit,
     onNewChat: () -> Unit,
     modifier: Modifier = Modifier,
-    vocabDueCount: Int = 14,
-    scheduledTimeLabel: String? = "7:00 PM",
-    unreadChatsCount: Int = 2,
-    activeLiveRoomsCount: Int = 2,
-    partnersOnlineCount: Int = 12,
-    leagueRank: Int = 5,
+    vocabDueCount: Int = 0,
+    scheduledTimeLabel: String? = null,
+    unreadChatsCount: Int = 0,
+    activeLiveRoomsCount: Int = 0,
+    partnersOnlineCount: Int = 0,
+    leagueRank: Int? = null,
 ) {
     Column(
         modifier = modifier
@@ -159,13 +159,17 @@ fun AppDrawer(
                 label = stringResource(DrawerDestination.Vocabulary.labelRes),
                 icon = DrawerDestination.Vocabulary.icon,
                 active = activeDestination == DrawerDestination.Vocabulary,
-                trailing = {
-                    Text(
-                        text = "$vocabDueCount due",
-                        style = ZunoType.Micro,
-                        color = ZunoColors.TextTertiary,
-                        maxLines = 1,
-                    )
+                trailing = if (vocabDueCount > 0) {
+                    {
+                        Text(
+                            text = "$vocabDueCount due",
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            maxLines = 1,
+                        )
+                    }
+                } else {
+                    null
                 },
                 onClick = { onDestination(DrawerDestination.Vocabulary) },
             )
@@ -209,24 +213,28 @@ fun AppDrawer(
                 label = stringResource(DrawerDestination.LiveRooms.labelRes),
                 icon = DrawerDestination.LiveRooms.icon,
                 active = activeDestination == DrawerDestination.LiveRooms,
-                trailing = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(ZunoColors.StatusSpeaking),
-                        )
-                        Text(
-                            text = "$activeLiveRoomsCount active",
-                            style = ZunoType.Micro,
-                            color = ZunoColors.TextTertiary,
-                            maxLines = 1,
-                        )
+                trailing = if (activeLiveRoomsCount > 0) {
+                    {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(ZunoColors.StatusSpeaking),
+                            )
+                            Text(
+                                text = "$activeLiveRoomsCount active",
+                                style = ZunoType.Micro,
+                                color = ZunoColors.TextTertiary,
+                                maxLines = 1,
+                            )
+                        }
                     }
+                } else {
+                    null
                 },
                 onClick = { onDestination(DrawerDestination.LiveRooms) },
             )
@@ -234,13 +242,17 @@ fun AppDrawer(
                 label = "Community & Partners",
                 icon = DrawerDestination.Community.icon,
                 active = activeDestination == DrawerDestination.Community,
-                trailing = {
-                    Text(
-                        text = "$partnersOnlineCount online",
-                        style = ZunoType.Micro,
-                        color = ZunoColors.TextTertiary,
-                        maxLines = 1,
-                    )
+                trailing = if (partnersOnlineCount > 0) {
+                    {
+                        Text(
+                            text = "$partnersOnlineCount online",
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            maxLines = 1,
+                        )
+                    }
+                } else {
+                    null
                 },
                 onClick = { onDestination(DrawerDestination.Community) },
             )
@@ -248,13 +260,15 @@ fun AppDrawer(
                 label = stringResource(DrawerDestination.Progress.labelRes),
                 icon = DrawerDestination.Progress.icon,
                 active = activeDestination == DrawerDestination.Progress,
-                trailing = {
-                    Text(
-                        text = "#$leagueRank",
-                        style = ZunoType.Micro,
-                        color = ZunoColors.TextTertiary,
-                        maxLines = 1,
-                    )
+                trailing = leagueRank?.let { rank ->
+                    {
+                        Text(
+                            text = "#$rank",
+                            style = ZunoType.Micro,
+                            color = ZunoColors.TextTertiary,
+                            maxLines = 1,
+                        )
+                    }
                 },
                 onClick = { onDestination(DrawerDestination.Progress) },
             )
@@ -291,7 +305,7 @@ fun AppDrawer(
                         meta = session.meta,
                         selected = isSelected,
                         pinned = session.pinned,
-                        unread = session.pinned && index == 0,
+                        unread = session.unread,
                         onClick = { onSession(session) },
                     )
                 }

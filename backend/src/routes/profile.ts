@@ -7,11 +7,13 @@ import { blockedLearner, conversation, roleplay, schedule, topic, userProfile, v
 import { account, user } from "../db/auth-schema.js";
 import { db } from "../db/index.js";
 import { deleteAccount, R2_PREFIX } from "../lib/account.js";
+import { getProgressOverview, getUserSummaryStats } from "../lib/activity.js";
 import { t } from "../lib/copy.js";
 import { sendEmail } from "../lib/email.js";
 import { parseBody, rateLimit, requireAuth, type AuthEnv } from "../lib/http.js";
 import { APP_LANGUAGE_CODES, LANGUAGE_CODES, LEVELS } from "../lib/languages.js";
 import { getNotificationPrefs, serializeNotificationPrefs, updateNotificationPrefs } from "../lib/notifications.js";
+import { recordPresenceHeartbeat } from "../lib/presence.js";
 import {
   DAILY_GOALS,
   FOCUSES,
@@ -104,6 +106,10 @@ const privacySchema = z.object({
   whoCanMessage: z.enum(["partners", "everyone", "nobody"]).optional(),
 });
 
+const presenceSchema = z.object({
+  status: z.enum(["online", "away"]).optional().default("online"),
+});
+
 async function imageUrl(image: string | null | undefined) {
   if (!image) return null;
   if (!image.startsWith(R2_PREFIX)) return image;
@@ -120,14 +126,16 @@ async function serializeUser(row: { id: string; name: string; email: string; ima
 
 async function profileResponse(current: { id: string; name: string; email: string; image?: string | null }) {
   const profile = await getProfile(current.id);
-  const [languages, providers] = await Promise.all([
+  const [languages, providers, stats] = await Promise.all([
     languageProgress(current.id, profile),
     db.select({ providerId: account.providerId }).from(account).where(eq(account.userId, current.id)),
+    getUserSummaryStats(current.id, profile.targetLanguage),
   ]);
   return {
     user: await serializeUser(current),
     profile,
     languages,
+    stats,
     // "Signed in with Google" in Settings · Account.
     providers: [...new Set(providers.map((p) => p.providerId))],
   };
@@ -140,6 +148,18 @@ export const profileRoutes = new Hono<AuthEnv>()
   .get("/", async (c) => {
     const [row] = await db.select().from(user).where(eq(user.id, c.get("user").id));
     return c.json(await profileResponse(row ?? c.get("user")));
+  })
+  .get("/progress", async (c) => {
+    const userId = c.get("user").id;
+    const profile = await getProfile(userId);
+    return c.json(await getProgressOverview(userId, profile));
+  })
+  .post("/presence", async (c) => {
+    const userId = c.get("user").id;
+    const body = await parseBody(c, presenceSchema);
+    await getProfile(userId);
+    const res = await recordPresenceHeartbeat(userId, body.status, c.req.header("x-timezone"));
+    return c.json(res);
   })
   .patch("/", async (c) => {
     const current = c.get("user");

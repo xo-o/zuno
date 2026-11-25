@@ -490,6 +490,8 @@ fun ZunoApp(
     val vocabLibrary by zunoViewModel.vocabLibrary.collectAsStateWithLifecycle()
     val liveRooms by zunoViewModel.liveRooms.collectAsStateWithLifecycle()
     val activeLiveRoom by zunoViewModel.activeLiveRoom.collectAsStateWithLifecycle()
+    val progressOverview by zunoViewModel.progressOverview.collectAsStateWithLifecycle()
+    val leagueOverview by zunoViewModel.leagueOverview.collectAsStateWithLifecycle()
     val privacySettings by zunoViewModel.privacySettings.collectAsStateWithLifecycle()
     var lastSprintResults by remember { mutableStateOf<List<SprintReviewResult>>(emptyList()) }
     var postCallCapture by remember { mutableStateOf<Pair<String, List<Triple<String, String, String>>>?>(null) }
@@ -589,6 +591,35 @@ fun ZunoApp(
     fun comingSoon(feature: String) = toast(str(R.string.common_coming_soon, feature), ToastIcon.Alert)
 
     LaunchedEffect(Unit) { zunoViewModel.messages.collect { toast(it) } }
+
+    // Foreground presence heartbeat (45s) + live sync of unread counts, online peers, and streaks.
+    val signedInReady = profile != null
+    LaunchedEffect(signedInReady) {
+        if (!signedInReady) return@LaunchedEffect
+        while (true) {
+            zunoViewModel.heartbeatPresence("online")
+            kotlinx.coroutines.delay(45_000)
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        if (profile != null) {
+            zunoViewModel.heartbeatPresence("online")
+            zunoViewModel.refreshProfileStats()
+            zunoViewModel.loadChatsOverview(silent = true)
+            zunoViewModel.loadLiveRooms(silent = true)
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (profile != null) {
+            zunoViewModel.heartbeatPresence("away")
+        }
+    }
+    LaunchedEffect(signedInReady) {
+        if (!signedInReady) return@LaunchedEffect
+        Push.peerEvents.collect {
+            zunoViewModel.loadChatsOverview(silent = true)
+        }
+    }
 
     var signOutReason by remember { mutableStateOf<SignOutReason?>(null) }
     LaunchedEffect(Unit) {
@@ -1958,16 +1989,15 @@ fun ZunoApp(
                     } else {
                         null
                     }
-                    val streakDays = 22
-                    val dailyMinutesDone = 8
+                    val streakDays = readyProfile.stats.streakDays
+                    val dailyMinutesDone = readyProfile.stats.dailyMinutesDone
                     val dailyTargetMin = preferences?.dailyGoalMin ?: 15
                     val currentLevel = readyProfile.level
-                    val unreadChatsCount = chatsOverview.items?.conversations?.count { it.unread } ?: 0
-                    val partnersOnline = chatsOverview.items?.openSpeakers?.size?.takeIf { it > 0 } ?: 12
+                    val leagueRank = readyProfile.stats.leagueRank
+                    val unreadChatsCount = chatsOverview.items?.unreadCount ?: 0
+                    val partnersOnline = chatsOverview.items?.onlineSpeakersCount ?: 0
                     val vocabDueCount = vocabLibrary.items?.counts?.due ?: 0
-                    val activeLiveRoomsCount = liveRooms.items?.let { browse ->
-                        (if (browse.featured?.isLive == true) 1 else 0) + browse.rooms.count { it.isLive }
-                    } ?: 0
+                    val activeLiveRoomsCount = liveRooms.items?.activeRoomsCount ?: 0
                     val nextSchedule = schedules.items?.filter { it.active }?.minByOrNull { it.nextRunAtMillis ?: Long.MAX_VALUE }
                     val scheduledTimeLabel = nextSchedule?.let { ScheduleFormat.time(localizedContext, it.timeOfDay) }
 
@@ -1989,6 +2019,7 @@ fun ZunoApp(
                         activeLiveRoomsCount = activeLiveRoomsCount,
                         partnersOnlineCount = partnersOnline,
                         scheduledTimeLabel = scheduledTimeLabel,
+                        leagueRank = leagueRank,
                         micGranted = ::micGranted,
                         onRequestMicForTalk = { onGranted -> withMicrophone(onGranted) },
                         onStreakClick = { openSection(ZunoRoute.Progress) },
@@ -2124,7 +2155,13 @@ fun ZunoApp(
                     val thread = peerChats[screen.peerConversationId]
                     LaunchedEffect(screen.peerConversationId) {
                         zunoViewModel.loadPeerChat(screen.peerConversationId)
+                        zunoViewModel.markPeerChatRead(screen.peerConversationId)
                         requestChatsNotificationsOnce()
+                    }
+                    LaunchedEffect(screen.peerConversationId, thread?.messages?.size) {
+                        if (thread != null) {
+                            zunoViewModel.markPeerChatRead(screen.peerConversationId)
+                        }
                     }
                     PeerChatScreen(
                         thread = thread,
@@ -3139,18 +3176,24 @@ fun ZunoApp(
                     modifier = screenModifier,
                 )
 
-                ZunoRoute.Progress -> ProgressScreen(
-                    languageName = language.displayName(appLanguage),
-                    level = profile?.level ?: "B1",
-                    streakDays = 22,
-                    onBack = ::pop,
-                    onStartDrill = { withMicrophone(::startHomeCall) },
-                    modifier = screenModifier,
-                )
+                ZunoRoute.Progress -> {
+                    LaunchedEffect(Unit) { zunoViewModel.loadProgress() }
+                    ProgressScreen(
+                        languageName = language.displayName(appLanguage),
+                        level = profile?.level ?: "B1",
+                        streakDays = profile?.stats?.streakDays ?: 0,
+                        progress = progressOverview,
+                        onRetry = { zunoViewModel.loadProgress() },
+                        onBack = ::pop,
+                        onStartDrill = { withMicrophone(::startHomeCall) },
+                        modifier = screenModifier,
+                    )
+                }
 
                 ZunoRoute.Community -> {
                     LaunchedEffect(Unit) {
-                        if (chatsOverview.items == null) zunoViewModel.loadChatsOverview(silent = true)
+                        zunoViewModel.loadChatsOverview(silent = true)
+                        zunoViewModel.loadCommunityLeague()
                     }
                     val overview = chatsOverview.items
                     val userInitial = profile?.displayName?.take(1)?.uppercase()?.ifBlank { "Z" } ?: "Z"
@@ -3163,6 +3206,8 @@ fun ZunoApp(
                         openToSpeak = overview?.openToSpeak ?: true,
                         partners = overview?.partners.orEmpty(),
                         onlineLearners = overview?.openSpeakers.orEmpty(),
+                        league = leagueOverview,
+                        onRetryLeague = { zunoViewModel.loadCommunityLeague() },
                         onToggleOpenToSpeak = { enabled ->
                             if (enabled) requestChatsNotificationsOnce()
                             zunoViewModel.toggleOpenToSpeak(enabled)

@@ -27,6 +27,14 @@ class ZunoApi(
 
     suspend fun profile(): Profile = get("/me").toProfile()
 
+    suspend fun progress(): ProgressOverview = get("/me/progress").toProgressOverview()
+
+    suspend fun heartbeatPresence(status: String = "online") {
+        send("POST", "/me/presence", JSONObject().put("status", status))
+    }
+
+    suspend fun communityLeague(): LeagueOverview = get("/community/league").toLeagueOverview()
+
     /** PATCH /me with any of: name, targetLanguage, nativeLanguage, level, accent and preference fields. */
     suspend fun updateProfile(fields: Map<String, Any>): Profile {
         val body = JSONObject()
@@ -561,6 +569,10 @@ class ZunoApi(
     suspend fun peerChat(conversationId: String): PeerConversationThread =
         get("/chats/people/$conversationId").toPeerConversationThread()
 
+    suspend fun markPeerChatRead(conversationId: String) {
+        send("POST", "/chats/people/$conversationId/read")
+    }
+
     suspend fun sendPeerMessage(conversationId: String, text: String): PeerMessage =
         send("POST", "/chats/people/$conversationId/messages", JSONObject().put("text", text))
             .getJSONObject("message")
@@ -753,12 +765,16 @@ class ZunoApi(
         return send("PATCH", "/live-rooms/$id", body).getJSONObject("room").toLiveRoom()
     }
 
-    suspend fun leaveLiveRoom(id: String) {
-        send("POST", "/live-rooms/$id/leave")
+    suspend fun pingLiveRoom(id: String) {
+        send("POST", "/live-rooms/$id/ping")
     }
 
-    suspend fun endLiveRoom(id: String) {
-        send("POST", "/live-rooms/$id/end")
+    suspend fun leaveLiveRoom(id: String, durationSec: Int = 0) {
+        send("POST", "/live-rooms/$id/leave", JSONObject().put("durationSec", durationSec.coerceAtLeast(0)))
+    }
+
+    suspend fun endLiveRoom(id: String, durationSec: Int = 0) {
+        send("POST", "/live-rooms/$id/end", JSONObject().put("durationSec", durationSec.coerceAtLeast(0)))
     }
 
     // Transport
@@ -770,7 +786,10 @@ class ZunoApi(
 
     private fun request(path: String): Request.Builder {
         val token = tokenProvider() ?: throw ApiException("Please sign in again.", unauthorized = true)
-        return Request.Builder().url("$apiUrl$path").header("Authorization", "Bearer $token")
+        return Request.Builder()
+            .url("$apiUrl$path")
+            .header("Authorization", "Bearer $token")
+            .header("X-Timezone", java.util.TimeZone.getDefault().id)
     }
 
     private suspend fun execute(request: Request): JSONObject = withContext(Dispatchers.IO) {

@@ -29,11 +29,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.zuno.ai.R
+import com.zuno.ai.data.LeagueOverview
+import com.zuno.ai.data.LeagueStanding
 import com.zuno.ai.data.PeerLearner
 import com.zuno.ai.ui.components.ZunoAvatar
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
+import com.zuno.ai.ui.components.ZunoEmptyState
+import com.zuno.ai.ui.components.ZunoLoadState
 import com.zuno.ai.ui.components.ZunoSectionTopBar
 import com.zuno.ai.ui.components.ZunoSegmentedTabs
 import com.zuno.ai.ui.theme.ZunoColors
@@ -44,15 +49,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
-
-private data class LeagueRow(
-    val rank: Int,
-    val initial: String,
-    val name: String,
-    val minutesSpoken: Int,
-    val xp: Int,
-    val isYou: Boolean = false,
-)
+import com.zuno.ai.viewmodel.Loadable
 
 /**
  * `14 · Community & Partners` (`3131:13712` Partners & `3131:13835` League).
@@ -67,6 +64,8 @@ fun CommunityScreen(
     openToSpeak: Boolean,
     partners: List<PeerLearner>,
     onlineLearners: List<PeerLearner>,
+    league: Loadable<LeagueOverview> = Loadable(),
+    onRetryLeague: () -> Unit = {},
     onToggleOpenToSpeak: (Boolean) -> Unit,
     onTalkToPartner: (PeerLearner) -> Unit,
     onInviteClick: () -> Unit,
@@ -112,13 +111,12 @@ fun CommunityScreen(
                 onToggleOpenToSpeak = onToggleOpenToSpeak,
                 onTalkToPartner = onTalkToPartner,
                 onInviteClick = onInviteClick,
-                onFallbackTalk = onOpenChats,
                 modifier = Modifier.weight(1f),
             )
         } else {
             LeagueTabBody(
-                userName = userName.ifBlank { "You" },
-                userInitial = userInitial,
+                league = league,
+                onRetry = onRetryLeague,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -137,7 +135,6 @@ private fun PartnersTabBody(
     onToggleOpenToSpeak: (Boolean) -> Unit,
     onTalkToPartner: (PeerLearner) -> Unit,
     onInviteClick: () -> Unit,
-    onFallbackTalk: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -164,7 +161,11 @@ private fun PartnersTabBody(
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
                     Text("Open to speak", style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
                     Text(
-                        text = "Visible to $languageName $level–B2 learners",
+                        text = if (openToSpeak) {
+                            "Visible to $languageName $level learners online"
+                        } else {
+                            "Turn on so $languageName learners can invite you"
+                        },
                         style = ZunoType.FootnoteRegular,
                         color = ZunoColors.TextTertiary,
                         maxLines = 1,
@@ -200,16 +201,35 @@ private fun PartnersTabBody(
                             if (idx > 0) ZunoGlassHairline()
                             PartnerCardRow(
                                 initial = p.initial,
+                                imageUrl = p.imageUrl,
                                 name = p.name,
-                                subtitle = "${p.languageName} ${p.level} · ${p.activeLabel}",
-                                onlineDot = p.openToSpeak,
+                                subtitle = buildString {
+                                    append("${p.languageName} ${p.level}")
+                                    if (p.activeLabel.isNotBlank()) append(" · ${p.activeLabel}")
+                                },
+                                onlineDot = p.online,
                                 onTalk = { onTalkToPartner(p) },
                             )
                         }
                     } else {
-                        PartnerCardRow("P", "Priya S.", "34 / 45 min goal · Spoke 2h ago", false, onFallbackTalk)
-                        ZunoGlassHairline()
-                        PartnerCardRow("A", "Arjun K.", "$languageName B2 · Spoke 2d ago", false, onFallbackTalk)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s20),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        ) {
+                            Text(
+                                text = "No practice partners yet",
+                                style = ZunoType.BodyMediumStrong,
+                                color = ZunoColors.TextPrimary,
+                            )
+                            Text(
+                                text = "Add learners you meet in Chats or Live Rooms to practice together again.",
+                                style = ZunoType.FootnoteRegular,
+                                color = ZunoColors.TextTertiary,
+                            )
+                        }
                     }
                 }
             }
@@ -224,7 +244,7 @@ private fun PartnersTabBody(
                 ) {
                     Text("Online now", style = ZunoType.LabelSmall, color = ZunoColors.TextSecondary)
                     Text(
-                        text = "${onlineLearners.size.takeIf { it > 0 } ?: 12} partners",
+                        text = "${onlineLearners.size} online",
                         style = ZunoType.FootnoteRegular,
                         color = ZunoColors.TextTertiary,
                     )
@@ -240,18 +260,36 @@ private fun PartnersTabBody(
                             val tags = learner.interests.take(2).joinToString(", ")
                             PartnerCardRow(
                                 initial = learner.initial,
+                                imageUrl = learner.imageUrl,
                                 name = learner.name,
-                                subtitle = if (tags.isNotBlank()) "${learner.languageName} ${learner.level} · $tags" else "${learner.languageName} ${learner.level} · ${learner.activeLabel}",
-                                onlineDot = true,
+                                subtitle = if (tags.isNotBlank()) {
+                                    "${learner.languageName} ${learner.level} · $tags"
+                                } else {
+                                    "${learner.languageName} ${learner.level} · ${learner.activeLabel}"
+                                },
+                                onlineDot = learner.online,
                                 onTalk = { onTalkToPartner(learner) },
                             )
                         }
                     } else {
-                        PartnerCardRow("C", "Carlos Vega", "$languageName B2 · Travel, Tech", true, onFallbackTalk)
-                        ZunoGlassHairline()
-                        PartnerCardRow("S", "Sofía Morales", "Native $languageName · Daily life", true, onFallbackTalk)
-                        ZunoGlassHairline()
-                        PartnerCardRow("M", "Mateo Ruiz", "$languageName C1 · Work, Culture", true, onFallbackTalk)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s20),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        ) {
+                            Text(
+                                text = "No $languageName learners online right now",
+                                style = ZunoType.BodyMediumStrong,
+                                color = ZunoColors.TextPrimary,
+                            )
+                            Text(
+                                text = "Leave “Open to speak” on — real learners studying $languageName will appear here as soon as they connect.",
+                                style = ZunoType.FootnoteRegular,
+                                color = ZunoColors.TextTertiary,
+                            )
+                        }
                     }
                 }
             }
@@ -262,6 +300,7 @@ private fun PartnersTabBody(
 @Composable
 private fun PartnerCardRow(
     initial: String,
+    imageUrl: String?,
     name: String,
     subtitle: String,
     onlineDot: Boolean,
@@ -276,14 +315,12 @@ private fun PartnerCardRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.size(40.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zunoGlassElevated(CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(initial, style = ZunoType.LabelMedium, color = ZunoColors.TextPrimary)
-            }
+            ZunoAvatar(
+                initial = initial,
+                imageUrl = imageUrl,
+                size = 40.dp,
+                textStyle = ZunoType.LabelMedium,
+            )
             if (onlineDot) {
                 Box(
                     modifier = Modifier
@@ -308,19 +345,50 @@ private fun PartnerCardRow(
     }
 }
 
+private fun formatCountdown(resetsAtMillis: Long?): String {
+    if (resetsAtMillis == null) return ""
+    val remainingMs = (resetsAtMillis - System.currentTimeMillis()).coerceAtLeast(0L)
+    val totalHours = remainingMs / 3_600_000L
+    val days = totalHours / 24L
+    val hours = totalHours % 24L
+    return when {
+        days > 0 -> "${days}d ${hours}h left"
+        hours > 0 -> "${hours}h left"
+        else -> "<1h left"
+    }
+}
+
 @Composable
 private fun LeagueTabBody(
-    userName: String,
-    userInitial: String,
+    league: Loadable<LeagueOverview>,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val standings = listOf(
-        LeagueRow(4, userInitial, "$userName (You)", 186, 1840, isYou = true),
-        LeagueRow(5, "J", "Jamie S.", 174, 1790),
-        LeagueRow(6, "Y", "Yuki T.", 162, 1655),
-        LeagueRow(7, "E", "Elena B.", 149, 1520),
-        LeagueRow(8, "R", "Rahul P.", 138, 1410),
-    )
+    val data = league.items
+    if (data == null) {
+        Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            ZunoLoadState(error = league.error, onRetry = onRetry)
+        }
+        return
+    }
+
+    if (data.standings.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxWidth().padding(horizontal = ZunoSpace.s24),
+            contentAlignment = Alignment.Center,
+        ) {
+            ZunoEmptyState(
+                icon = R.drawable.zuno_ic_trending_up,
+                title = "This week's league is open",
+                description = "Complete a voice call, chat, or lesson to earn XP and appear on the leaderboard.",
+            )
+        }
+        return
+    }
+
+    val top3 = data.standings.take(3)
+    val restStandings = if (data.standings.size > 3) data.standings.drop(3) else data.standings
+    val countdown = formatCountdown(data.resetsAtMillis)
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -342,21 +410,38 @@ private fun LeagueTabBody(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
                         Text("Weekly speaking", style = ZunoType.FootnoteRegular, color = ZunoColors.TextSecondary)
-                        Text("Your rank · #4", style = ZunoType.TitleMedium, color = ZunoColors.TextPrimary)
+                        Text(
+                            text = data.myRank?.let { "Your rank · #$it" } ?: "Practice to rank",
+                            style = ZunoType.TitleMedium,
+                            color = ZunoColors.TextPrimary,
+                        )
                     }
-                    Text("3d 14h left", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                    if (countdown.isNotBlank()) {
+                        Text(countdown, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                    }
                 }
 
                 ZunoGlassHairline()
 
+                val podiumOrdered: List<LeagueStanding> = when (top3.size) {
+                    3 -> listOf(top3[1], top3[0], top3[2])
+                    2 -> listOf(top3[1], top3[0])
+                    else -> top3
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = ZunoSpace.s4),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PodiumColumn("P", "2 · Priya", "2,140 XP", isFirst = false)
-                    PodiumColumn("A", "1 · Arjun", "2,560 XP", isFirst = true)
-                    PodiumColumn("L", "3 · Lucía", "1,980 XP", isFirst = false)
+                    podiumOrdered.forEach { entry ->
+                        PodiumColumn(
+                            initial = entry.initial,
+                            imageUrl = entry.imageUrl,
+                            label = "${entry.rank} · ${entry.name.substringBefore(" ")}",
+                            xp = "%,d XP".format(entry.xp),
+                            isFirst = entry.rank == 1,
+                        )
+                    }
                 }
             }
         }
@@ -368,14 +453,14 @@ private fun LeagueTabBody(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text("Standings", style = ZunoType.LabelSmall, color = ZunoColors.TextSecondary)
-                    Text("Top 10 advance", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                    Text("${data.totalParticipants} active", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
                 }
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
                 ) {
-                    standings.forEachIndexed { idx, row ->
+                    restStandings.forEachIndexed { idx, row ->
                         if (idx > 0) ZunoGlassHairline()
                         Row(
                             modifier = Modifier
@@ -390,23 +475,20 @@ private fun LeagueTabBody(
                                 color = if (row.isYou) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
                                 modifier = Modifier.size(20.dp),
                             )
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .then(
-                                        if (row.isYou) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
-                                        else Modifier.zunoGlassElevated(CircleShape),
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = row.initial,
-                                    style = ZunoType.LabelSmall,
-                                    color = if (row.isYou) ZunoColors.TextOnInverse else ZunoColors.TextPrimary,
-                                )
-                            }
+                            ZunoAvatar(
+                                initial = row.initial,
+                                imageUrl = row.imageUrl,
+                                size = 34.dp,
+                                textStyle = ZunoType.LabelSmall,
+                            )
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
-                                Text(row.name, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    text = if (row.isYou) "${row.name} (You)" else row.name,
+                                    style = ZunoType.BodyMediumStrong,
+                                    color = ZunoColors.TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                                 Text("${row.minutesSpoken} min spoken", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
                             }
                             Text(
@@ -423,25 +505,40 @@ private fun LeagueTabBody(
 }
 
 @Composable
-private fun PodiumColumn(initial: String, label: String, xp: String, isFirst: Boolean) {
+private fun PodiumColumn(
+    initial: String,
+    imageUrl: String?,
+    label: String,
+    xp: String,
+    isFirst: Boolean,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
     ) {
-        Box(
-            modifier = Modifier
-                .size(if (isFirst) 42.dp else 36.dp)
-                .then(
-                    if (isFirst) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
-                    else Modifier.zunoGlassElevated(CircleShape),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = initial,
-                style = ZunoType.LabelMedium,
-                color = if (isFirst) ZunoColors.TextOnInverse else ZunoColors.TextPrimary,
+        if (imageUrl != null) {
+            ZunoAvatar(
+                initial = initial,
+                imageUrl = imageUrl,
+                size = if (isFirst) 42.dp else 36.dp,
+                textStyle = ZunoType.LabelMedium,
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(if (isFirst) 42.dp else 36.dp)
+                    .then(
+                        if (isFirst) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
+                        else Modifier.zunoGlassElevated(CircleShape),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = initial,
+                    style = ZunoType.LabelMedium,
+                    color = if (isFirst) ZunoColors.TextOnInverse else ZunoColors.TextPrimary,
+                )
+            }
         }
         Text(label, style = ZunoType.FootnoteStrong, color = ZunoColors.TextPrimary)
         Text(xp, style = ZunoType.Micro, color = ZunoColors.TextTertiary)

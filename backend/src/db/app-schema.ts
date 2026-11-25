@@ -14,41 +14,45 @@ export type RecommendedTopic = {
  * Learning preferences. One row per user, created lazily on first read. `level` and `accent` are the
  * current target language's values (denormalised from user_language_progress for the tutor).
  */
-export const userProfile = pgTable("user_profile", {
-  userId: text("user_id")
-    .primaryKey()
-    .references(() => user.id, { onDelete: "cascade" }),
-  targetLanguage: text("target_language").default("es").notNull(),
-  nativeLanguage: text("native_language").default("en").notNull(),
-  level: text("level").default("B1").notNull(),
-  accent: text("accent"),
-  // Preferences & learning goals (Settings · Preferences / Learning)
-  tutorId: text("tutor_id").default("sofia").notNull(),
-  tutorVoice: text("tutor_voice").default("warm").notNull(),
-  teachingStyle: text("teaching_style").default("balanced").notNull(),
-  strictMode: boolean("strict_mode").default(false).notNull(),
-  handsFree: boolean("hands_free").default(true).notNull(),
-  suggestReplies: boolean("suggest_replies").default(true).notNull(),
-  showTranslations: boolean("show_translations").default(true).notNull(),
-  teachInTarget: boolean("teach_in_target").default(false).notNull(),
-  dailyGoalMin: integer("daily_goal_min").default(15).notNull(),
-  focus: text("focus").default("conversation").notNull(),
-  interests: jsonb("interests").$type<string[]>().default([]).notNull(),
-  goalNote: text("goal_note"),
-  onboardingCompletedAt: timestamp("onboarding_completed_at"),
-  recommendedTopics: jsonb("recommended_topics").$type<RecommendedTopic[]>(),
-  openToSpeak: boolean("open_to_speak").default(true).notNull(),
-  allowCallInvites: boolean("allow_call_invites").default(true).notNull(),
-  whoCanMessage: text("who_can_message", { enum: ["partners", "everyone", "nobody"] }).default("partners").notNull(),
-  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
-  plan: text("plan", { enum: ["free", "pro"] }).default("free").notNull(),
-  planExpiresAt: timestamp("plan_expires_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-});
+export const userProfile = pgTable(
+  "user_profile",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    targetLanguage: text("target_language").default("es").notNull(),
+    nativeLanguage: text("native_language").default("en").notNull(),
+    level: text("level").default("B1").notNull(),
+    accent: text("accent"),
+    // Preferences & learning goals (Settings · Preferences / Learning)
+    tutorId: text("tutor_id").default("sofia").notNull(),
+    tutorVoice: text("tutor_voice").default("warm").notNull(),
+    teachingStyle: text("teaching_style").default("balanced").notNull(),
+    strictMode: boolean("strict_mode").default(false).notNull(),
+    handsFree: boolean("hands_free").default(true).notNull(),
+    suggestReplies: boolean("suggest_replies").default(true).notNull(),
+    showTranslations: boolean("show_translations").default(true).notNull(),
+    teachInTarget: boolean("teach_in_target").default(false).notNull(),
+    dailyGoalMin: integer("daily_goal_min").default(15).notNull(),
+    focus: text("focus").default("conversation").notNull(),
+    interests: jsonb("interests").$type<string[]>().default([]).notNull(),
+    goalNote: text("goal_note"),
+    onboardingCompletedAt: timestamp("onboarding_completed_at"),
+    recommendedTopics: jsonb("recommended_topics").$type<RecommendedTopic[]>(),
+    openToSpeak: boolean("open_to_speak").default(true).notNull(),
+    allowCallInvites: boolean("allow_call_invites").default(true).notNull(),
+    whoCanMessage: text("who_can_message", { enum: ["partners", "everyone", "nobody"] }).default("partners").notNull(),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+    plan: text("plan", { enum: ["free", "pro"] }).default("free").notNull(),
+    planExpiresAt: timestamp("plan_expires_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("user_profile_presence_idx").on(table.targetLanguage, table.openToSpeak, table.lastSeenAt)],
+);
 
 /** Level and accent per language the learner has studied, so switching back restores them. */
 export const userLanguageProgress = pgTable(
@@ -262,6 +266,8 @@ export const conversation = pgTable(
     titleEdited: boolean("title_edited").default(false).notNull(),
     /** A "Find my level" Free Talk: the tutor assesses the learner's CEFR level. */
     levelCheck: boolean("level_check").default(false).notNull(),
+    unreadCount: integer("unread_count").default(0).notNull(),
+    lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -739,15 +745,42 @@ export const vocabPhrase = pgTable(
   ],
 );
 
+// ── 13 · Daily Activity Ledger (Streaks, Progress, Weekly League) ────────────
+
+export const userDailyActivity = pgTable(
+  "user_daily_activity",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Learner's local calendar date YYYY-MM-DD. */
+    localDate: date("local_date", { mode: "string" }).notNull(),
+    language: text("language").notNull(),
+    spokenSec: integer("spoken_sec").default(0).notNull(),
+    messagesCount: integer("messages_count").default(0).notNull(),
+    lessonsCompleted: integer("lessons_completed").default(0).notNull(),
+    vocabReviewed: integer("vocab_reviewed").default(0).notNull(),
+    xp: integer("xp").default(0).notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.localDate, table.language] }),
+    index("user_daily_activity_user_date_idx").on(table.userId, table.localDate),
+    index("user_daily_activity_lang_date_xp_idx").on(table.language, table.localDate, table.xp),
+  ],
+);
+
 // ── 15 · Live Rooms ──────────────────────────────────────────────────────────
 
 export const liveRoom = pgTable(
   "live_room",
   {
     id: text("id").primaryKey(),
-    hostUserId: text("host_user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    /** Null for Zuno-hosted curated system rooms. */
+    hostUserId: text("host_user_id").references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description").default("").notNull(),
     language: text("language").notNull(),
@@ -759,7 +792,10 @@ export const liveRoom = pgTable(
     status: text("status", { enum: ["lobby", "live", "ended"] }).default("lobby").notNull(),
     livekitRoom: text("livekit_room").notNull().unique(),
     discussionPrompts: jsonb("discussion_prompts").$type<string[]>().default([]).notNull(),
+    starterPhrases: jsonb("starter_phrases").$type<string[]>().default([]).notNull(),
     currentRound: integer("current_round").default(1).notNull(),
+    startedAt: timestamp("started_at"),
+    endedAt: timestamp("ended_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -784,6 +820,7 @@ export const liveRoomMember = pgTable(
     role: text("role", { enum: ["host", "member"] }).default("member").notNull(),
     ready: boolean("ready").default(true).notNull(),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
   },
   (table) => [primaryKey({ columns: [table.roomId, table.userId] })],
 );

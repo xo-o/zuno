@@ -124,6 +124,10 @@ registerJob(CHAT_REMINDER_JOB, async (payload) => {
     data: { conversationId: reminder.conversationId, reminderId: reminder.id },
   });
   await db.update(chatReminder).set({ status: "sent" }).where(eq(chatReminder.id, reminder.id));
+  await db
+    .update(conversation)
+    .set({ unreadCount: sql`${conversation.unreadCount} + 1` })
+    .where(eq(conversation.id, reminder.conversationId));
 });
 
 // ── Progress milestones ───────────────────────────────────────────────────────

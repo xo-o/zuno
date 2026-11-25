@@ -21,6 +21,7 @@ import com.zuno.ai.data.DiscoverTopicsResult
 import com.zuno.ai.data.DraftStore
 import com.zuno.ai.data.JoinLiveRoomResult
 import com.zuno.ai.data.JoinPeerCallResult
+import com.zuno.ai.data.LeagueOverview
 import com.zuno.ai.data.LiveRoom
 import com.zuno.ai.data.LiveRoomsBrowse
 import com.zuno.ai.data.MaterialPart
@@ -28,6 +29,7 @@ import com.zuno.ai.data.PeerConversationThread
 import com.zuno.ai.data.PeerMessage
 import com.zuno.ai.data.PreparedFile
 import com.zuno.ai.data.PrivacySettings
+import com.zuno.ai.data.ProgressOverview
 import com.zuno.ai.data.RoleplayDraft
 import com.zuno.ai.data.RoleplaySessionTicket
 import com.zuno.ai.data.RoleplayShareResult
@@ -239,6 +241,12 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _activeLiveRoom = MutableStateFlow<LiveRoom?>(null)
     val activeLiveRoom: StateFlow<LiveRoom?> = _activeLiveRoom.asStateFlow()
+
+    private val _progressOverview = MutableStateFlow(Loadable<ProgressOverview>())
+    val progressOverview: StateFlow<Loadable<ProgressOverview>> = _progressOverview.asStateFlow()
+
+    private val _leagueOverview = MutableStateFlow(Loadable<LeagueOverview>())
+    val leagueOverview: StateFlow<Loadable<LeagueOverview>> = _leagueOverview.asStateFlow()
 
     private val _privacySettings = MutableStateFlow<PrivacySettings?>(null)
     val privacySettings: StateFlow<PrivacySettings?> = _privacySettings.asStateFlow()
@@ -553,6 +561,8 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _vocabLibrary.value = Loadable()
         _liveRooms.value = Loadable()
         _activeLiveRoom.value = null
+        _progressOverview.value = Loadable()
+        _leagueOverview.value = Loadable()
         _privacySettings.value = null
         _typingHint.value = null
         uploadJobs.values.forEach { it.cancel() }
@@ -943,6 +953,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                 _lessonEvaluations.update { it + (lessonId to res.evaluation) }
                 res.topic?.let(::cacheTopic)
                 refreshRecent()
+                refreshProfileStats()
                 onSaved(res.evaluation)
             } catch (e: ApiException) {
                 handleAuth(e)
@@ -1312,7 +1323,15 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         send(conversationId, text)
     }
 
-    fun loadConversation(id: String) = launchSafely { cacheThread(api.conversation(id)) }
+    fun loadConversation(id: String) = launchSafely {
+        cacheThread(api.conversation(id))
+        _recent.update { list -> list.map { if (it.conversationId == id || it.id == id) it.copy(unread = false) else it } }
+        _chatsOverview.update { state ->
+            val current = state.items ?: return@update state
+            val updated = current.conversations.map { if (it.conversationId == id) it.copy(unread = false) else it }
+            state.copy(items = current.copy(conversations = updated, unreadCount = updated.count { it.unread }))
+        }
+    }
 
     fun openConversationThread(id: String, onLoaded: (ConversationThread) -> Unit) = runBusy {
         val thread = api.conversation(id)
@@ -1446,6 +1465,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                     launchSafely(silent = true) { setLoadedProfile(api.profile()) }
                 }
                 refreshRecent()
+                refreshProfileStats()
             } catch (e: ApiException) {
                 handleAuth(e)
                 updateChat(conversationId) { it.copy(pendingText = null, pendingAttachments = emptyList(), error = e.message) }
@@ -1663,6 +1683,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             updateChat(conversationId) { it.copy(messages = it.messages + saved) }
             refreshRecent()
             loadChatsOverview(silent = true)
+            refreshProfileStats()
         }
     }
 
@@ -1673,6 +1694,58 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             val saved = api.saveCallSummary(conversationId, durationSec, isVideo, tipsCount)
             updateChat(conversationId) { it.copy(messages = it.messages + saved) }
             loadChatsOverview(silent = true)
+            refreshProfileStats()
+        }
+    }
+
+    // ── Progress, Presence & Community League ───────────────────────────────
+
+    fun refreshProfileStats() = launchSafely(silent = true) {
+        if (_profile.value != null) {
+            setLoadedProfile(api.profile())
+        }
+    }
+
+    fun heartbeatPresence(status: String = "online") = launchSafely(silent = true) {
+        if (_profile.value != null) {
+            api.heartbeatPresence(status)
+        }
+    }
+
+    fun loadProgress(silent: Boolean = false) {
+        if (!silent) _progressOverview.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _progressOverview.value = Loadable(api.progress())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!silent) _progressOverview.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun loadCommunityLeague(silent: Boolean = false) {
+        if (!silent) _leagueOverview.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                _leagueOverview.value = Loadable(api.communityLeague())
+            } catch (e: ApiException) {
+                handleAuth(e)
+                if (!silent) _leagueOverview.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun markPeerChatRead(conversationId: String) {
+        _chatsOverview.update { state ->
+            val current = state.items ?: return@update state
+            val updatedConvs = current.conversations.map { item ->
+                if (item.peerConversationId == conversationId) item.copy(unread = false) else item
+            }
+            state.copy(items = current.copy(conversations = updatedConvs, unreadCount = updatedConvs.count { it.unread }))
+        }
+        launchSafely(silent = true) {
+            api.markPeerChatRead(conversationId)
         }
     }
 
@@ -1875,6 +1948,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                 api.endPeerCall(callId, durationSec, isVideo)
                 loadPeerChat(conversationId, silent = true)
                 loadChatsOverview(silent = true)
+                refreshProfileStats()
                 onDone()
             } catch (e: ApiException) {
                 handleAuth(e)
@@ -2038,6 +2112,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val updated = api.reviewVocabPhrase(id, passed)
                 loadVocabulary(silent = true)
+                refreshProfileStats()
                 onReviewed(updated)
             } catch (e: ApiException) {
                 handleAuth(e)
@@ -2121,17 +2196,23 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         onDone(updated)
     }
 
-    fun leaveLiveRoom(id: String, onDone: () -> Unit = {}) = launchSafely(silent = true) {
-        api.leaveLiveRoom(id)
+    fun pingLiveRoom(id: String) = launchSafely(silent = true) {
+        api.pingLiveRoom(id)
+    }
+
+    fun leaveLiveRoom(id: String, durationSec: Int = 0, onDone: () -> Unit = {}) = launchSafely(silent = true) {
+        api.leaveLiveRoom(id, durationSec)
         _activeLiveRoom.value = null
         loadLiveRooms(silent = true)
+        if (durationSec > 0) refreshProfileStats()
         onDone()
     }
 
-    fun endLiveRoom(id: String, onDone: () -> Unit = {}) = launchSafely(silent = true) {
-        api.endLiveRoom(id)
+    fun endLiveRoom(id: String, durationSec: Int = 0, onDone: () -> Unit = {}) = launchSafely(silent = true) {
+        api.endLiveRoom(id, durationSec)
         _activeLiveRoom.value = null
         loadLiveRooms(silent = true)
+        if (durationSec > 0) refreshProfileStats()
         onDone()
     }
 

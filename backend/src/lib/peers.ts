@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 import { AccessToken } from "livekit-server-sdk";
 import { z } from "zod";
 import {
+  blockedLearner,
   conversation,
   learnerPartner,
   message,
@@ -14,258 +16,16 @@ import {
 } from "../db/app-schema.js";
 import { user } from "../db/auth-schema.js";
 import { db } from "../db/index.js";
-import { generateJson } from "./gemini.js";
+import { getBatchLearnerStats, recordPracticeActivity } from "./activity.js";
+import { resolveUserImageUrl } from "./avatars.js";
 import { quote, t } from "./copy.js";
+import { generateJson } from "./gemini.js";
 import { languageName, type LanguageCode } from "./languages.js";
 import { displayLanguage } from "./notifications.js";
+import { formatActiveLabel, isUserOnline, ONLINE_WINDOW_MS } from "./presence.js";
 import { getProfile, type LearnerProfile } from "./profile.js";
 import { sendToUser } from "./push.js";
-import { elevenLabsVoiceFor, resolveTutor } from "./voices.js";
-
-const SEED_PREFIX = "seed:";
-
-type SeedLearnerSpec = {
-  id: string;
-  name: string;
-  email: string;
-  level: "A2" | "B1" | "B2";
-  nativeLanguage: string;
-  tutorVoice: "warm" | "calm" | "energetic";
-  openToSpeak: boolean;
-  streakDays: number;
-  sessionsCount: number;
-  interests: string[];
-  activeLabel: string;
-  starterPartner: boolean;
-};
-
-const SEED_LEARNERS: SeedLearnerSpec[] = [
-  {
-    id: "seed:lucia",
-    name: "Lucía M.",
-    email: "lucia.seed@heyzuno.app",
-    level: "B1",
-    nativeLanguage: "en",
-    tutorVoice: "warm",
-    openToSpeak: true,
-    streakDays: 18,
-    sessionsCount: 34,
-    interests: ["Travel", "Café", "Culture"],
-    activeLabel: "Open to speak",
-    starterPartner: false,
-  },
-  {
-    id: "seed:priya",
-    name: "Priya S.",
-    email: "priya.seed@heyzuno.app",
-    level: "B2",
-    nativeLanguage: "en",
-    tutorVoice: "calm",
-    openToSpeak: true,
-    streakDays: 21,
-    sessionsCount: 48,
-    interests: ["Travel", "Food", "Cinema"],
-    activeLabel: "Open to speak",
-    starterPartner: true,
-  },
-  {
-    id: "seed:carlos",
-    name: "Carlos Vega",
-    email: "carlos.seed@heyzuno.app",
-    level: "B2",
-    nativeLanguage: "pt",
-    tutorVoice: "energetic",
-    openToSpeak: true,
-    streakDays: 14,
-    sessionsCount: 42,
-    interests: ["Travel", "Daily life", "Tech"],
-    activeLabel: "Open to speak",
-    starterPartner: false,
-  },
-  {
-    id: "seed:yuki",
-    name: "Yuki T.",
-    email: "yuki.seed@heyzuno.app",
-    level: "A2",
-    nativeLanguage: "ja",
-    tutorVoice: "calm",
-    openToSpeak: true,
-    streakDays: 9,
-    sessionsCount: 16,
-    interests: ["Daily life", "Music"],
-    activeLabel: "Open to speak",
-    starterPartner: false,
-  },
-  {
-    id: "seed:mateo",
-    name: "Mateo R.",
-    email: "mateo.seed@heyzuno.app",
-    level: "B1",
-    nativeLanguage: "en",
-    tutorVoice: "energetic",
-    openToSpeak: false,
-    streakDays: 11,
-    sessionsCount: 25,
-    interests: ["Work", "Sports"],
-    activeLabel: "Active 2h ago",
-    starterPartner: true,
-  },
-];
-
-const SEED_BY_ID = new Map(SEED_LEARNERS.map((s) => [s.id, s]));
-
-export function isSeedUser(userId: string) {
-  return userId.startsWith(SEED_PREFIX);
-}
-
-let seededOnce = false;
-
-export async function ensureSeededLearners() {
-  if (seededOnce) return;
-  for (const spec of SEED_LEARNERS) {
-    await db
-      .insert(user)
-      .values({
-        id: spec.id,
-        name: spec.name,
-        email: spec.email,
-        emailVerified: true,
-      })
-      .onConflictDoNothing();
-    await db
-      .insert(userProfile)
-      .values({
-        userId: spec.id,
-        targetLanguage: "es",
-        nativeLanguage: spec.nativeLanguage,
-        level: spec.level,
-        tutorVoice: spec.tutorVoice,
-        interests: spec.interests,
-        openToSpeak: spec.openToSpeak,
-        onboardingCompletedAt: new Date(),
-      })
-      .onConflictDoNothing();
-  }
-  seededOnce = true;
-}
-
-const seededUsers = new Set<string>();
-
-/** Seeds realistic starter 1:1 threads & added partners on first visit for a new learner. */
-async function ensureStarterPeerData(userId: string, language: string) {
-  if (seededUsers.has(`${userId}:${language}`)) return;
-  await ensureSeededLearners();
-  const [existingConvs, existingPartners] = await Promise.all([
-    db
-      .select({ id: peerConversation.id })
-      .from(peerConversation)
-      .where(or(eq(peerConversation.userAId, userId), eq(peerConversation.userBId, userId)))
-      .limit(1),
-    db.select({ partnerUserId: learnerPartner.partnerUserId }).from(learnerPartner).where(eq(learnerPartner.userId, userId)).limit(1),
-  ]);
-  if (existingConvs.length > 0 || existingPartners.length > 0) {
-    seededUsers.add(`${userId}:${language}`);
-    return;
-  }
-
-  for (const spec of SEED_LEARNERS.filter((s) => s.starterPartner)) {
-    await db.insert(learnerPartner).values({ userId, partnerUserId: spec.id }).onConflictDoNothing();
-  }
-
-  const now = Date.now();
-  const luciaConvId = randomUUID();
-  const priyaConvId = randomUUID();
-  const mateoConvId = randomUUID();
-
-  const luciaGreeting =
-    language === "es"
-      ? "¡Hola! ¿Tienes 5 minutos para practicar antes de la clase?"
-      : `Hi! Do you have 5 minutes to practice ${languageName(language as LanguageCode)} together?`;
-
-  await db.insert(peerConversation).values([
-    {
-      id: luciaConvId,
-      userAId: userId,
-      userBId: "seed:lucia",
-      language,
-      lastMessageText: luciaGreeting,
-      lastMessageAt: new Date(now - 14 * 60_000),
-      unreadCountA: 1,
-      unreadCountB: 0,
-    },
-    {
-      id: priyaConvId,
-      userAId: userId,
-      userBId: "seed:priya",
-      language,
-      lastMessageText: "Voice practice · 8 min",
-      lastMessageAt: new Date(now - 24 * 60 * 60_000),
-      unreadCountA: 0,
-      unreadCountB: 0,
-    },
-    {
-      id: mateoConvId,
-      userAId: userId,
-      userBId: "seed:mateo",
-      language,
-      lastMessageText: language === "es" ? "Nos vemos el jueves en la sala" : "See you Thursday in the practice room!",
-      lastMessageAt: new Date(now - 48 * 60 * 60_000),
-      unreadCountA: 0,
-      unreadCountB: 0,
-    },
-  ]);
-
-  const luciaCallId = randomUUID();
-  await db.insert(peerCallRoom).values({
-    id: luciaCallId,
-    peerConversationId: luciaConvId,
-    hostUserId: "seed:lucia",
-    guestUserId: userId,
-    livekitRoom: `peer-${luciaCallId.slice(0, 12)}`,
-    status: "waiting",
-    cameraEnabled: false,
-  });
-
-  await db.insert(peerMessage).values([
-    {
-      id: randomUUID(),
-      peerConversationId: luciaConvId,
-      senderId: "seed:lucia",
-      kind: "text",
-      text: luciaGreeting,
-      createdAt: new Date(now - 16 * 60_000),
-    },
-    {
-      id: randomUUID(),
-      peerConversationId: luciaConvId,
-      senderId: "seed:lucia",
-      kind: "call_invite",
-      text: "Lucía M. is inviting you to talk",
-      callRoomId: luciaCallId,
-      metadata: { cameraEnabled: false, status: "waiting" },
-      createdAt: new Date(now - 14 * 60_000),
-    },
-    {
-      id: randomUUID(),
-      peerConversationId: priyaConvId,
-      senderId: "seed:priya",
-      kind: "call_summary",
-      text: "Voice practice · 8 min",
-      metadata: { durationSec: 480, isVideo: false },
-      createdAt: new Date(now - 24 * 60 * 60_000),
-    },
-    {
-      id: randomUUID(),
-      peerConversationId: mateoConvId,
-      senderId: "seed:mateo",
-      kind: "text",
-      text: language === "es" ? "Nos vemos el jueves en la sala" : "See you Thursday in the practice room!",
-      createdAt: new Date(now - 48 * 60 * 60_000),
-    },
-  ]);
-
-  seededUsers.add(`${userId}:${language}`);
-}
+import { resolveTutor } from "./voices.js";
 
 export function shortName(fullName: string) {
   const parts = fullName.trim().split(/\s+/);
@@ -273,7 +33,23 @@ export function shortName(fullName: string) {
   return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
 }
 
-function serializeLearner(
+async function getBlockedUserIds(userId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({
+      userId: blockedLearner.userId,
+      blockedUserId: blockedLearner.blockedUserId,
+    })
+    .from(blockedLearner)
+    .where(or(eq(blockedLearner.userId, userId), eq(blockedLearner.blockedUserId, userId)));
+  const blocked = new Set<string>();
+  for (const r of rows) {
+    if (r.userId === userId) blocked.add(r.blockedUserId);
+    if (r.blockedUserId === userId) blocked.add(r.userId);
+  }
+  return blocked;
+}
+
+async function serializeLearner(
   row: {
     id: string;
     name: string;
@@ -286,40 +62,33 @@ function serializeLearner(
   },
   targetLanguage: string,
   isPartner: boolean,
+  stats?: { streakDays: number; sessionsCount: number },
 ) {
-  const seed = SEED_BY_ID.get(row.id);
-  const diffMin = Math.max(0, Math.round((Date.now() - row.lastSeenAt.getTime()) / 60_000));
-  const activeLabel = seed
-    ? seed.activeLabel
-    : row.openToSpeak
-      ? "Open to speak"
-      : diffMin < 5
-        ? "Online"
-        : diffMin < 60
-          ? `Active ${diffMin}m ago`
-          : `Active ${Math.max(1, Math.round(diffMin / 60))}h ago`;
+  const online = isUserOnline(row.lastSeenAt);
+  const activeLabel = formatActiveLabel(row.lastSeenAt, row.openToSpeak);
+  const image = await resolveUserImageUrl(row.image);
   return {
     id: row.id,
     name: row.name,
     shortName: row.name.split(" ")[0] || row.name,
     initial: (row.name.trim()[0] || "L").toUpperCase(),
-    image: row.image ?? null,
+    image,
     language: targetLanguage,
     languageName: languageName(targetLanguage as LanguageCode),
-    level: seed?.level ?? row.level,
-    nativeLanguage: languageName((seed?.nativeLanguage ?? row.nativeLanguage) as any) || "English",
-    streakDays: seed?.streakDays ?? 7,
-    sessionsCount: seed?.sessionsCount ?? 12,
-    interests: seed?.interests ?? (row.interests.length > 0 ? row.interests : ["Conversation", "Travel"]),
+    level: row.level,
+    nativeLanguage: languageName(row.nativeLanguage as any) || "English",
+    streakDays: stats?.streakDays ?? 0,
+    sessionsCount: stats?.sessionsCount ?? 0,
+    interests: row.interests,
     openToSpeak: row.openToSpeak,
+    online,
     isPartner,
     activeLabel,
-    isSeeded: Boolean(seed),
+    isSeeded: false,
   };
 }
 
 export async function loadLearner(partnerId: string, viewerLanguage: string, isPartner: boolean) {
-  await ensureSeededLearners();
   const [row] = await db
     .select({
       id: user.id,
@@ -336,6 +105,7 @@ export async function loadLearner(partnerId: string, viewerLanguage: string, isP
     .where(eq(user.id, partnerId));
 
   if (!row) return null;
+  const statsMap = await getBatchLearnerStats([row.id]);
   return serializeLearner(
     {
       id: row.id,
@@ -344,31 +114,77 @@ export async function loadLearner(partnerId: string, viewerLanguage: string, isP
       level: row.level ?? "B1",
       nativeLanguage: row.nativeLanguage ?? "en",
       interests: row.interests ?? [],
-      openToSpeak: row.openToSpeak ?? true,
-      lastSeenAt: row.lastSeenAt ?? new Date(),
+      openToSpeak: row.openToSpeak ?? false,
+      lastSeenAt: row.lastSeenAt ?? new Date(0),
     },
     viewerLanguage,
     isPartner,
+    statsMap.get(row.id),
   );
+}
+
+async function assertNotBlocked(userId: string, otherUserId: string) {
+  const blocked = await getBlockedUserIds(userId);
+  if (blocked.has(otherUserId)) {
+    throw new HTTPException(403, { message: "This learner is unavailable." });
+  }
+}
+
+async function assertCanMessage(senderId: string, recipientId: string, hasExistingThread = false) {
+  await assertNotBlocked(senderId, recipientId);
+  const [recipientProfile] = await db
+    .select({
+      whoCanMessage: userProfile.whoCanMessage,
+      openToSpeak: userProfile.openToSpeak,
+      lastSeenAt: userProfile.lastSeenAt,
+    })
+    .from(userProfile)
+    .where(eq(userProfile.userId, recipientId));
+
+  if (!recipientProfile) throw new HTTPException(404, { message: "Learner not found" });
+  if (recipientProfile.whoCanMessage === "nobody") {
+    throw new HTTPException(403, { message: "This learner isn't accepting new messages right now." });
+  }
+  if (recipientProfile.whoCanMessage === "partners" && !hasExistingThread) {
+    const isCurrentlyOpen = recipientProfile.openToSpeak && isUserOnline(recipientProfile.lastSeenAt);
+    if (!isCurrentlyOpen) {
+      const [partnerLink] = await db
+        .select({ userId: learnerPartner.userId })
+        .from(learnerPartner)
+        .where(
+          or(
+            and(eq(learnerPartner.userId, recipientId), eq(learnerPartner.partnerUserId, senderId)),
+            and(eq(learnerPartner.userId, senderId), eq(learnerPartner.partnerUserId, recipientId)),
+          ),
+        )
+        .limit(1);
+      if (!partnerLink) {
+        throw new HTTPException(403, { message: "Only partners can message this learner while they're offline." });
+      }
+    }
+  }
 }
 
 export async function getChatsOverview(userId: string) {
   const profile = await getProfile(userId);
-  await db.update(userProfile).set({ lastSeenAt: new Date() }).where(eq(userProfile.userId, userId));
-  await ensureStarterPeerData(userId, profile.targetLanguage);
+  const now = new Date();
+  const onlineCutoff = new Date(now.getTime() - ONLINE_WINDOW_MS);
 
-  const [viewerRow] = await db
-    .select({ openToSpeak: userProfile.openToSpeak })
-    .from(userProfile)
-    .where(eq(userProfile.userId, userId));
+  await db.update(userProfile).set({ lastSeenAt: now }).where(eq(userProfile.userId, userId));
 
-  const partnerRows = await db
-    .select({ partnerUserId: learnerPartner.partnerUserId })
-    .from(learnerPartner)
-    .where(eq(learnerPartner.userId, userId));
-  const partnerIds = new Set(partnerRows.map((r) => r.partnerUserId));
+  const [[viewerRow], partnerRows, blockedIds] = await Promise.all([
+    db.select({ openToSpeak: userProfile.openToSpeak }).from(userProfile).where(eq(userProfile.userId, userId)),
+    db
+      .select({ partnerUserId: learnerPartner.partnerUserId })
+      .from(learnerPartner)
+      .where(eq(learnerPartner.userId, userId)),
+    getBlockedUserIds(userId),
+  ]);
 
-  // Learners open to speak: real users learning this language (openToSpeak=true) + seeded learners.
+  const partnerIds = new Set(partnerRows.map((r) => r.partnerUserId).filter((id) => !blockedIds.has(id)));
+  const partnerIdList = [...partnerIds];
+
+  // Real connected learners open to speak right now (within ONLINE_WINDOW_MS) + viewer's saved partners.
   const learnerRows = await db
     .select({
       id: user.id,
@@ -386,22 +202,26 @@ export async function getChatsOverview(userId: string) {
     .where(
       and(
         ne(user.id, userId),
+        sql`${user.id} not like 'seed:%'`,
         or(
-          and(eq(userProfile.targetLanguage, profile.targetLanguage), eq(userProfile.openToSpeak, true)),
-          sql`${user.id} like 'seed:%'`,
-          partnerRows.length > 0
-            ? sql`${user.id} in (${sql.join(
-                partnerRows.map((p) => sql`${p.partnerUserId}`),
-                sql`, `,
-              )})`
-            : sql`false`,
+          and(
+            eq(userProfile.targetLanguage, profile.targetLanguage),
+            eq(userProfile.openToSpeak, true),
+            isNotNull(userProfile.onboardingCompletedAt),
+            gte(userProfile.lastSeenAt, onlineCutoff),
+          ),
+          partnerIdList.length > 0 ? inArray(user.id, partnerIdList) : sql`false`,
         ),
       ),
-    );
+    )
+    .orderBy(desc(userProfile.lastSeenAt))
+    .limit(60);
 
-  const learnersMap = new Map(
-    learnerRows.map((row) => [
-      row.id,
+  const visibleRows = learnerRows.filter((r) => !blockedIds.has(r.id));
+  const statsMap = await getBatchLearnerStats(visibleRows.map((r) => r.id), now);
+
+  const serializedLearners = await Promise.all(
+    visibleRows.map((row) =>
       serializeLearner(
         {
           id: row.id,
@@ -415,44 +235,44 @@ export async function getChatsOverview(userId: string) {
         },
         profile.targetLanguage,
         partnerIds.has(row.id),
+        statsMap.get(row.id),
       ),
-    ]),
+    ),
   );
 
-  const openSpeakers = Array.from(learnersMap.values())
-    .filter((l) => l.openToSpeak)
-    .sort((a, b) => Number(a.isSeeded) - Number(b.isSeeded));
+  const learnersMap = new Map(serializedLearners.map((l) => [l.id, l]));
 
-  const partners = Array.from(learnersMap.values()).filter((l) => l.isPartner);
+  const openSpeakers = serializedLearners.filter((l) => l.openToSpeak && l.online);
+  const partners = serializedLearners.filter((l) => l.isPartner);
 
   // AI Tutor conversations for current targetLanguage
-  const aiConvs = await db.query.conversation.findMany({
-    where: and(eq(conversation.userId, userId), eq(conversation.language, profile.targetLanguage)),
-    orderBy: [desc(conversation.updatedAt)],
-    limit: 30,
-    with: {
-      messages: {
-        orderBy: [desc(message.createdAt)],
-        limit: 1,
+  const [aiConvs, peerConvs] = await Promise.all([
+    db.query.conversation.findMany({
+      where: and(eq(conversation.userId, userId), eq(conversation.language, profile.targetLanguage)),
+      orderBy: [desc(conversation.updatedAt)],
+      limit: 30,
+      with: {
+        messages: {
+          orderBy: [desc(message.createdAt)],
+          limit: 1,
+        },
       },
-    },
-  });
-
-  // Peer conversations for this user
-  const peerConvs = await db
-    .select()
-    .from(peerConversation)
-    .where(
-      and(
-        eq(peerConversation.language, profile.targetLanguage),
-        or(
-          and(eq(peerConversation.userAId, userId), eq(peerConversation.deletedByUserA, false)),
-          and(eq(peerConversation.userBId, userId), eq(peerConversation.deletedByUserB, false)),
+    }),
+    db
+      .select()
+      .from(peerConversation)
+      .where(
+        and(
+          eq(peerConversation.language, profile.targetLanguage),
+          or(
+            and(eq(peerConversation.userAId, userId), eq(peerConversation.deletedByUserA, false)),
+            and(eq(peerConversation.userBId, userId), eq(peerConversation.deletedByUserB, false)),
+          ),
         ),
-      ),
-    )
-    .orderBy(desc(peerConversation.lastMessageAt))
-    .limit(30);
+      )
+      .orderBy(desc(peerConversation.lastMessageAt))
+      .limit(30),
+  ]);
 
   const activeTutor = resolveTutor(profile.tutorId, profile.tutorVoice);
   const aiItems = aiConvs
@@ -476,20 +296,27 @@ export async function getChatsOverview(userId: string) {
         isVoice,
         openToSpeak: false,
         snippet,
-        unread: false,
+        unread: row.unreadCount > 0,
         pinned: row.pinnedAt !== null,
         updatedAt: (lastMsg?.createdAt ?? row.updatedAt).toISOString(),
-        avatarInitial: "S",
+        avatarInitial: activeTutor.name.slice(0, 1).toUpperCase() || "Z",
         avatarUrl: null as string | null,
       };
     });
 
+  const visiblePeerConvs = peerConvs.filter((row) => {
+    const partnerId = row.userAId === userId ? row.userBId : row.userAId;
+    return !blockedIds.has(partnerId);
+  });
+
   const peerItems = await Promise.all(
-    peerConvs.map(async (row) => {
+    visiblePeerConvs.map(async (row) => {
       const isA = row.userAId === userId;
       const partnerId = isA ? row.userBId : row.userAId;
       const partner = learnersMap.get(partnerId) ?? (await loadLearner(partnerId, profile.targetLanguage, partnerIds.has(partnerId)));
-      const unread = (isA ? row.unreadCountA : row.unreadCountB) > 0;
+      const muted = isA ? row.mutedByUserA : row.mutedByUserB;
+      const unread = !muted && (isA ? row.unreadCountA : row.unreadCountB) > 0;
+      const partnerOnlineAndOpen = Boolean(partner?.online && partner?.openToSpeak);
       return {
         id: `peer:${row.id}`,
         kind: "peer" as const,
@@ -497,9 +324,9 @@ export async function getChatsOverview(userId: string) {
         peerConversationId: row.id,
         partnerId,
         title: partner?.name ?? "Learner",
-        badge: partner?.openToSpeak ? "Open to speak" : null,
+        badge: partnerOnlineAndOpen ? "Open to speak" : null,
         isVoice: false,
-        openToSpeak: partner?.openToSpeak ?? false,
+        openToSpeak: partnerOnlineAndOpen,
         snippet: row.lastMessageText || "Tap to start chatting",
         unread,
         pinned: false,
@@ -519,6 +346,8 @@ export async function getChatsOverview(userId: string) {
     language: profile.targetLanguage,
     languageName: languageName(profile.targetLanguage),
     level: profile.level,
+    unreadCount: unified.filter((c) => c.unread).length,
+    onlineSpeakersCount: openSpeakers.length,
     openSpeakers,
     partners,
     conversations: unified,
@@ -536,8 +365,10 @@ export async function setOpenToSpeak(userId: string, openToSpeak: boolean) {
 
 export async function setPartner(userId: string, partnerId: string, add: boolean) {
   if (userId === partnerId) return;
-  await ensureSeededLearners();
   if (add) {
+    await assertNotBlocked(userId, partnerId);
+    const [exists] = await db.select({ id: user.id }).from(user).where(eq(user.id, partnerId)).limit(1);
+    if (!exists) throw new HTTPException(404, { message: "Learner not found" });
     await db.insert(learnerPartner).values({ userId, partnerUserId: partnerId }).onConflictDoNothing();
   } else {
     await db
@@ -548,7 +379,7 @@ export async function setPartner(userId: string, partnerId: string, add: boolean
 
 export async function findOrCreatePeerConversation(userId: string, partnerId: string) {
   const profile = await getProfile(userId);
-  await ensureSeededLearners();
+  await assertNotBlocked(userId, partnerId);
   const [userAId, userBId] = userId < partnerId ? [userId, partnerId] : [partnerId, userId];
 
   const existing = await db.query.peerConversation.findFirst({
@@ -560,7 +391,6 @@ export async function findOrCreatePeerConversation(userId: string, partnerId: st
   });
 
   if (existing) {
-    // Un-delete for caller if previously deleted
     if ((existing.userAId === userId && existing.deletedByUserA) || (existing.userBId === userId && existing.deletedByUserB)) {
       await db
         .update(peerConversation)
@@ -569,6 +399,8 @@ export async function findOrCreatePeerConversation(userId: string, partnerId: st
     }
     return existing;
   }
+
+  await assertCanMessage(userId, partnerId, false);
 
   const [created] = await db
     .insert(peerConversation)
@@ -583,6 +415,24 @@ export async function findOrCreatePeerConversation(userId: string, partnerId: st
     .returning();
 
   return created;
+}
+
+export async function markPeerConversationRead(userId: string, peerConversationId: string): Promise<boolean> {
+  const conv = await db.query.peerConversation.findFirst({
+    where: and(
+      eq(peerConversation.id, peerConversationId),
+      or(eq(peerConversation.userAId, userId), eq(peerConversation.userBId, userId)),
+    ),
+  });
+  if (!conv) return false;
+  const isA = conv.userAId === userId;
+  if ((isA && conv.unreadCountA > 0) || (!isA && conv.unreadCountB > 0)) {
+    await db
+      .update(peerConversation)
+      .set(isA ? { unreadCountA: 0 } : { unreadCountB: 0 })
+      .where(eq(peerConversation.id, conv.id));
+  }
+  return true;
 }
 
 export async function getPeerConversationDetail(userId: string, peerConversationId: string) {
@@ -674,84 +524,6 @@ function isRecipientMuted(conv: typeof peerConversation.$inferSelect, recipientI
   return conv.userAId === recipientId ? conv.mutedByUserA : conv.mutedByUserB;
 }
 
-const peerReplySchema = z.object({
-  reply: z.string().min(1).max(320),
-});
-
-async function triggerSeededReply(
-  conv: typeof peerConversation.$inferSelect,
-  partnerSpec: SeedLearnerSpec,
-  learnerMessage: string,
-) {
-  try {
-    const recent = await db
-      .select()
-      .from(peerMessage)
-      .where(and(eq(peerMessage.peerConversationId, conv.id), eq(peerMessage.kind, "text")))
-      .orderBy(desc(peerMessage.createdAt))
-      .limit(8);
-    const historyLines = recent
-      .reverse()
-      .map((m) => `${m.senderId === partnerSpec.id ? partnerSpec.name : "Partner"}: ${m.text}`)
-      .join("\n");
-
-    const targetLang = languageName(conv.language as LanguageCode);
-    let replyText = "";
-    try {
-      const res = await generateJson({
-        system: [
-          `You are ${partnerSpec.name}, a friendly language learner practicing ${targetLang} at CEFR ${partnerSpec.level}.`,
-          `Your native language is ${partnerSpec.nativeLanguage} and your interests are ${partnerSpec.interests.join(", ")}.`,
-          `Reply naturally to your practice partner's message in ${targetLang} (1-2 short, warm conversational sentences). Do not act like a teacher or AI; talk like a peer learner.`,
-        ].join(" "),
-        contents: `Recent chat:\n${historyLines}\n\nLatest message from your partner: "${learnerMessage}"`,
-        schema: peerReplySchema,
-        temperature: 0.8,
-        timeoutMs: 12_000,
-      });
-      replyText = res.reply.trim();
-    } catch {
-      replyText =
-        conv.language === "es"
-          ? "¡Qué bien! Yo también estoy practicando hoy. ¿Hablamos un momento por voz?"
-          : "Sounds great! I am practicing right now too. Want to hop on a quick voice call?";
-    }
-
-    const isPartnerA = conv.userAId === partnerSpec.id;
-    const recipientId = isPartnerA ? conv.userBId : conv.userAId;
-    const replyMsgId = randomUUID();
-    await db.insert(peerMessage).values({
-      id: replyMsgId,
-      peerConversationId: conv.id,
-      senderId: partnerSpec.id,
-      kind: "text",
-      text: replyText,
-    });
-    const [updatedConv] = await db
-      .update(peerConversation)
-      .set({
-        lastMessageText: replyText,
-        lastMessageAt: new Date(),
-        ...(isPartnerA
-          ? { unreadCountB: sql`${peerConversation.unreadCountB} + 1` }
-          : { unreadCountA: sql`${peerConversation.unreadCountA} + 1` }),
-      })
-      .where(eq(peerConversation.id, conv.id))
-      .returning();
-
-    if (!isSeedUser(recipientId) && !(updatedConv && isRecipientMuted(updatedConv, recipientId))) {
-      sendToUser(recipientId, {
-        type: "peer_message",
-        title: partnerSpec.name,
-        body: quote(replyText, 120),
-        data: { peerConversationId: conv.id, partnerId: partnerSpec.id, messageId: replyMsgId },
-      }).catch(() => {});
-    }
-  } catch (err) {
-    console.warn("Seeded learner reply failed:", err);
-  }
-}
-
 export async function sendPeerMessage(userId: string, peerConversationId: string, text: string) {
   const conv = await db.query.peerConversation.findFirst({
     where: and(
@@ -763,6 +535,7 @@ export async function sendPeerMessage(userId: string, peerConversationId: string
 
   const isA = conv.userAId === userId;
   const partnerId = isA ? conv.userBId : conv.userAId;
+  await assertCanMessage(userId, partnerId, true);
 
   const [saved] = await db
     .insert(peerMessage)
@@ -788,10 +561,9 @@ export async function sendPeerMessage(userId: string, peerConversationId: string
     })
     .where(eq(peerConversation.id, conv.id));
 
-  const seed = SEED_BY_ID.get(partnerId);
-  if (seed) {
-    setTimeout(() => void triggerSeededReply(conv, seed, text), 700);
-  } else if (!isRecipientMuted(conv, partnerId)) {
+  await recordPracticeActivity(userId, conv.language, { messagesCount: 1 }).catch(() => {});
+
+  if (!isRecipientMuted(conv, partnerId)) {
     const [[sender], recipientProfile] = await Promise.all([
       db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
       getProfile(partnerId),
@@ -834,7 +606,7 @@ export async function deletePeerConversation(userId: string, peerConversationId:
   const isA = conv.userAId === userId;
   await db
     .update(peerConversation)
-    .set(isA ? { deletedByUserA: true } : { deletedByUserB: true })
+    .set(isA ? { deletedByUserA: true, unreadCountA: 0 } : { deletedByUserB: true, unreadCountB: 0 })
     .where(eq(peerConversation.id, conv.id));
   return true;
 }
@@ -873,29 +645,13 @@ async function mintPeerCallToken(params: {
   if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
     throw new Error("LiveKit is not configured");
   }
-  const seed = SEED_BY_ID.get(params.partner.id);
-  const metadata = seed
-    ? {
-        mode: "peer_partner",
-        provider: "elevenlabs",
-        voice: elevenLabsVoiceFor(seed.tutorVoice),
-        tutorVoice: seed.tutorVoice,
-        language: params.callerProfile.targetLanguage,
-        targetLanguage: params.callerProfile.targetLanguage,
-        nativeLanguage: params.callerProfile.nativeLanguage,
-        handsFree: true,
-        partnerId: seed.id,
-        partnerName: seed.name,
-        partnerLevel: seed.level,
-        partnerInterests: seed.interests,
-      }
-    : {
-        mode: "peer_human_only",
-        language: params.callerProfile.targetLanguage,
-        targetLanguage: params.callerProfile.targetLanguage,
-        nativeLanguage: params.callerProfile.nativeLanguage,
-        partnerId: params.partner.id,
-      };
+  const metadata = {
+    mode: "peer_human_only",
+    language: params.callerProfile.targetLanguage,
+    targetLanguage: params.callerProfile.targetLanguage,
+    nativeLanguage: params.callerProfile.nativeLanguage,
+    partnerId: params.partner.id,
+  };
 
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: params.userId,
@@ -929,12 +685,18 @@ export async function startPeerCall(userId: string, peerConversationId: string, 
   if (!conv) return null;
 
   const partnerId = conv.userAId === userId ? conv.userBId : conv.userAId;
-  const [callerProfile, callerRow, partner] = await Promise.all([
+  await assertNotBlocked(userId, partnerId);
+
+  const [[recipientPrefs], callerProfile, callerRow, partner] = await Promise.all([
+    db.select({ allowCallInvites: userProfile.allowCallInvites }).from(userProfile).where(eq(userProfile.userId, partnerId)),
     getProfile(userId),
     db.select({ name: user.name, email: user.email }).from(user).where(eq(user.id, userId)).then((r) => r[0]),
     loadLearner(partnerId, conv.language, false),
   ]);
   if (!partner) return null;
+  if (recipientPrefs && !recipientPrefs.allowCallInvites) {
+    throw new HTTPException(403, { message: "This learner has call invites turned off." });
+  }
 
   // Mark older waiting calls as missed
   await db
@@ -990,7 +752,7 @@ export async function startPeerCall(userId: string, peerConversationId: string, 
     })
     .where(eq(peerConversation.id, conv.id));
 
-  if (!isSeedUser(partnerId) && !isRecipientMuted(conv, partnerId)) {
+  if (!isRecipientMuted(conv, partnerId)) {
     const recipientProfile = await getProfile(partnerId);
     const lang = recipientProfile.nativeLanguage;
     sendToUser(partnerId, {
@@ -1097,21 +859,19 @@ export async function pingPeerCall(userId: string, callId: string) {
   if (!call) return null;
 
   const partnerId = call.hostUserId === userId ? call.guestUserId : call.hostUserId;
-  if (!isSeedUser(partnerId)) {
-    const [conv, [sender], recipientProfile] = await Promise.all([
-      db.query.peerConversation.findFirst({ where: eq(peerConversation.id, call.peerConversationId) }),
-      db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
-      getProfile(partnerId),
-    ]);
-    if (!conv || !isRecipientMuted(conv, partnerId)) {
-      const lang = recipientProfile.nativeLanguage;
-      sendToUser(partnerId, {
-        type: "peer_invite",
-        title: t(lang, "peerPingTitle", { name: shortName(sender?.name || "Partner") }),
-        body: t(lang, "peerPingBody"),
-        data: { peerConversationId: call.peerConversationId, partnerId: userId, callId: call.id },
-      }).catch(() => {});
-    }
+  const [conv, [sender], recipientProfile] = await Promise.all([
+    db.query.peerConversation.findFirst({ where: eq(peerConversation.id, call.peerConversationId) }),
+    db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
+    getProfile(partnerId),
+  ]);
+  if (!conv || !isRecipientMuted(conv, partnerId)) {
+    const lang = recipientProfile.nativeLanguage;
+    sendToUser(partnerId, {
+      type: "peer_invite",
+      title: t(lang, "peerPingTitle", { name: shortName(sender?.name || "Partner") }),
+      body: t(lang, "peerPingBody"),
+      data: { peerConversationId: call.peerConversationId, partnerId: userId, callId: call.id },
+    }).catch(() => {});
   }
   return { ok: true, status: call.status };
 }
@@ -1131,6 +891,11 @@ export async function endPeerCall(userId: string, callId: string, durationSec: n
     .set({ status: "ended", endedAt: new Date(), durationSec: safeDur })
     .where(eq(peerCallRoom.id, call.id))
     .returning();
+
+  const conv = await db.query.peerConversation.findFirst({ where: eq(peerConversation.id, call.peerConversationId) });
+  if (conv && safeDur > 0) {
+    await recordPracticeActivity(userId, conv.language, { spokenSec: safeDur }).catch(() => {});
+  }
 
   const mins = Math.max(1, Math.round(safeDur / 60));
   const summaryLabel = `${isVideo ? "Video" : "Voice"} practice · ${mins} min`;
