@@ -130,6 +130,8 @@ class RoleplayOrchestrator:
         self._turn_seq: int = 0
         self._speech_lock = asyncio.Lock()
         self._genai_client: genai.Client | None = None
+        self.caption_streaming_active: bool = False
+        self._streamed_turn_ids: set[str] = set()
 
     @property
     def base_speed(self) -> float:
@@ -227,6 +229,7 @@ class RoleplayOrchestrator:
         text: str,
         translation: str | None = None,
         actions: list[str] | None = None,
+        is_final: bool = True,
     ) -> str:
         tid = self._next_turn_id("rp-agent" if speaker == "agent" else "rp-user")
         if speaker == "agent":
@@ -241,8 +244,40 @@ class RoleplayOrchestrator:
             "text": text,
             "translation": translation,
             "actions": actions or [],
+            "isFinal": is_final,
         })
         return tid
+
+    async def on_agent_caption(self, segment_id: str, text: str, is_final: bool) -> None:
+        clean = strip_lang_tags(text).strip()
+        if not clean:
+            return
+        sender_label = self.sender_role_label if is_final else f"{self.sender_role_label} · Speaking"
+        self.last_tutor_line = clean
+        self.last_tutor_turn_id = segment_id
+        if is_final:
+            self._turn_history_by_text[clean] = segment_id
+
+        if segment_id not in self._streamed_turn_ids:
+            self._streamed_turn_ids.add(segment_id)
+            await self.broadcast({
+                "type": "lesson_turn",
+                "id": segment_id,
+                "speaker": "agent",
+                "senderLabel": sender_label,
+                "text": clean,
+                "translation": None,
+                "actions": ["translate", "listen_slow"],
+                "isFinal": is_final,
+            })
+        else:
+            await self.broadcast({
+                "type": "lesson_turn_update",
+                "id": segment_id,
+                "senderLabel": sender_label,
+                "text": clean,
+                "isFinal": is_final,
+            })
 
     async def _speak(
         self,
@@ -256,7 +291,7 @@ class RoleplayOrchestrator:
         if not self.session or not clean_text:
             return
         async with self._speech_lock:
-            if record_in_transcript:
+            if record_in_transcript and not self.caption_streaming_active:
                 await self.emit_turn(
                     speaker="agent",
                     sender_label=self.sender_role_label,

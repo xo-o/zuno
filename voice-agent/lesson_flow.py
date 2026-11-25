@@ -31,11 +31,17 @@ NATIVE_QUESTION_CUES = (
     "what does", "what is", "what's", "what means", "mean in", "meaning of",
     "how do i", "how do you", "how to say", "why is", "why do", "can you explain",
     "explain", "translate", "help me", "i don't understand", "didn't catch",
-    "que significa", "qué significa", "como se dice", "cómo se dice", "por qué",
+    "que significa", "qué significa", "como se dice", "cómo se dice",
+    "que es ", "qué es ", "por qué", "por que ", "quiere decir",
+    "no entiendo", "no entendí", "traduce", "ayuda",
 )
 REPEAT_CUES = ("repeat", "say that again", "one more time", "say it again", "repite", "otra vez")
 SLOW_CUES = ("slower", "slow down", "slowly", "more slowly", "más lento", "despacio")
 HINT_CUES = ("give me a hint", "hint", "first word", "a clue", "pista")
+
+
+def _has_latin_letters(text: str) -> bool:
+    return any("a" <= ch.lower() <= "z" for ch in unicodedata.normalize("NFD", text or ""))
 
 
 def _compute_blank_lengths(phrase: str) -> list[int]:
@@ -81,6 +87,8 @@ def score_pronunciation(
     """
     spoken_tokens = _normalize_tokens(spoken)
     if not spoken_tokens:
+        return 0, True
+    if _has_latin_letters(expected_phrase) and not _has_latin_letters(spoken):
         return 0, True
     if stt_confidence is not None and stt_confidence < 0.35 and len(spoken_tokens) <= 1:
         return 0, True
@@ -202,6 +210,9 @@ class LessonOrchestrator:
         self.last_tutor_turn_id: str = ""
         self._turn_seq: int = 0
         self.last_prompt_text: str = ""
+        self.caption_streaming_active: bool = False
+        self._streamed_turn_ids: set[str] = set()
+        self._active_caption_meta: dict[str, Any] = {}
 
         self.synthesizer = (
             synthesizer
@@ -228,6 +239,7 @@ class LessonOrchestrator:
         translation: str | None = None,
         actions: list[str] | None = None,
         turn_id: str | None = None,
+        is_final: bool = True,
     ) -> str:
         tid = turn_id or self._next_turn_id("agent" if speaker == "agent" else "user")
         if speaker == "agent":
@@ -240,8 +252,57 @@ class LessonOrchestrator:
             "text": text,
             "translation": translation,
             "actions": actions or [],
+            "isFinal": is_final,
         })
         return tid
+
+    async def on_agent_caption(self, segment_id: str, text: str, is_final: bool) -> None:
+        clean = strip_lang_tags(text).strip()
+        if not clean:
+            return
+        if self.stage == "roleplay":
+            ai_role = self.roleplay_cfg.get("aiRole") or self.tutor_name
+            base_label = f"{ai_role} · {self.tutor_name}" if self.tutor_name.lower() not in ai_role.lower() else ai_role
+            actions = ["translate", "listen_slow"]
+            translation = None
+        else:
+            base_label = self.tutor_name
+            meta = self._active_caption_meta or {}
+            actions = list(meta.get("actions") or ["listen_normal", "listen_slow"])
+            translation = meta.get("translation") if is_final else None
+
+        sender_label = base_label if is_final else f"{base_label} · Speaking"
+        if segment_id not in self._streamed_turn_ids:
+            self._streamed_turn_ids.add(segment_id)
+            self.last_tutor_turn_id = segment_id
+            if self.stage == "roleplay":
+                self.last_tutor_line = clean
+            await self.broadcast({
+                "type": "lesson_turn",
+                "id": segment_id,
+                "speaker": "agent",
+                "senderLabel": sender_label,
+                "text": clean,
+                "translation": translation,
+                "actions": actions,
+                "isFinal": is_final,
+            })
+        else:
+            if self.stage == "roleplay" or is_final:
+                self.last_tutor_line = clean
+            payload: dict[str, Any] = {
+                "type": "lesson_turn_update",
+                "id": segment_id,
+                "senderLabel": sender_label,
+                "text": clean,
+                "isFinal": is_final,
+            }
+            if translation:
+                payload["translation"] = translation
+            await self.broadcast(payload)
+
+        if is_final:
+            self._active_caption_meta = {}
 
     def _roleplay_goals_payload(self) -> list[dict[str, Any]]:
         goals = self.roleplay_goals or [{"id": "goal_1", "label": "Complete task", "description": "Complete the conversation"}]
@@ -410,13 +471,19 @@ class LessonOrchestrator:
             "recallPrompt": None,
             "rescueChips": [],
         })
-        await self._emit_lesson_turn(
-            speaker="agent",
-            sender_label=f"{self.tutor_name} · Speaking",
-            text=phrase,
-            translation=None if self.teach_in_target else translation,
-            actions=["listen_normal", "listen_slow"],
-        )
+        if self.caption_streaming_active:
+            self._active_caption_meta = {
+                "actions": ["listen_normal", "listen_slow"],
+                "translation": None if self.teach_in_target else translation,
+            }
+        else:
+            await self._emit_lesson_turn(
+                speaker="agent",
+                sender_label=f"{self.tutor_name} · Speaking",
+                text=phrase,
+                translation=None if self.teach_in_target else translation,
+                actions=["listen_normal", "listen_slow"],
+            )
 
         spoken = f"{setup} {phrase}".strip() if (not self.teach_in_target and setup) else phrase
         await self._speak(spoken, display_text=spoken, speed=self.model_speed)
@@ -497,12 +564,15 @@ class LessonOrchestrator:
             "recallPrompt": None,
             "rescueChips": ["hint", "reveal", "slow"],
         })
-        await self._emit_lesson_turn(
-            speaker="agent",
-            sender_label=self.tutor_name,
-            text=prompt_native,
-            actions=["hint", "reveal"],
-        )
+        if self.caption_streaming_active:
+            self._active_caption_meta = {"actions": ["hint", "reveal"]}
+        else:
+            await self._emit_lesson_turn(
+                speaker="agent",
+                sender_label=self.tutor_name,
+                text=prompt_native,
+                actions=["hint", "reveal"],
+            )
 
         if not self.teach_in_target and clean_meaning and new_word:
             clean_prompt = ensure_terminal_punct(prompt_native)
@@ -551,12 +621,15 @@ class LessonOrchestrator:
             },
             "rescueChips": ["first_word", "reveal", "slow"],
         })
-        await self._emit_lesson_turn(
-            speaker="agent",
-            sender_label=self.tutor_name,
-            text=cue,
-            actions=["first_word", "reveal"],
-        )
+        if self.caption_streaming_active:
+            self._active_caption_meta = {"actions": ["first_word", "reveal"]}
+        else:
+            await self._emit_lesson_turn(
+                speaker="agent",
+                sender_label=self.tutor_name,
+                text=cue,
+                actions=["first_word", "reveal"],
+            )
 
         await self._speak(cue, speed=1.0)
 
@@ -617,7 +690,10 @@ class LessonOrchestrator:
                     "?" in low
                     and any(
                         w in low.split()
-                        for w in ("what", "why", "how", "when", "does", "do", "is", "can", "mean", "means")
+                        for w in (
+                            "what", "why", "how", "when", "does", "do", "is", "can", "mean", "means",
+                            "qué", "que", "cómo", "como", "por", "cuál", "cual", "quién", "quien", "dónde", "donde",
+                        )
                     )
                 )
             )
@@ -661,12 +737,17 @@ class LessonOrchestrator:
                 if current_target
                 else "Let's try together."
             )
-        await self._emit_lesson_turn(
-            speaker="agent",
-            sender_label=self.tutor_name,
-            text=answer,
-            actions=["listen_normal", "listen_slow"] if current_target else [],
-        )
+        if self.caption_streaming_active:
+            self._active_caption_meta = {
+                "actions": ["listen_normal", "listen_slow"] if current_target else [],
+            }
+        else:
+            await self._emit_lesson_turn(
+                speaker="agent",
+                sender_label=self.tutor_name,
+                text=answer,
+                actions=["listen_normal", "listen_slow"] if current_target else [],
+            )
         await self._speak(answer, display_text=answer, speed=1.0)
 
     async def handle_structured_user_turn(self, transcript: str, confidence: float | None) -> None:
@@ -1143,14 +1224,16 @@ class LessonOrchestrator:
                 pass
 
         if action == "listen_normal":
-            phrase = payload or self._current_target_phrase()
+            target = self._current_target_phrase()
+            phrase = target if (self.stage in ("teach_model", "shadow_drill") and target and (not payload or target in payload)) else (payload or target)
             if phrase:
                 await self._speak(phrase, speed=1.0)
             return
 
         if action in ("listen_slow", "slow"):
             if self.stage in ("teach_model", "shadow_drill"):
-                phrase = payload or self._current_target_phrase()
+                target = self._current_target_phrase()
+                phrase = target if (target and (not payload or target in payload)) else (payload or target)
                 if phrase:
                     await self._speak(phrase, speed=0.75)
             elif self.stage == "roleplay" and self.last_tutor_line:

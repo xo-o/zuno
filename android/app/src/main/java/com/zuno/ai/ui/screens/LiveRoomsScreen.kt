@@ -1133,7 +1133,8 @@ fun ActiveLiveRoomScreen(
                     ChatMessage(id = "sys-q", speaker = Speaker.AGENT, text = "“$promptText”", isFinal = true),
                 )
             }
-            LaunchedEffect(displayTurns.size) {
+            val lastTurnText = displayTurns.lastOrNull()?.text.orEmpty()
+            LaunchedEffect(displayTurns.size, lastTurnText) {
                 if (displayTurns.isNotEmpty()) {
                     delay(50)
                     listState.animateScrollToItem(displayTurns.size - 1)
@@ -1155,14 +1156,27 @@ fun ActiveLiveRoomScreen(
                 ) {
                     items(displayTurns, key = { it.id }) { turn ->
                         if (turn.speaker == Speaker.USER) {
+                            val youName = stringResource(R.string.call_you_name, userName)
+                            val userLabel = if (!turn.isFinal) {
+                                "$youName · ${stringResource(R.string.voice_status_dot_speaking)}"
+                            } else {
+                                youName
+                            }
                             ZunoUserBubble(
                                 message = "“${turn.text.trim('“', '”')}”",
-                                senderLabel = "${stringResource(R.string.call_you_name, userName)} · ${stringResource(R.string.voice_status_dot_speaking)}",
+                                senderLabel = userLabel,
                             )
                         } else {
+                            val baseSender = turn.senderName?.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.live_rooms_zuno_prompt_sender)
+                            val otherLabel = if (!turn.isFinal) {
+                                "$baseSender · ${stringResource(R.string.voice_status_dot_speaking)}"
+                            } else {
+                                baseSender
+                            }
                             ZunoAssistantBubble(
                                 message = turn.text,
-                                senderLabel = stringResource(R.string.live_rooms_zuno_prompt_sender),
+                                senderLabel = otherLabel,
                                 onListen = { onTranslate(turn.text) },
                                 listenLabel = stringResource(R.string.voice_chip_translate),
                                 listenIcon = R.drawable.zuno_ic_languages,

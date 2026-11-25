@@ -172,7 +172,9 @@ class ElevenLabsAndRoleplayTest(unittest.TestCase):
         self.assertIn("translate", actions)
 
     def test_free_talk_user_language_default_and_clean_instructions(self):
-        from agent import ConversationalAgent, can_use_multi_stt
+        from unittest.mock import patch
+        from agent import ConversationalAgent, can_use_multi_stt, create_stt
+        import livekit.plugins.elevenlabs as elevenlabs
 
         self.assertEqual(
             detect_clause_language("No problem, tell me about a trip!", "en", "es", "en"),
@@ -182,8 +184,18 @@ class ElevenLabsAndRoleplayTest(unittest.TestCase):
             detect_clause_language("¡Claro! ¿Cómo estás hoy?", "en", "es", "en"),
             "es",
         )
-        self.assertTrue(can_use_multi_stt("es", "en"))
-        self.assertFalse(can_use_multi_stt("ko", "en"))
+        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test-eleven-key"}, clear=False):
+            self.assertTrue(can_use_multi_stt("es", "en"))
+            self.assertTrue(can_use_multi_stt("ko", "en"))
+            stt_engine = create_stt("en", native_language="es", multilingual=True)
+            self.assertIsInstance(stt_engine, elevenlabs.STT)
+            self.assertEqual(stt_engine._opts.model_id, "scribe_v2_realtime")
+            self.assertEqual(stt_engine._opts.language_code.language, "en")
+            self.assertEqual([l.language for l in stt_engine._opts.secondary_languages], ["es"])
+
+        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": "", "ELEVEN_API_KEY": ""}, clear=False):
+            self.assertTrue(can_use_multi_stt("es", "en"))
+            self.assertFalse(can_use_multi_stt("ko", "en"))
 
         fake_stt = unittest.mock.MagicMock()
         agent = ConversationalAgent(
@@ -201,6 +213,32 @@ class ElevenLabsAndRoleplayTest(unittest.TestCase):
         self.assertNotIn('<lang code="', agent.instructions)
         asyncio.run(agent.set_listening_language("ko"))
         fake_stt.update_options.assert_called_with(language="ko")
+
+    def test_live_caption_text_output_streams_and_flushes(self):
+        from agent import LiveCaptionTextOutput
+
+        captured = []
+
+        async def _on_caption(seg_id, text, is_final):
+            captured.append((seg_id, text, is_final))
+
+        async def _run():
+            out = LiveCaptionTextOutput(on_caption=_on_caption)
+            await out.capture_text("<lang code=\"es\">Hola</lang>")
+            await out.capture_text(" amigo")
+            out.flush()
+            await asyncio.sleep(0.01)
+            self.assertTrue(out.was_streamed("Hola amigo"))
+
+        asyncio.run(_run())
+        self.assertEqual(len(captured), 3)
+        self.assertEqual(captured[0][1], "Hola")
+        self.assertFalse(captured[0][2])
+        self.assertEqual(captured[1][1], "Hola amigo")
+        self.assertFalse(captured[1][2])
+        self.assertEqual(captured[2][1], "Hola amigo")
+        self.assertTrue(captured[2][2])
+        self.assertEqual(captured[0][0], captured[2][0])
 
     def test_tutor_catalog_six_elevenlabs_tutors_1_to_1_mapping(self):
         self.assertEqual(len(TUTOR_CATALOG), 6)

@@ -892,6 +892,8 @@ async function mintPeerCallToken(params: {
     : {
         mode: "peer_human_only",
         language: params.callerProfile.targetLanguage,
+        targetLanguage: params.callerProfile.targetLanguage,
+        nativeLanguage: params.callerProfile.nativeLanguage,
         partnerId: params.partner.id,
       };
 

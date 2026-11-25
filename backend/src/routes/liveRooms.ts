@@ -167,6 +167,7 @@ async function serializeRoom(roomRow: typeof liveRoom.$inferSelect, viewerId: st
 async function issueLiveKitTicket(roomRow: typeof liveRoom.$inferSelect, viewer: { id: string; name: string; email: string }) {
   const { LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
   if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) return null;
+  const profile = await getProfile(viewer.id).catch(() => null);
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: viewer.id,
     name: viewer.name || viewer.email,
@@ -175,7 +176,12 @@ async function issueLiveKitTicket(roomRow: typeof liveRoom.$inferSelect, viewer:
       mode: "live_room",
       roomId: roomRow.id,
       language: roomRow.language,
+      targetLanguage: roomRow.language,
+      nativeLanguage: profile?.nativeLanguage ?? "en",
       level: roomRow.level,
+      sourceKind: roomRow.sourceKind,
+      discussionPrompts: roomRow.discussionPrompts,
+      currentRound: roomRow.currentRound,
     }),
   });
   token.addGrant({

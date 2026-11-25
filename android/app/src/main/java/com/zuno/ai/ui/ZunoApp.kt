@@ -1164,6 +1164,7 @@ fun ZunoApp(
                         return@joinPeerCall
                     }
                     activePeerCallId = joined.call.id
+                    voiceMessageStart = 0
                     callStartedAt = System.currentTimeMillis()
                     callUsedVideo = false
                     zunoViewModel.loadCoachPrompts(
@@ -2030,6 +2031,7 @@ fun ZunoApp(
                                     zunoViewModel.openPeerChat(partner.id) { thread ->
                                         zunoViewModel.startPeerCall(thread.conversation.id) { started ->
                                             activePeerCallId = started.call.id
+                                            voiceMessageStart = 0
                                             callStartedAt = System.currentTimeMillis()
                                             callUsedVideo = false
                                             zunoViewModel.loadCoachPrompts(
@@ -2090,6 +2092,7 @@ fun ZunoApp(
                                     tts.stop()
                                     zunoViewModel.startPeerCall(screen.peerConversationId) { started ->
                                         activePeerCallId = started.call.id
+                                        voiceMessageStart = 0
                                         callStartedAt = System.currentTimeMillis()
                                         callUsedVideo = false
                                         zunoViewModel.loadCoachPrompts(
@@ -2636,7 +2639,7 @@ fun ZunoApp(
                         },
                         startedAtMillis = callStartedAt.takeIf { inVoice },
                         tutorLine = recentTurns.lastOrNull { it.speaker == Speaker.AGENT }?.text,
-                        userLine = recentTurns.lastOrNull { it.speaker == Speaker.USER }?.text,
+                        userLine = recentTurns.lastOrNull()?.takeIf { it.speaker == Speaker.USER }?.text,
                         turns = recentTurns,
                         isMuted = isMuted,
                         menu = conversationMenu(screen.conversationId),
@@ -2648,7 +2651,7 @@ fun ZunoApp(
                         sessionKindLabel = sessionKindLabel,
                         languageLevelLabel = langLevelLabel,
                         learnerLevel = profile?.level ?: "B1",
-                        initialCaptionsOn = false,
+                        initialCaptionsOn = true,
                         userName = userName,
                         userInitial = userInitial,
                         isCameraOn = isCameraOn,
@@ -3141,6 +3144,7 @@ fun ZunoApp(
                     isSpeakerOn = isSpeakerOn,
                     onSetActiveRoom = { roomId, startedAt ->
                         activeLiveRoomId = roomId
+                        if (roomId != null) voiceMessageStart = 0
                         callStartedAt = startedAt
                     },
                     withMicrophone = ::withMicrophone,

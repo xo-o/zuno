@@ -281,11 +281,6 @@ fun PeerCallScreen(
                         listState.animateScrollToItem(displayTurns.size - 1)
                     }
                 }
-                val partnerLabel = if (status == VoiceCallStatus.Speaking) {
-                    "$partnerName · ${stringResource(R.string.voice_status_dot_speaking)}"
-                } else {
-                    "$partnerName · ${stringResource(R.string.voice_status_dot_listening)}"
-                }
 
                 LazyColumn(
                     state = listState,
@@ -304,9 +299,15 @@ fun PeerCallScreen(
                                 )
                             }
                             Speaker.AGENT -> {
+                                val baseName = turn.senderName?.takeIf { it.isNotBlank() } ?: partnerName
+                                val bubbleLabel = if (!turn.isFinal) {
+                                    "$baseName · ${stringResource(R.string.voice_status_dot_speaking)}"
+                                } else {
+                                    baseName
+                                }
                                 ZunoAssistantBubble(
                                     message = turn.text,
-                                    senderLabel = partnerLabel,
+                                    senderLabel = bubbleLabel,
                                     onListen = { onTranslate(turn.text) },
                                     listenLabel = stringResource(R.string.voice_chip_translate),
                                     listenIcon = R.drawable.zuno_ic_languages,

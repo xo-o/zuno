@@ -122,6 +122,37 @@ class LessonFlowTest(unittest.TestCase):
         self.assertEqual(turn_events[1]["speaker"], "agent")
         self.assertIn("downtown", turn_events[1]["text"])
 
+    def test_wrong_script_transcript_rejected_as_noise(self):
+        from lesson_flow import score_pronunciation
+
+        score, is_noise = score_pronunciation("חוך חביובין רטלי", "How have you been lately?", "lately", 0.9)
+        self.assertEqual(score, 0)
+        self.assertTrue(is_noise)
+
+        score_ok, is_noise_ok = score_pronunciation("How have you been lately?", "How have you been lately?", "lately", 0.95)
+        self.assertGreaterEqual(score_ok, 90)
+        self.assertFalse(is_noise_ok)
+
+    def test_streaming_agent_caption_emits_turn_then_updates(self):
+        orch, events = self._make_orch()
+        orch.caption_streaming_active = True
+
+        async def _run():
+            await orch.on_agent_caption("seg-1", "Excuse", False)
+            await orch.on_agent_caption("seg-1", "Excuse me, does this bus", False)
+            await orch.on_agent_caption("seg-1", "Excuse me, does this bus go downtown?", True)
+
+        asyncio.run(_run())
+        turns = [e for e in events if e.get("type") == "lesson_turn"]
+        updates = [e for e in events if e.get("type") == "lesson_turn_update"]
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0]["id"], "seg-1")
+        self.assertFalse(turns[0]["isFinal"])
+        self.assertEqual(len(updates), 2)
+        self.assertFalse(updates[0]["isFinal"])
+        self.assertTrue(updates[1]["isFinal"])
+        self.assertEqual(updates[1]["text"], "Excuse me, does this bus go downtown?")
+
 
 if __name__ == "__main__":
     unittest.main()

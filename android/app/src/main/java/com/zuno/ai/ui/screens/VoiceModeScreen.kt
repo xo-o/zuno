@@ -447,9 +447,11 @@ private fun PortraitVoiceCallBody(
                             items(displayTurns, key = { it.id }) { turn ->
                                 when (turn.speaker) {
                                     Speaker.AGENT -> {
+                                        val baseLabel = if (cameraActive) tutor.displayName else "${tutor.displayName} · $sessionKindLabel"
+                                        val liveLabel = if (turn.isFinal) baseLabel else "$baseLabel · ${stringResource(R.string.voice_status_dot_speaking)}"
                                         ZunoAssistantBubble(
                                             message = turn.text,
-                                            senderLabel = if (cameraActive) tutor.displayName else "${tutor.displayName} · $sessionKindLabel",
+                                            senderLabel = liveLabel,
                                             onListen = { onTranslate?.invoke(turn.text) },
                                             listenLabel = stringResource(R.string.voice_chip_translate),
                                             listenIcon = R.drawable.zuno_ic_languages,
@@ -1228,7 +1230,7 @@ private fun LessonAvatarVoiceBody(
     val listState = rememberLazyListState()
     val lastTurnText = displayTurns.lastOrNull()?.text.orEmpty()
 
-    LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, showLiveUserBubble, showPlaceholder, rescuePayload) {
+    LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, liveUserText, showLiveUserBubble, showPlaceholder, rescuePayload) {
         if (!captionsOn) return@LaunchedEffect
         val total = displayTurns.size + (if (showLiveUserBubble || showPlaceholder) 1 else 0) + (if (rescuePayload != null) 1 else 0)
         if (total > 0) {
@@ -1354,10 +1356,15 @@ private fun LessonConversationAndCoach(
                     val a2 = turn.actions.getOrNull(1)
                     val (l1, i1, cb1) = mapTurnAction(a1, turn.text, onLessonAction)
                     val (l2, i2, cb2) = mapTurnAction(a2, turn.text, onLessonAction)
+                    val displaySender = if (!turn.isFinal && !turn.senderLabel.contains("Speaking", ignoreCase = true)) {
+                        "${turn.senderLabel} · ${stringResource(R.string.voice_status_dot_speaking)}"
+                    } else {
+                        turn.senderLabel
+                    }
                     ZunoAssistantBubble(
                         message = turn.text,
                         translation = if (stageKind == LessonStageKind.ActiveRecall) null else turn.translation,
-                        senderLabel = turn.senderLabel,
+                        senderLabel = displaySender,
                         onListen = cb1,
                         listenLabel = l1,
                         listenIcon = i1,

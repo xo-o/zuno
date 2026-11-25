@@ -246,6 +246,7 @@ data class LessonTurnUi(
     val text: String,
     val translation: String? = null,
     val actions: List<String> = emptyList(),
+    val isFinal: Boolean = true,
 )
 
 data class LessonStageUi(
@@ -1151,6 +1152,7 @@ internal fun JSONObject.toLessonTurnUi(): LessonTurnUi {
         text = optString("text"),
         translation = optStringOrNull("translation"),
         actions = actions,
+        isFinal = optBoolean("isFinal", true),
     )
 }
 

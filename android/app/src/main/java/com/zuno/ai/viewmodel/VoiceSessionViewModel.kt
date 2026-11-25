@@ -601,11 +601,27 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                         }
                         "transcript" -> {
                             val speakerStr = json.optString("speaker")
-                            val speaker = if (speakerStr == "user") Speaker.USER else Speaker.AGENT
+                            val speakerId = json.optString("speakerId").takeIf { it.isNotBlank() }
+                            val speakerName = json.optString("speakerName").takeIf { it.isNotBlank() }
+                            val segmentId = json.optString("segmentId").takeIf { it.isNotBlank() }
+                            val localId = currentRoom?.localParticipant?.identity?.value
+                            val speaker = when {
+                                speakerId != null && localId != null ->
+                                    if (speakerId == localId) Speaker.USER else Speaker.AGENT
+                                speakerStr == "user" -> Speaker.USER
+                                else -> Speaker.AGENT
+                            }
                             val rawText = json.optString("text")
                             val messageText = if (speaker == Speaker.AGENT) stripVoiceTags(rawText) else rawText
                             val isFinal = json.optBoolean("is_final", true)
-                            addOrUpdateMessage(speaker, messageText, isFinal)
+                            addOrUpdateMessage(
+                                speaker = speaker,
+                                text = messageText,
+                                isFinal = isFinal,
+                                segmentId = segmentId,
+                                senderId = speakerId,
+                                senderName = speakerName,
+                            )
                         }
                         "metrics" -> {
                             val total = json.optInt("total_ms", -1)
@@ -622,7 +638,12 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                             val turn = json.toLessonTurnUi()
                             if (turn.text.isNotBlank()) {
                                 _lessonTurns.update { current ->
-                                    if (current.any { it.id == turn.id }) current else (current + turn).takeLast(12)
+                                    val idx = current.indexOfFirst { it.id == turn.id }
+                                    if (idx >= 0) {
+                                        current.toMutableList().apply { set(idx, turn) }
+                                    } else {
+                                        (current + turn).takeLast(12)
+                                    }
                                 }
                             }
                         }
@@ -630,6 +651,9 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                             val targetId = json.optString("id")
                             val newLabel = json.optString("senderLabel").takeIf { it.isNotBlank() }
                             val newTranslation = json.optString("translation").takeIf { it.isNotBlank() }
+                            val newText = json.optString("text").takeIf { it.isNotBlank() }
+                            val hasFinal = json.has("isFinal")
+                            val newIsFinal = json.optBoolean("isFinal", true)
                             if (targetId.isNotBlank()) {
                                 _lessonTurns.update { current ->
                                     current.map { t ->
@@ -637,6 +661,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                                             t.copy(
                                                 senderLabel = newLabel ?: t.senderLabel,
                                                 translation = newTranslation ?: t.translation,
+                                                text = newText ?: t.text,
+                                                isFinal = if (hasFinal) newIsFinal else t.isFinal,
                                             )
                                         } else {
                                             t
@@ -689,25 +715,46 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     /** LiveKit levels sit mostly in 0..0.3 for speech; lift them into a usable 0..1 range. */
     private fun normalizeLevel(raw: Float): Float = (sqrt(raw.coerceAtLeast(0f)) * 1.6f).coerceIn(0f, 1f)
 
-    private fun addOrUpdateMessage(speaker: Speaker, text: String, isFinal: Boolean) {
+    private fun addOrUpdateMessage(
+        speaker: Speaker,
+        text: String,
+        isFinal: Boolean,
+        segmentId: String? = null,
+        senderId: String? = null,
+        senderName: String? = null,
+    ) {
         if (text.isBlank()) return
         _messages.update { currentList ->
-            val last = currentList.lastOrNull()
-            if (last != null && last.speaker == speaker && !last.isFinal) {
-                val updated = currentList.toMutableList()
-                updated[updated.lastIndex] = last.copy(
-                    text = text,
-                    isFinal = isFinal,
-                    timestamp = System.currentTimeMillis(),
-                )
-                updated
+            val matchIdx = if (segmentId != null) {
+                currentList.indexOfLast { it.segmentId == segmentId }
             } else {
-                currentList + ChatMessage(
-                    id = "${System.currentTimeMillis()}-${Random.nextInt(1000, 9999)}",
+                currentList.indexOfLast {
+                    it.speaker == speaker && !it.isFinal && it.senderId == senderId
+                }.takeIf { it == currentList.lastIndex } ?: -1
+            }
+            if (matchIdx >= 0) {
+                val existing = currentList[matchIdx]
+                val updated = currentList.toMutableList()
+                updated[matchIdx] = existing.copy(
                     speaker = speaker,
                     text = text,
                     isFinal = isFinal,
                     timestamp = System.currentTimeMillis(),
+                    segmentId = segmentId ?: existing.segmentId,
+                    senderId = senderId ?: existing.senderId,
+                    senderName = senderName ?: existing.senderName,
+                )
+                updated
+            } else {
+                currentList + ChatMessage(
+                    id = segmentId ?: "${System.currentTimeMillis()}-${Random.nextInt(1000, 9999)}",
+                    speaker = speaker,
+                    text = text,
+                    isFinal = isFinal,
+                    timestamp = System.currentTimeMillis(),
+                    segmentId = segmentId,
+                    senderId = senderId,
+                    senderName = senderName,
                 )
             }
         }

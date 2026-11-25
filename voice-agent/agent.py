@@ -3,15 +3,16 @@ import json
 import logging
 import os
 import time
+from collections.abc import Awaitable, Callable
 
 import certifi
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 
-# Python builds on macOS often ship without a CA bundle, which breaks TLS to LiveKit Cloud.
+# Python builds on macOS often ship without a CA bundle, which breaks TLS to LiveKit Cloud / ElevenLabs.
 os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
+from google import genai
+from google.genai import types
 from livekit import rtc
 from livekit.agents import (
     Agent,
@@ -21,8 +22,13 @@ from livekit.agents import (
     cli,
     function_tool,
     room_io,
+    stt as lk_stt,
+    vad as lk_vad,
 )
+from livekit.agents.types import NOT_GIVEN
+from livekit.agents.voice import io as voice_io
 import livekit.plugins.deepgram as dg
+import livekit.plugins.elevenlabs as elevenlabs
 import livekit.plugins.google as gg
 import livekit.plugins.silero as silero
 
@@ -66,15 +72,19 @@ STT_ACCENT_CODES = {
 NOVA3_MULTI_LANGS = {"en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"}
 
 
+def _elevenlabs_api_key() -> str | None:
+    return os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY") or None
+
+
 def can_use_multi_stt(language: str = "en", native_language: str | None = None) -> bool:
     base_target = (language or "en").lower().split("-")[0]
     base_native = (native_language or "").lower().split("-")[0]
-    return bool(
-        base_native
-        and base_native != base_target
-        and base_target in NOVA3_MULTI_LANGS
-        and base_native in NOVA3_MULTI_LANGS
-    )
+    if not base_native or base_native == base_target:
+        return False
+    if _elevenlabs_api_key():
+        # ElevenLabs Scribe v2 Realtime supports 90+ languages with language_code + secondary_languages.
+        return True
+    return base_target in NOVA3_MULTI_LANGS and base_native in NOVA3_MULTI_LANGS
 
 
 def resolve_stt_code(language: str, accent: str | None = None) -> str:
@@ -89,11 +99,28 @@ def create_stt(
     multilingual: bool = False,
     allow_dynamic_switch: bool = False,
 ):
+    elevenlabs_key = _elevenlabs_api_key()
+    target_base = (language or "en").lower().split("-")[0]
+    native_base = (native_language or "").lower().split("-")[0]
+    if elevenlabs_key:
+        secondary = (
+            [native_base]
+            if (multilingual and native_base and native_base != target_base)
+            else NOT_GIVEN
+        )
+        return elevenlabs.STT(
+            model="scribe_v2_realtime",
+            language_code=target_base,
+            secondary_languages=secondary,
+            include_language_detection=True,
+            api_key=elevenlabs_key,
+        )
+
     if multilingual and can_use_multi_stt(language, native_language):
         return dg.STT(
             model="nova-3",
             language="multi",
-            endpointing_ms=25,
+            endpointing_ms=300,
             interim_results=True,
             api_key=os.environ.get("DEEPGRAM_API_KEY"),
         )
@@ -108,7 +135,7 @@ def create_stt(
     return dg.STT(
         model="nova-3",
         language=resolve_stt_code(language, accent),
-        endpointing_ms=25,
+        endpointing_ms=300,
         interim_results=True,
         api_key=os.environ.get("DEEPGRAM_API_KEY"),
     )
@@ -257,7 +284,10 @@ class ConversationalAgent(Agent):
         chosen = target_base if norm == target_base else native_base
         stt_code = resolve_stt_code(chosen, self.accent if chosen == target_base else None)
         try:
-            if hasattr(self._stt_engine, "update_options"):
+            if isinstance(self._stt_engine, elevenlabs.STT):
+                self._stt_engine.update_options(secondary_languages=[chosen])
+                logger.info("Updated ElevenLabs STT secondary language to %s", chosen)
+            elif hasattr(self._stt_engine, "update_options"):
                 self._stt_engine.update_options(language=stt_code)
                 logger.info("Switched Free Talk STT language dynamically to %s", stt_code)
         except Exception as e:
@@ -385,6 +415,247 @@ class ConversationalAgent(Agent):
                 logger.warning("Conversational translate fallback error: %s", e)
 
 
+class LiveCaptionTextOutput(voice_io.TextOutput):
+    """Receives audio-synchronized agent text chunks from LiveKit TranscriptSynchronizer
+    and forwards real-time interim/final captions to the room."""
+
+    def __init__(
+        self,
+        on_caption: Callable[[str, str, bool], Awaitable[None]],
+    ) -> None:
+        super().__init__(label="zuno-live-captions", next_in_chain=None)
+        self._on_caption = on_caption
+        self._buffer = ""
+        self._last_emitted = ""
+        self._segment_seq = 0
+        self._segment_id = self._next_segment_id()
+        self._streamed_texts: list[str] = []
+        self._tasks: set[asyncio.Task] = set()
+
+    def _next_segment_id(self) -> str:
+        self._segment_seq += 1
+        return f"agent-{self._segment_seq}-{int(time.time() * 1000)}"
+
+    def was_streamed(self, text: str) -> bool:
+        norm = strip_lang_tags(text).strip()
+        if not norm:
+            return False
+        for item in self._streamed_texts[-6:]:
+            if item == norm or norm.startswith(item) or item.startswith(norm):
+                return True
+        return False
+
+    async def capture_text(self, text: str) -> None:
+        self._buffer += text
+        clean = strip_lang_tags(self._buffer).strip()
+        if clean and clean != self._last_emitted:
+            self._last_emitted = clean
+            await self._on_caption(self._segment_id, clean, False)
+
+    def flush(self) -> None:
+        seg_id = self._segment_id
+        final_text = strip_lang_tags(self._buffer).strip()
+        self._buffer = ""
+        self._last_emitted = ""
+        self._segment_id = self._next_segment_id()
+        if final_text:
+            self._streamed_texts.append(final_text)
+            if len(self._streamed_texts) > 20:
+                self._streamed_texts = self._streamed_texts[-10:]
+            task = asyncio.create_task(self._on_caption(seg_id, final_text, True))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+
+
+async def run_multi_participant_transcriber(ctx: JobContext, meta: dict, mode: str) -> None:
+    """Real-time multi-speaker STT captioning for 1:1 human calls and group Live Rooms."""
+    target_lang = str(meta.get("targetLanguage") or meta.get("language") or "en")
+    native_lang = str(meta.get("nativeLanguage") or "en")
+    multilingual = bool(
+        native_lang and native_lang.lower().split("-")[0] != target_lang.lower().split("-")[0]
+    )
+
+    vad = silero.VAD.load(min_speech_duration=0.10, min_silence_duration=0.45)
+    stt_engine = create_stt(
+        target_lang,
+        native_language=native_lang,
+        multilingual=multilingual,
+    )
+
+    active_tasks: dict[str, asyncio.Task] = {}
+    room_closed = asyncio.Event()
+
+    async def broadcast_transcript(
+        *,
+        speaker: str,
+        speaker_id: str,
+        speaker_name: str,
+        segment_id: str,
+        text: str,
+        is_final: bool,
+    ) -> None:
+        try:
+            payload = json.dumps({
+                "type": "transcript",
+                "speaker": speaker,
+                "speakerId": speaker_id,
+                "speakerName": speaker_name,
+                "segmentId": segment_id,
+                "text": text,
+                "is_final": is_final,
+            }).encode("utf-8")
+            await ctx.room.local_participant.publish_data(payload, reliable=True)
+        except Exception as e:
+            logger.debug("Multi-party caption broadcast error: %s", e)
+
+    async def transcribe_track(participant: rtc.RemoteParticipant, track: rtc.Track) -> None:
+        speaker_id = participant.identity
+        speaker_name = participant.name or participant.identity
+        audio_stream = rtc.AudioStream.from_track(
+            track=track,
+            sample_rate=16000,
+            num_channels=1,
+        )
+        vad_stream = vad.stream()
+        stt_stream = stt_engine.stream()
+
+        seg_seq = 0
+
+        def next_seg_id() -> str:
+            nonlocal seg_seq
+            seg_seq += 1
+            return f"{speaker_id}-{seg_seq}-{int(time.time() * 1000)}"
+
+        current_seg_id = next_seg_id()
+
+        async def pump_audio() -> None:
+            async for ev in audio_stream:
+                vad_stream.push_frame(ev.frame)
+                stt_stream.push_frame(ev.frame)
+            vad_stream.end_input()
+            stt_stream.end_input()
+
+        async def pump_vad() -> None:
+            async for ev in vad_stream:
+                if ev.type == lk_vad.VADEventType.END_OF_SPEECH:
+                    stt_stream.flush()
+
+        async def pump_stt() -> None:
+            nonlocal current_seg_id
+            async for ev in stt_stream:
+                if ev.type not in (
+                    lk_stt.SpeechEventType.INTERIM_TRANSCRIPT,
+                    lk_stt.SpeechEventType.FINAL_TRANSCRIPT,
+                ):
+                    continue
+                if not ev.alternatives:
+                    continue
+                text = (ev.alternatives[0].text or "").strip()
+                if not text:
+                    continue
+                is_final = ev.type == lk_stt.SpeechEventType.FINAL_TRANSCRIPT
+                await broadcast_transcript(
+                    speaker="user",
+                    speaker_id=speaker_id,
+                    speaker_name=speaker_name,
+                    segment_id=current_seg_id,
+                    text=text,
+                    is_final=is_final,
+                )
+                if is_final:
+                    current_seg_id = next_seg_id()
+
+        try:
+            await asyncio.gather(pump_audio(), pump_vad(), pump_stt())
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug("Track transcriber stopped for %s: %s", speaker_id, e)
+        finally:
+            for closable in (audio_stream, vad_stream, stt_stream):
+                try:
+                    await closable.aclose()
+                except Exception:
+                    pass
+
+    def maybe_start_track(participant: rtc.RemoteParticipant, track: rtc.Track | None) -> None:
+        if track is None or track.kind != rtc.TrackKind.KIND_AUDIO:
+            return
+        ident = participant.identity or ""
+        if ident.startswith("agent-") or ident.startswith("avatar-"):
+            return
+        key = f"{ident}:{track.sid}"
+        if key in active_tasks and not active_tasks[key].done():
+            return
+        logger.info("Starting live caption transcriber for %s (%s)", participant.name or ident, mode)
+        active_tasks[key] = asyncio.create_task(transcribe_track(participant, track))
+
+    def stop_participant_tracks(ident: str) -> None:
+        prefix = f"{ident}:"
+        for key in list(active_tasks.keys()):
+            if key.startswith(prefix):
+                task = active_tasks.pop(key)
+                task.cancel()
+
+    @ctx.room.on("track_subscribed")
+    def _on_track_subscribed(
+        track: rtc.Track,
+        publication: rtc.RemoteTrackPublication,
+        remote_participant: rtc.RemoteParticipant,
+    ) -> None:
+        maybe_start_track(remote_participant, track)
+
+    @ctx.room.on("track_unpublished")
+    def _on_track_unpublished(
+        publication: rtc.RemoteTrackPublication,
+        remote_participant: rtc.RemoteParticipant,
+    ) -> None:
+        key = f"{remote_participant.identity}:{publication.sid}"
+        task = active_tasks.pop(key, None)
+        if task:
+            task.cancel()
+
+    @ctx.room.on("participant_disconnected")
+    def _on_participant_disconnected(remote_participant: rtc.RemoteParticipant) -> None:
+        stop_participant_tracks(remote_participant.identity)
+        humans = [
+            p for p in ctx.room.remote_participants.values()
+            if not (p.identity or "").startswith(("agent-", "avatar-"))
+        ]
+        if not humans:
+            room_closed.set()
+
+    @ctx.room.on("disconnected")
+    def _on_room_disconnected(*_args) -> None:
+        room_closed.set()
+
+    for remote in ctx.room.remote_participants.values():
+        for pub in remote.track_publications.values():
+            if pub.track is not None:
+                maybe_start_track(remote, pub.track)
+
+    if mode == "live_room" and meta.get("sourceKind") == "system":
+        prompts = meta.get("discussionPrompts") or []
+        round_idx = max(0, int(meta.get("currentRound") or 1) - 1)
+        if isinstance(prompts, list) and round_idx < len(prompts):
+            prompt_text = str(prompts[round_idx] or "").strip()
+            if prompt_text:
+                await broadcast_transcript(
+                    speaker="agent",
+                    speaker_id="zuno-host",
+                    speaker_name="Zuno",
+                    segment_id="sys-q",
+                    text=f"“{prompt_text}”",
+                    is_final=True,
+                )
+
+    await room_closed.wait()
+    for task in list(active_tasks.values()):
+        task.cancel()
+    if active_tasks:
+        await asyncio.gather(*active_tasks.values(), return_exceptions=True)
+
+
 @server.rtc_session()
 async def entrypoint(ctx: JobContext) -> None:
     logger.info(f"Connecting agent to room: {ctx.room.name}")
@@ -411,8 +682,9 @@ async def entrypoint(ctx: JobContext) -> None:
     else:
         mode = "conversation"
 
-    if mode == "peer_human_only":
-        logger.info(f"Peer human-only room {ctx.room.name}; agent stepping out.")
+    if mode in ("peer_human_only", "live_room"):
+        logger.info(f"Starting multi-participant live captioner for {mode} room {ctx.room.name}")
+        await run_multi_participant_transcriber(ctx, meta, mode)
         return
 
     tutor_id = str(meta.get("tutorId") or "") or None
@@ -498,8 +770,8 @@ async def entrypoint(ctx: JobContext) -> None:
         stt_lang = current_language
         stt_accent = current_accent
 
-    vad = silero.VAD.load(min_speech_duration=0.05, min_silence_duration=0.25)
-    use_multilingual_stt = mode in ("lesson", "roleplay", "conversation")
+    vad = silero.VAD.load(min_speech_duration=0.10, min_silence_duration=0.45)
+    use_multilingual_stt = mode in ("lesson", "roleplay", "conversation", "peer_partner")
     stt = create_stt(
         stt_lang,
         stt_accent,
@@ -619,10 +891,41 @@ async def entrypoint(ctx: JobContext) -> None:
 
     if lesson_orchestrator is not None:
         lesson_orchestrator.session = session
+        lesson_orchestrator.caption_streaming_active = True
     if roleplay_orchestrator is not None:
         roleplay_orchestrator.session = session
+        roleplay_orchestrator.caption_streaming_active = True
     if onboarding_orchestrator is not None:
         onboarding_orchestrator.session = session
+
+    agent_display_name = (
+        str(meta.get("partnerName") or tutor_name)
+        if mode == "peer_partner"
+        else tutor_name
+    )
+    user_identity = participant.identity
+    user_display_name = participant.name or "You"
+    agent_identity = ctx.room.local_participant.identity
+
+    async def _on_agent_caption(seg_id: str, text: str, is_final: bool) -> None:
+        if lesson_orchestrator is not None:
+            await lesson_orchestrator.on_agent_caption(seg_id, text, is_final)
+        elif roleplay_orchestrator is not None:
+            await roleplay_orchestrator.on_agent_caption(seg_id, text, is_final)
+        elif conversational_agent is not None:
+            conversational_agent.last_tutor_line = text
+
+        await broadcast_event({
+            "type": "transcript",
+            "speaker": "agent",
+            "speakerId": agent_identity,
+            "speakerName": agent_display_name,
+            "segmentId": seg_id,
+            "text": text,
+            "is_final": is_final,
+        })
+
+    caption_output = LiveCaptionTextOutput(on_caption=_on_agent_caption)
 
     async def _cleanup_resources() -> None:
         await session_synthesizer.aclose()
@@ -636,6 +939,8 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(_cleanup_resources)
 
     last_user_speech_end = 0.0
+    user_seg_seq = 1
+    current_user_seg_id = f"user-{user_seg_seq}-{int(time.time() * 1000)}"
 
     @session.on("agent_state_changed")
     def _on_state_changed(ev) -> None:
@@ -664,15 +969,21 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("user_input_transcribed")
     def _on_user_input(ev) -> None:
-        nonlocal last_user_speech_end
+        nonlocal last_user_speech_end, user_seg_seq, current_user_seg_id
         logger.info(f"User transcript (final={ev.is_final}): {ev.transcript}")
+        seg_id = current_user_seg_id
         if ev.is_final:
             last_user_speech_end = time.time()
+            user_seg_seq += 1
+            current_user_seg_id = f"user-{user_seg_seq}-{int(time.time() * 1000)}"
 
         asyncio.create_task(
             broadcast_event({
                 "type": "transcript",
                 "speaker": "user",
+                "speakerId": user_identity,
+                "speakerName": user_display_name,
+                "segmentId": seg_id,
                 "text": ev.transcript,
                 "is_final": ev.is_final,
             })
@@ -693,6 +1004,9 @@ async def entrypoint(ctx: JobContext) -> None:
                 return
             logger.info(f"Agent reply: {clean_text}")
 
+            if caption_output.was_streamed(clean_text):
+                return
+
             if lesson_orchestrator is not None and lesson_orchestrator.stage == "roleplay":
                 lesson_orchestrator.last_tutor_line = clean_text
                 tname = lesson_orchestrator.tutor_name
@@ -708,6 +1022,7 @@ async def entrypoint(ctx: JobContext) -> None:
                         "senderLabel": role_label,
                         "text": clean_text,
                         "actions": ["translate", "listen_slow"],
+                        "isFinal": True,
                     })
                 )
             elif roleplay_orchestrator is not None and clean_text != roleplay_orchestrator.last_tutor_line:
@@ -726,6 +1041,8 @@ async def entrypoint(ctx: JobContext) -> None:
                 broadcast_event({
                     "type": "transcript",
                     "speaker": "agent",
+                    "speakerId": agent_identity,
+                    "speakerName": agent_display_name,
                     "text": clean_text,
                     "is_final": True,
                 })
@@ -788,6 +1105,10 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(),
             audio_output=not use_video_avatar,
+            text_output=room_io.TextOutputOptions(
+                next_in_chain=caption_output,
+                sync_transcription=True,
+            ),
         ),
     )
 

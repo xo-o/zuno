@@ -10,5 +10,8 @@ data class ChatMessage(
     val speaker: Speaker,
     val text: String,
     val isFinal: Boolean = true,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val segmentId: String? = null,
+    val senderId: String? = null,
+    val senderName: String? = null,
 )
