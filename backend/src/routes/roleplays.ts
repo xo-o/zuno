@@ -235,7 +235,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
       category: row.category ?? "social",
       sourceKind: row.sourceKind === "system" ? ("system" as const) : ("community" as const),
       authorHandle: row.authorHandle ?? "@learner",
-      level,
+      level: row.level || level,
       practicedCount: row.practicedCount ?? 0,
       shareUrl: roleplayShareUrlOf(row),
       alreadySaved: myRoleplayIds.has(row.id) || savedSourceIds.has(row.id),
@@ -317,7 +317,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
         category: row.category ?? "social",
         sourceKind: row.sourceKind === "system" ? "system" : "community",
         authorHandle: row.authorHandle ?? "@learner",
-        level,
+        level: row.level || level,
         practicedCount: row.practicedCount ?? 0,
         shareUrl: roleplayShareUrlOf(row),
         alreadySaved: Boolean(existing),
@@ -364,6 +364,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
         id: randomUUID(),
         userId,
         language: profile.targetLanguage,
+        level: profile.level,
         ...generated,
         userRole: body.userRole || generated.userRole,
         aiRole: body.aiRole || generated.aiRole,
@@ -381,6 +382,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
   .post("/:id/save", aiLimit, async (c) => {
     const userId = c.get("user").id;
     const sourceId = c.req.param("id");
+    const profile = await getProfile(userId);
 
     const alreadyOwned = await db.query.roleplay.findFirst({
       where: and(eq(roleplay.id, sourceId), eq(roleplay.userId, userId)),
@@ -405,6 +407,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
           aiRole: seed.generated.aiRole,
           setting: seed.generated.setting,
           language: seed.language,
+          level: profile.level,
           category: seed.category,
           visibility: "private",
           sourceKind: seed.sourceKind,
@@ -420,6 +423,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     });
     if (!source) throw new HTTPException(404, { message: "Roleplay is no longer available" });
 
+    const sameLevel = (source.level || "B1") === profile.level;
     const cloned = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(roleplay)
@@ -432,7 +436,8 @@ export const roleplayRoutes = new Hono<AuthEnv>()
           aiRole: source.aiRole,
           setting: source.setting,
           language: source.language,
-          goals: source.goals ?? null,
+          level: profile.level,
+          goals: sameLevel ? (source.goals ?? null) : null,
           category: source.category,
           visibility: "private",
           sourceKind: source.sourceKind === "system" ? "system" : "community",
@@ -571,6 +576,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
     if (!row) {
       const seed = findSeedRoleplay(requestedId);
       if (seed) {
+        const sameSeedLevel = seed.level === profile.level;
         const [created] = await db
           .insert(roleplay)
           .values({
@@ -582,7 +588,8 @@ export const roleplayRoutes = new Hono<AuthEnv>()
             aiRole: seed.generated.aiRole,
             setting: seed.generated.setting,
             language: seed.language,
-            goals: seed.generated.goals ?? null,
+            level: profile.level,
+            goals: sameSeedLevel ? (seed.generated.goals ?? null) : null,
             category: seed.category,
             visibility: "private",
             sourceKind: seed.sourceKind,
@@ -596,6 +603,7 @@ export const roleplayRoutes = new Hono<AuthEnv>()
           where: and(eq(roleplay.id, requestedId), eq(roleplay.visibility, "public")),
         });
         if (!publicSource) throw new HTTPException(404, { message: "Roleplay not found" });
+        const sameLevel = (publicSource.level || "B1") === profile.level;
         const [created] = await db
           .insert(roleplay)
           .values({
@@ -607,7 +615,8 @@ export const roleplayRoutes = new Hono<AuthEnv>()
             aiRole: publicSource.aiRole,
             setting: publicSource.setting,
             language: publicSource.language,
-            goals: publicSource.goals ?? null,
+            level: profile.level,
+            goals: sameLevel ? (publicSource.goals ?? null) : null,
             category: publicSource.category,
             visibility: "private",
             sourceKind: publicSource.sourceKind === "system" ? "system" : "community",

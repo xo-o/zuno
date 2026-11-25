@@ -320,7 +320,7 @@
     <string name="topics_official_badge">Zuno Offiziell</string>
     <string name="topics_learners_count">%1$d Lernende</string>
     <string name="topics_browse_empty_title">Keine Themen für „%1$s“</string>
-    <string name="topics_browse_empty_body">Erstelle mit Sofía ein eigenes Thema mit 5 Lektionen dazu.</string>
+    <string name="topics_browse_empty_body">Erstelle mit Sofía ein eigenes Thema dazu.</string>
     <string name="topics_create_query_cta">„%1$s“ erstellen</string>
     <string name="topics_cat_all">Alle</string>
     <string name="topics_cat_travel">Reisen</string>

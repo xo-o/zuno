@@ -476,6 +476,20 @@ class RoleplayOrchestrator:
                     })
 
 
+CEFR_ROLEPLAY_GUIDANCE: dict[str, str] = {
+    "A1": "CEFR A1 (Beginner): speak in very short, clear everyday sentences (4–8 words), present tense, common survival words, and warm patient prompts without idioms or surprise twists.",
+    "A2": "CEFR A2 (Elementary): speak in short, friendly everyday sentences with familiar vocabulary and simple follow-ups; avoid obscure slang or rapid multi-part questions.",
+    "B1": "CEFR B1 (Intermediate): speak naturally using everyday and travel/work vocabulary, polite conditionals, and one manageable realistic detail at a time.",
+    "B2": "CEFR B2 (Upper-Intermediate): speak naturally with varied idiomatic expressions, realistic complications, and engaging follow-up questions.",
+    "C1": "CEFR C1 (Advanced): speak at authentic native register with idioms, nuance, negotiation/persuasion, and subtle cultural context.",
+    "C2": "CEFR C2 (Mastery): speak with full native fluency, nuanced register shifts, domain vocabulary, and natural wit.",
+}
+
+
+def cefr_roleplay_guidance(level: str) -> str:
+    return CEFR_ROLEPLAY_GUIDANCE.get((level or "B1").strip().upper(), CEFR_ROLEPLAY_GUIDANCE["B1"])
+
+
 class RoleplayAgent(Agent):
     """LiveKit Agent for dynamic practice-oriented Roleplays with ElevenLabs multilingual synthesis."""
 
@@ -531,9 +545,19 @@ class RoleplayAgent(Agent):
             else ""
         )
 
+        level_guide = cefr_roleplay_guidance(orch.level)
+        realism_rule = (
+            "3. LEVEL-APPROPRIATE REALISM: Keep details clear, friendly, and concrete (simple choices, clear prices/times) "
+            "so the beginner builds confidence speaking spontaneously."
+            if orch.level in ("A1", "A2")
+            else "3. REALISTIC PRACTICE: Include natural real-life details (prices, availability, times, follow-up questions) "
+            "so the learner practices genuine listening and spontaneous speaking."
+        )
+
         return (
             f"You are playing '{orch.ai_role}' in a live spoken {orch.variety_name} ({orch.target_lang_name}) roleplay "
             f"with a {orch.native_lang_name} speaker at CEFR level {orch.level}.\n"
+            f"Level calibration: {level_guide}\n"
             f"Learner's role: '{orch.user_role}'\n"
             f"Scenario: {orch.scenario}\n"
             f"Setting & context: {orch.setting}\n"
@@ -544,8 +568,7 @@ class RoleplayAgent(Agent):
             f"Keep every turn concise and conversational: 1 to 2 short sentences (typically under 150 characters) suited "
             f"to CEFR {orch.level}, ending with a natural prompt or question.\n"
             f"{clarification_rule}\n"
-            "3. REALISTIC PRACTICE: Include natural real-life details (prices, availability, times, follow-up questions) "
-            "so the learner practices genuine listening and spontaneous speaking.\n"
+            f"{realism_rule}\n"
             f"{strict_rule}\n"
             "5. GOAL TRACKING: As soon as the learner satisfies one of the practice goals, call `mark_roleplay_goal_complete` "
             "with that `goal_id` AND include your next spoken in-character reply.\n"

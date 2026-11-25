@@ -303,7 +303,7 @@
     <!-- 03 · Topics & 04 · Roleplays -->
     <string name="topics_title">Onderwerpen</string>
     <string name="topics_empty_title">Nog geen onderwerpen</string>
-    <string name="topics_empty_body">Maak je eigen pad van 5 lessen of zoek onderwerpen van Zuno en de community.</string>
+    <string name="topics_empty_body">Maak je eigen lespad of zoek onderwerpen van Zuno en de community.</string>
     <string name="topics_create_cta">Onderwerp maken</string>
     <string name="topics_explore_cta">Ontdekken</string>
     <string name="topics_explore_section">Ontdek Zuno &amp; community</string>
@@ -320,7 +320,7 @@
     <string name="topics_official_badge">Zuno Officieel</string>
     <string name="topics_learners_count">%1$d leerlingen</string>
     <string name="topics_browse_empty_title">Geen onderwerpen voor “%1$s”</string>
-    <string name="topics_browse_empty_body">Maak samen met Sofía een pad van 5 lessen hierover.</string>
+    <string name="topics_browse_empty_body">Maak samen met Sofía een lespad hierover.</string>
     <string name="topics_create_query_cta">“%1$s” maken</string>
     <string name="topics_cat_all">Alles</string>
     <string name="topics_cat_travel">Reizen</string>

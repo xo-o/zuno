@@ -11,6 +11,8 @@ export const db = drizzle(pool, { schema: { ...authSchema, ...appSchema } });
 export async function ensureRuntimeSchema(): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   try {
+    await pool.query(`ALTER TABLE "topic" ADD COLUMN IF NOT EXISTS "level" text NOT NULL DEFAULT 'B1';`);
+    await pool.query(`ALTER TABLE "roleplay" ADD COLUMN IF NOT EXISTS "level" text NOT NULL DEFAULT 'B1';`);
     await pool.query(`ALTER TABLE "roleplay" ADD COLUMN IF NOT EXISTS "goals" jsonb;`);
     await pool.query(`ALTER TABLE "user_profile" ADD COLUMN IF NOT EXISTS "tutor_id" text NOT NULL DEFAULT 'sofia';`);
     await pool.query(`ALTER TABLE "user_profile" ADD COLUMN IF NOT EXISTS "allow_call_invites" boolean NOT NULL DEFAULT true;`);

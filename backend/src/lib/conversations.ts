@@ -12,7 +12,7 @@ import {
 import type { GeminiTurn } from "./gemini.js";
 import { stripLangTags } from "./bilingual-tts.js";
 import { updateProfile, type LearnerProfile } from "./profile.js";
-import { generateOpening, generateReply, LESSONS_PER_TOPIC, type ConversationContext } from "./tutor.js";
+import { DEFAULT_LESSONS_PER_TOPIC, generateOpening, generateReply, type ConversationContext } from "./tutor.js";
 
 export type ConversationRow = typeof conversation.$inferSelect;
 
@@ -50,7 +50,10 @@ export async function contextFor(row: ConversationRow): Promise<ConversationCont
   if (row.kind === "lesson" && row.lessonId && row.topicId) {
     const [lesson, parent] = await Promise.all([
       db.query.topicLesson.findFirst({ where: eq(topicLesson.id, row.lessonId) }),
-      db.query.topic.findFirst({ where: eq(topic.id, row.topicId) }),
+      db.query.topic.findFirst({
+        where: eq(topic.id, row.topicId),
+        with: { lessons: { columns: { id: true } } },
+      }),
     ]);
     if (lesson && parent) {
       return {
@@ -59,7 +62,7 @@ export async function contextFor(row: ConversationRow): Promise<ConversationCont
         lessonTitle: lesson.title,
         objective: lesson.objective,
         position: lesson.position,
-        total: LESSONS_PER_TOPIC,
+        total: parent.lessons.length || DEFAULT_LESSONS_PER_TOPIC,
         material: parent.material,
       };
     }

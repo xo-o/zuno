@@ -83,6 +83,7 @@ export const topic = pgTable(
     title: text("title").notNull(),
     translation: text("translation").notNull(),
     language: text("language").notNull(),
+    level: text("level").default("B1").notNull(),
     category: text("category", {
       enum: ["travel", "food", "work", "daily_life", "grammar", "culture"],
     })
@@ -193,6 +194,7 @@ export const roleplay = pgTable(
     aiRole: text("ai_role").notNull(),
     setting: text("setting").notNull(),
     language: text("language").notNull(),
+    level: text("level").default("B1").notNull(),
     goals: jsonb("goals").$type<RoleplayGoalItem[]>(),
     category: text("category", {
       enum: ["travel", "food", "work", "housing", "health", "social"],

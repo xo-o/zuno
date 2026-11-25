@@ -141,6 +141,20 @@ def create_stt(
     )
 
 
+CEFR_VOICE_GUIDANCE: dict[str, str] = {
+    "A1": "CEFR A1 (Beginner): use simple high-frequency everyday words, short present-tense sentences (4–8 words), and avoid idioms or complex clauses.",
+    "A2": "CEFR A2 (Elementary): use common everyday vocabulary, simple present/near-future/basic past forms, and short clear sentences without obscure slang.",
+    "B1": "CEFR B1 (Intermediate): use natural everyday plus travel/work vocabulary, past/future/polite conditional forms, and friendly follow-up questions.",
+    "B2": "CEFR B2 (Upper-Intermediate): use varied idiomatic vocabulary, opinions, hypotheticals, and natural conversational nuance.",
+    "C1": "CEFR C1 (Advanced): use authentic native register, subtle idioms, abstract ideas, and persuasive/nuanced phrasing without simplifying unnecessarily.",
+    "C2": "CEFR C2 (Mastery): use rich native-level phrasing, domain vocabulary, and subtle humor or register shifts.",
+}
+
+
+def cefr_voice_guidance(level: str) -> str:
+    return CEFR_VOICE_GUIDANCE.get((level or "B1").strip().upper(), CEFR_VOICE_GUIDANCE["B1"])
+
+
 def _build_voice_Guardrails(
     *,
     is_free_talk: bool,
@@ -149,8 +163,10 @@ def _build_voice_Guardrails(
     target_code: str,
     target_name: str,
     variety_name: str,
+    level: str = "B1",
     multi_stt_active: bool,
 ) -> str:
+    level_guide = cefr_voice_guidance(level)
     if is_free_talk:
         stt_rule = (
             ""
@@ -163,10 +179,12 @@ def _build_voice_Guardrails(
         )
         return (
             "CRITICAL FREE TALK VOICE & BILINGUAL RULES:\n"
+            f"- LEARNER LEVEL CALIBRATION: {level_guide}\n"
             f"- USER-LANGUAGE DEFAULT: Speak in {native_name} by default. "
             "Chat warmly and naturally about ANY topic the learner brings up (daily life, travel, culture, work, hobbies, grammar, or vocabulary).\n"
-            f"- SEAMLESS BILINGUAL SWITCHING: Include {target_name} ({variety_name}) words, phrases, or examples directly and naturally in your speech. "
-            f"If the learner speaks in {target_name} or asks to practice in {target_name}, mirror and converse in {target_name}, "
+            f"- SEAMLESS BILINGUAL SWITCHING: Include {target_name} ({variety_name}) words, phrases, or examples directly and naturally in your speech, "
+            f"strictly calibrated to CEFR {level}. "
+            f"If the learner speaks in {target_name} or asks to practice in {target_name}, mirror and converse in {target_name} at CEFR {level}, "
             f"switching back smoothly to {native_name} whenever they speak {native_name} or ask for help.\n"
             f"- PRONUNCIATION & 'HOW DO I SAY' COACHING: When the learner asks how to say or pronounce something in {target_name}, "
             f"give a brief 1-sentence tip in {native_name}, model the {target_name} phrase naturally, and invite them to try it. "
@@ -179,7 +197,8 @@ def _build_voice_Guardrails(
 
     return (
         "CRITICAL VOICE FORMATTING RULES:\n"
-        f"- Speak primarily in {target_name} ({variety_name}) unless clarification in {native_name} is needed.\n"
+        f"- LEARNER LEVEL CALIBRATION: {level_guide}\n"
+        f"- Speak primarily in {target_name} ({variety_name}) calibrated to CEFR {level} unless clarification in {native_name} is needed.\n"
         "- Keep responses short, concise, and natural: 1 to 2 sentences typically (under 140 characters).\n"
         "- NEVER output XML tags (<lang>), markdown headers (#), bold (**), italics (*), bullets (-), or numbered lists.\n"
         "- NEVER output stage directions like (laughs), (sighs), or romanization in parentheses.\n"
@@ -246,6 +265,7 @@ class ConversationalAgent(Agent):
             target_code=target_base,
             target_name=target_language_name,
             variety_name=self.variety_name,
+            level=self.level,
             multi_stt_active=multi_stt_active,
         )
         base_intro = (
@@ -340,21 +360,21 @@ class ConversationalAgent(Agent):
             self.session.generate_reply(
                 instructions=(
                     f"Say a warm, friendly 1-sentence hello in {self.native_language_name} "
-                    f"and invite the learner to talk about any topic, practice {self.target_language_name}, "
-                    "or ask how to say or pronounce anything."
+                    f"to a CEFR {self.level} {self.target_language_name} learner and invite them to talk about any topic, "
+                    f"practice {self.target_language_name} at their level, or ask how to say or pronounce anything."
                 )
             )
         elif self.tutor_instructions:
             self.session.generate_reply(
                 instructions=(
-                    f"Greet the learner in one short sentence in {self.target_language_name} "
+                    f"Greet the learner in one short sentence in {self.target_language_name} suited to CEFR {self.level} "
                     "and invite them to start, following your role."
                 )
             )
         else:
             self.session.generate_reply(
                 instructions=(
-                    f"Say a warm, brief one-sentence hello to the learner in {self.target_language_name} "
+                    f"Say a warm, brief one-sentence hello to the learner in {self.target_language_name} suited to CEFR {self.level} "
                     "and ask what they would like to talk about today."
                 )
             )

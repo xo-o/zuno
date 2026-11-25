@@ -305,7 +305,7 @@
     <!-- 03 · Topics & 04 · Roleplays -->
     <string name="topics_title">Tematy</string>
     <string name="topics_empty_title">Brak tematów</string>
-    <string name="topics_empty_body">Stwórz własną ścieżkę 5 lekcji lub wyszukaj tematy od Zuno i społeczności.</string>
+    <string name="topics_empty_body">Stwórz własną ścieżkę lekcji lub wyszukaj tematy od Zuno i społeczności.</string>
     <string name="topics_create_cta">Utwórz temat</string>
     <string name="topics_explore_cta">Odkrywaj</string>
     <string name="topics_explore_section">Odkrywaj Zuno i społeczność</string>

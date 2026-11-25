@@ -258,6 +258,61 @@ class ElevenLabsAndRoleplayTest(unittest.TestCase):
             "cjVigY5qzO86Huf0OWal",
         )
 
+    def test_cefr_level_calibration_in_free_talk_and_roleplay(self):
+        from agent import ConversationalAgent
+        from roleplay_flow import RoleplayAgent
+
+        a1_agent = ConversationalAgent(
+            language="es",
+            target_language_name="Spanish",
+            native_language="en",
+            native_language_name="English",
+            level="A1",
+            conversation_kind="freetalk",
+            teach_in_target=False,
+        )
+        self.assertIn("CEFR A1 (Beginner)", a1_agent.instructions)
+
+        c1_agent = ConversationalAgent(
+            language="es",
+            target_language_name="Spanish",
+            native_language="en",
+            native_language_name="English",
+            level="C1",
+            conversation_kind="freetalk",
+            teach_in_target=True,
+        )
+        self.assertIn("CEFR C1 (Advanced)", c1_agent.instructions)
+
+        async def _noop(ev):
+            pass
+
+        synth = ElevenLabsSynthesizer(api_key="test-key", tutor_id="sofia")
+        tts = create_elevenlabs_tts(synthesizer=synth)
+        orch_a1 = RoleplayOrchestrator(
+            meta={
+                "level": "A1",
+                "targetLanguage": "es",
+                "targetLanguageName": "Spanish",
+                "nativeLanguage": "en",
+                "nativeLanguageName": "English",
+                "roleplay": {
+                    "id": "rp-1",
+                    "title": "Ordering coffee",
+                    "scenario": "Order a coffee",
+                    "userRole": "Customer",
+                    "aiRole": "Barista",
+                    "setting": "A friendly neighborhood café.",
+                },
+            },
+            tts=tts,
+            synthesizer=synth,
+            broadcast=_noop,
+        )
+        rp_agent = RoleplayAgent(orchestrator=orch_a1, tts=tts, stt=None)
+        self.assertIn("CEFR A1 (Beginner)", rp_agent.instructions)
+        self.assertIn("LEVEL-APPROPRIATE REALISM", rp_agent.instructions)
+
 
 if __name__ == "__main__":
     unittest.main()

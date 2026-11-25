@@ -32,7 +32,8 @@ import {
   generateLessonCurriculum,
   generateTopic,
   generateTopicBuilderTurn,
-  LESSONS_PER_TOPIC,
+  MAX_LESSONS_PER_TOPIC,
+  MIN_LESSONS_PER_TOPIC,
   type GeneratedTopic,
 } from "../lib/tutor.js";
 
@@ -51,7 +52,7 @@ const draftTopicSchema = z.object({
   translation: z.string().trim().min(1).max(80),
   category: topicCategoryEnum.default("daily_life"),
   prompt: z.string().trim().min(2).max(200),
-  lessons: z.array(draftLessonSchema).length(LESSONS_PER_TOPIC),
+  lessons: z.array(draftLessonSchema).min(MIN_LESSONS_PER_TOPIC).max(MAX_LESSONS_PER_TOPIC),
 });
 
 const createSchema = z.object({
@@ -123,6 +124,7 @@ export async function persistAndWarmTopic(options: {
         title: options.generated.title,
         translation: options.generated.translation,
         language: options.profile.targetLanguage,
+        level: options.profile.level,
         category: options.generated.category ?? "daily_life",
         sourceKind: options.sourceKind ?? "user",
         sourceTopicId: options.sourceTopicId ?? null,
@@ -146,9 +148,10 @@ export async function persistAndWarmTopic(options: {
     return { ...created, lessons };
   });
 
-  // Pre-generate structured voice curricula in the background so Lesson 1..5 launch instantaneously.
+  // Pre-generate structured voice curricula in the background so lessons launch instantaneously.
   void (async () => {
     const ordered = [...row.lessons].sort((a, b) => a.position - b.position);
+    const totalLessons = ordered.length;
     for (const lesson of ordered) {
       try {
         const curriculum = await generateLessonCurriculum(
@@ -158,6 +161,7 @@ export async function persistAndWarmTopic(options: {
             lessonTranslation: lesson.translation,
             objective: lesson.objective,
             position: lesson.position,
+            totalLessons,
             material: trimmedMaterial,
           },
           options.profile,
@@ -272,7 +276,7 @@ export const topicRoutes = new Hono<AuthEnv>()
         category: row.category ?? "daily_life",
         sourceKind: row.sourceKind === "system" ? ("system" as const) : ("community" as const),
         authorHandle: row.authorHandle ?? "@learner",
-        level,
+        level: row.level || level,
         learnersCount: row.learnersCount ?? 0,
         totalLessons: ordered.length,
         shareUrl: topicShareUrlOf(row),
@@ -364,7 +368,7 @@ export const topicRoutes = new Hono<AuthEnv>()
         category: row.category ?? "daily_life",
         sourceKind: row.sourceKind === "system" ? "system" : "community",
         authorHandle: row.authorHandle ?? "@learner",
-        level,
+        level: row.level || level,
         learnersCount: row.learnersCount ?? 0,
         totalLessons: ordered.length,
         shareUrl: topicShareUrlOf(row),
@@ -502,6 +506,7 @@ export const topicRoutes = new Hono<AuthEnv>()
           title: source.title,
           translation: source.translation,
           language: source.language,
+          level: profile.level,
           category: source.category,
           visibility: "private",
           sourceKind: source.sourceKind === "system" ? "system" : "community",
@@ -511,6 +516,7 @@ export const topicRoutes = new Hono<AuthEnv>()
           material: null,
         })
         .returning();
+      const sameLevel = (source.level || "B1") === profile.level;
       const lessons = await tx
         .insert(topicLesson)
         .values(
@@ -521,7 +527,7 @@ export const topicRoutes = new Hono<AuthEnv>()
             title: l.title,
             translation: l.translation,
             objective: l.objective,
-            curriculum: l.curriculum ?? null,
+            curriculum: sameLevel ? (l.curriculum ?? null) : null,
           })),
         )
         .returning();

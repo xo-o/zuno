@@ -303,7 +303,7 @@
     <!-- 03 · Topics & 04 · Roleplays -->
     <string name="topics_title">Argomenti</string>
     <string name="topics_empty_title">Ancora nessun argomento</string>
-    <string name="topics_empty_body">Crea il tuo percorso di 5 lezioni o esplora gli argomenti di Zuno e della community.</string>
+    <string name="topics_empty_body">Crea il tuo percorso personalizzato o esplora gli argomenti di Zuno e della community.</string>
     <string name="topics_create_cta">Crea argomento</string>
     <string name="topics_explore_cta">Esplora</string>
     <string name="topics_explore_section">Esplora Zuno e community</string>
@@ -320,7 +320,7 @@
     <string name="topics_official_badge">Zuno Ufficiale</string>
     <string name="topics_learners_count">%1$d studenti</string>
     <string name="topics_browse_empty_title">Nessun argomento per “%1$s”</string>
-    <string name="topics_browse_empty_body">Crea un percorso su misura di 5 lezioni con Sofía.</string>
+    <string name="topics_browse_empty_body">Crea un percorso su misura con Sofía.</string>
     <string name="topics_create_query_cta">Crea “%1$s”</string>
     <string name="topics_cat_all">Tutti</string>
     <string name="topics_cat_travel">Viaggi</string>

@@ -608,7 +608,6 @@ private fun RecommendedTopicsBlock(
                 .fillMaxWidth()
                 .zunoGlassSubtle(shape),
         ) {
-            val lessonsLabel = stringResource(R.string.onboarding_lessons_count, 5)
             recommendedTopics.forEachIndexed { index, rec ->
                 val categoryTag = rec.reason.ifBlank { rec.translation }
                 Column(
@@ -628,7 +627,7 @@ private fun RecommendedTopicsBlock(
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
                         ) {
                             Text(rec.title, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
-                            Text("$categoryTag · $lessonsLabel", style = ZunoType.CaptionRegular, color = ZunoColors.TextTertiary)
+                            Text(categoryTag, style = ZunoType.CaptionRegular, color = ZunoColors.TextTertiary)
                         }
                         ZunoIcon(R.drawable.zuno_ic_chevron_right_muted, 16.dp)
                     }

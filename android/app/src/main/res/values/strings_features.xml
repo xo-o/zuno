@@ -553,8 +553,8 @@
     <string name="topics_preview_menu_report">Report topic</string>
     <string name="topics_builder_title">New topic</string>
     <string name="topics_builder_sender">Sofía · Topic builder</string>
-    <string name="topics_builder_greeting">Hey! What should your new topic be about? Tell me a situation or goal, or upload notes and PDFs — we’ll shape the 5 lessons together.</string>
-    <string name="topics_builder_greeting_named">Hey %1$s! What should your new topic be about? Tell me a situation or goal, or upload notes and PDFs — we’ll shape the 5 lessons together.</string>
+    <string name="topics_builder_greeting">Hey! What should your new topic be about? Tell me a situation or goal, or upload notes and PDFs — we’ll shape the lessons together.</string>
+    <string name="topics_builder_greeting_named">Hey %1$s! What should your new topic be about? Tell me a situation or goal, or upload notes and PDFs — we’ll shape the lessons together.</string>
     <string name="topics_builder_placeholder">Describe a topic or attach files…</string>
     <string name="topics_builder_refine_placeholder">Refine lessons or attach more notes…</string>
     <string name="topics_draft_eyebrow">DRAFT TOPIC · %1$d LESSONS</string>

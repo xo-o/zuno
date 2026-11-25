@@ -102,6 +102,7 @@ export const lessonRoutes = new Hono<AuthEnv>()
           lessonTranslation: lesson.translation,
           objective: lesson.objective,
           position: lesson.position,
+          totalLessons: sortedLessons.length,
           material: parent.material,
         },
         profile,
