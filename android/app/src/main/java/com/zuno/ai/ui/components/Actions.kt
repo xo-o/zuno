@@ -87,6 +87,7 @@ fun ZunoButton(
     @DrawableRes leadingIcon: Int? = null,
     leadingIconTint: Color? = null,
     @DrawableRes trailingIcon: Int? = null,
+    trailingIconTint: Color? = null,
     loading: Boolean = false,
 ) {
     val shape = CircleShape
@@ -115,7 +116,7 @@ fun ZunoButton(
             leadingIcon?.let { ZunoIcon(it, size.iconSize, tint = leadingIconTint) }
         }
         Text(text = label, style = textStyle, color = contentColor, maxLines = 1)
-        trailingIcon?.let { ZunoIcon(it, size.iconSize) }
+        trailingIcon?.let { ZunoIcon(it, size.iconSize, tint = trailingIconTint) }
     }
 }
 

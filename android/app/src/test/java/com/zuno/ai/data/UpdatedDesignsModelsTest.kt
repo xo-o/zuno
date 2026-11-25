@@ -1,5 +1,6 @@
 package com.zuno.ai.data
 
+import com.zuno.ai.ui.components.parseSyllables
 import com.zuno.ai.ui.screens.HomeCopy
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -112,5 +113,21 @@ class UpdatedDesignsModelsTest {
         assertEquals("Hola Noah, ¿qué practicamos hoy?", copy.fullGreeting)
         assertEquals("Hola, Noah", copy.shortGreeting)
         assertEquals("es-419", copy.speechTag)
+    }
+
+    @Test
+    fun parseSyllables_detectsStressedUppercaseSyllable() {
+        val parsed = parseSyllables("au·to·BÚS")
+        assertEquals(3, parsed.size)
+        assertEquals("au" to false, parsed[0])
+        assertEquals("to" to false, parsed[1])
+        assertEquals("BÚS" to true, parsed[2])
+    }
+
+    @Test
+    fun parseSyllables_singleUppercaseWordIsNotHighlightedAsMultiStress() {
+        val parsed = parseSyllables("MEET")
+        assertEquals(1, parsed.size)
+        assertEquals("MEET" to false, parsed[0])
     }
 }

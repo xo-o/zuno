@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -491,7 +492,7 @@ fun ZunoLessonRescueBar(
 }
 
 /**
- * Unified Lesson Coach Card (`2949:13391` .. `2949:13630`) rendered at the bottom of the
+ * Unified Lesson Coach Card (`7400:15220` .. `7400:15408`) rendered at the bottom of the
  * avatar voice lesson stage (`03a`–`03f`), adapting cleanly per pedagogical stage.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -508,7 +509,11 @@ fun ZunoLessonCoachCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .zunoGlassSubtle(cardShape)
+            .zunoGlassSubtle(
+                cardShape,
+                fillColor = ZunoColors.SurfaceDefault,
+                borderBrush = SolidColor(ZunoColors.BorderDefault),
+            )
             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
@@ -528,9 +533,9 @@ fun ZunoLessonCoachCard(
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                     ) {
                         syllables.forEach { (part, stressed) ->
-                            CoachTilePill(
+                            ZunoCoachTilePill(
                                 text = part,
-                                inverse = stressed,
+                                stressed = stressed,
                                 onClick = if (card.focusWord.isNotBlank()) {
                                     { onLessonAction("play_chunk", card.focusWord) }
                                 } else {
@@ -569,9 +574,9 @@ fun ZunoLessonCoachCard(
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                     ) {
                         syllables.forEach { (part, stressed) ->
-                            CoachTilePill(
+                            ZunoCoachTilePill(
                                 text = part,
-                                inverse = stressed,
+                                stressed = stressed,
                                 onClick = if (card.focusWord.isNotBlank()) {
                                     { onLessonAction("play_chunk", card.focusWord) }
                                 } else {
@@ -605,17 +610,26 @@ fun ZunoLessonCoachCard(
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                     ) {
                         if (card.newWord.isNotBlank()) {
-                            CoachTilePill(
+                            ZunoCoachTilePill(
                                 text = card.newWord,
-                                inverse = true,
+                                stressed = false,
+                                compactHorizontalPadding = true,
                                 onClick = { onLessonAction("play_chunk", card.newWord) },
                             )
                         }
                         if (card.meaning.isNotBlank()) {
-                            CoachTilePill(text = card.meaning, inverse = false)
+                            ZunoCoachTilePill(
+                                text = card.meaning,
+                                stressed = false,
+                                compactHorizontalPadding = true,
+                            )
                         }
                         if (card.stemHint.isNotBlank()) {
-                            CoachTilePill(text = card.stemHint, inverse = false)
+                            ZunoCoachTilePill(
+                                text = card.stemHint,
+                                stressed = false,
+                                compactHorizontalPadding = true,
+                            )
                         }
                     }
                 }
@@ -633,9 +647,9 @@ fun ZunoLessonCoachCard(
                 val firstWord = rescuePayload?.takeIf { it.action == "first_word" }?.text
                 when {
                     !revealed.isNullOrBlank() -> {
-                        CoachTilePill(
+                        ZunoCoachTilePill(
                             text = revealed,
-                            inverse = true,
+                            stressed = true,
                             onClick = { onLessonAction("play_chunk", revealed) },
                         )
                     }
@@ -646,9 +660,9 @@ fun ZunoLessonCoachCard(
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                             modifier = Modifier.alpha(pulseAlpha),
                         ) {
-                            CoachTilePill(text = firstWord, inverse = true)
+                            ZunoCoachTilePill(text = firstWord, stressed = true)
                             (prompt?.blankLengths ?: listOf(4, 5)).drop(1).forEach { len ->
-                                BlankCueTile(wordLength = len)
+                                ZunoBlankCueTile(wordLength = len)
                             }
                         }
                     }
@@ -659,7 +673,7 @@ fun ZunoLessonCoachCard(
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                         ) {
                             lengths.forEach { len ->
-                                BlankCueTile(wordLength = len)
+                                ZunoBlankCueTile(wordLength = len)
                             }
                         }
                     }
@@ -709,7 +723,11 @@ fun ZunoLessonCoachCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(promptRowShape)
+                            .zunoGlassSubtle(
+                                promptRowShape,
+                                fillColor = ZunoColors.SurfaceDefault,
+                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            )
                             .clickable(
                                 enabled = phraseText.isNotBlank(),
                                 role = Role.Button,
@@ -747,7 +765,11 @@ fun ZunoLessonCoachCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(promptRowShape)
+                            .zunoGlassSubtle(
+                                promptRowShape,
+                                fillColor = ZunoColors.SurfaceDefault,
+                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            )
                             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                     ) {
@@ -786,7 +808,7 @@ fun ZunoLessonCoachCard(
 }
 
 @Composable
-private fun CoachStageHeader(left: String, right: String) {
+internal fun CoachStageHeader(left: String, right: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -813,16 +835,25 @@ private fun CoachStageHeader(left: String, right: String) {
 }
 
 @Composable
-private fun CoachTilePill(
+internal fun ZunoCoachTilePill(
     text: String,
-    inverse: Boolean,
+    stressed: Boolean,
     onClick: (() -> Unit)? = null,
+    compactHorizontalPadding: Boolean = false,
 ) {
     val shape = RoundedCornerShape(ZunoRadius.lg)
-    val baseModifier = if (inverse) {
-        Modifier.clip(shape).background(ZunoColors.SurfaceInverse)
+    val baseModifier = if (stressed) {
+        Modifier.zunoGlassElevated(
+            shape = shape,
+            fillColor = ZunoColors.SurfaceStrong,
+            borderBrush = SolidColor(ZunoColors.BorderStrong),
+        )
     } else {
-        Modifier.zunoGlassSubtle(shape)
+        Modifier.zunoGlassSubtle(
+            shape = shape,
+            fillColor = ZunoColors.SurfaceDefault,
+            borderBrush = SolidColor(ZunoColors.BorderDefault),
+        )
     }
     Box(
         modifier = baseModifier
@@ -833,25 +864,32 @@ private fun CoachTilePill(
                     Modifier
                 },
             )
-            .padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s4),
+            .padding(
+                horizontal = if (compactHorizontalPadding) ZunoSpace.s10 else ZunoSpace.s12,
+                vertical = ZunoSpace.s4,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
-            style = ZunoType.FootnoteStrong,
-            color = if (inverse) ZunoColors.TextOnInverse else ZunoColors.TextPrimary,
+            style = if (stressed) ZunoType.FootnoteStrong.copy(fontWeight = FontWeight.SemiBold) else ZunoType.FootnoteStrong,
+            color = ZunoColors.TextPrimary,
             maxLines = 1,
         )
     }
 }
 
 @Composable
-private fun BlankCueTile(wordLength: Int) {
+internal fun ZunoBlankCueTile(wordLength: Int) {
     val shape = RoundedCornerShape(ZunoRadius.md)
     val dashes = List(wordLength.coerceIn(2, 7)) { "_" }.joinToString(" ")
     Box(
         modifier = Modifier
-            .zunoGlassSubtle(shape)
+            .zunoGlassSubtle(
+                shape = shape,
+                fillColor = ZunoColors.SurfaceDefault,
+                borderBrush = SolidColor(ZunoColors.BorderDefault),
+            )
             .padding(horizontal = ZunoSpace.s10, vertical = ZunoSpace.s4),
         contentAlignment = Alignment.Center,
     ) {
@@ -864,7 +902,7 @@ private fun BlankCueTile(wordLength: Int) {
     }
 }
 
-private fun parseSyllables(raw: String): List<Pair<String, Boolean>> {
+internal fun parseSyllables(raw: String): List<Pair<String, Boolean>> {
     val parts = raw.split("·").map { it.trim() }.filter { it.isNotEmpty() }
     if (parts.isEmpty()) return emptyList()
     return parts.map { part ->

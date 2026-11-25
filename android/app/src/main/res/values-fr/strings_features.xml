@@ -603,4 +603,19 @@
     <string name="live_rooms_menu_end_all">Fermer le salon pour tous</string>
     <string name="live_rooms_zuno_prompt_sender">Zuno · Question du système</string>
     <string name="live_rooms_end_btn">Quitter</string>
+
+    <!-- Live Waveform Pill & Sprint -->
+    <string name="voice_pill_speaking">%1$s parle</string>
+    <string name="voice_pill_speak_interrupt">· Parlez pour interrompre</string>
+    <string name="voice_pill_listening">À l’écoute</string>
+    <string name="voice_pill_speak_anytime">· Parlez librement</string>
+    <string name="voice_pill_hearing_you">Je vous entends…</string>
+    <string name="voice_pill_thinking">Réflexion…</string>
+    <string name="voice_pill_loading">Chargement voix…</string>
+    <string name="voice_pill_error">Connexion perdue</string>
+    <string name="voice_pill_muted">Muet</string>
+    <string name="voice_pill_tap_unmute">· Touchez le micro</string>
+    <string name="vocab_sprint_next_phrase">Phrase suivante</string>
+    <string name="vocab_sprint_mastered_feedback">Maîtrisée · Prochaine révision dans %1$s</string>
+    <string name="vocab_sprint_retry_feedback">%1$s · Réinitialisée pour demain</string>
 </resources>

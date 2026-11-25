@@ -612,6 +612,7 @@ fun ZunoApp(
     val localVideoTrack by viewModel.localVideoTrack.collectAsStateWithLifecycle()
     val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsStateWithLifecycle()
     val partnerJoined by viewModel.partnerJoined.collectAsStateWithLifecycle()
+    val activeSpeaker by viewModel.activeSpeaker.collectAsStateWithLifecycle()
     val voiceError by viewModel.errorMessage.collectAsStateWithLifecycle()
     val lessonStage by viewModel.lessonStage.collectAsStateWithLifecycle()
     val lessonTurns by viewModel.lessonTurns.collectAsStateWithLifecycle()
@@ -2270,6 +2271,9 @@ fun ZunoApp(
                                 voiceKey = activeTutor.id,
                             )
                         },
+                        userAudioLevel = { viewModel.userAudioLevel.value },
+                        activeSpeaker = activeSpeaker,
+                        hasError = !voiceError.isNullOrBlank(),
                         modifier = screenModifier,
                     )
                 }
@@ -2754,6 +2758,9 @@ fun ZunoApp(
                         },
                         onInterrupt = { viewModel.interrupt() },
                         onToggleMute = { viewModel.toggleMute() },
+                        userAudioLevel = { viewModel.userAudioLevel.value },
+                        activeSpeaker = activeSpeaker,
+                        hasError = !voiceError.isNullOrBlank(),
                         modifier = screenModifier,
                     )
                 }
@@ -2851,6 +2858,9 @@ fun ZunoApp(
                         },
                         onInterrupt = { viewModel.interrupt() },
                         onToggleMute = { viewModel.toggleMute() },
+                        userAudioLevel = { viewModel.userAudioLevel.value },
+                        activeSpeaker = activeSpeaker,
+                        hasError = !voiceError.isNullOrBlank(),
                         modifier = screenModifier,
                     )
                 }

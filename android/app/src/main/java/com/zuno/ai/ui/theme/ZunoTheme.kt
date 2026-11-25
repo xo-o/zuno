@@ -89,9 +89,11 @@ object ZunoColors {
     val Divider = Color(0x24FFFFFF) // white-alpha/14
     val DividerSubtle = Color(0x14FFFFFF) // white-alpha/8
 
-    // Danger (destructive confirm, "Delete" menu item)
+    // Danger (destructive confirm, "Delete" menu item, Error status pill)
     val SurfaceDanger = Red500
     val TextDanger = Red300
+    val DangerSurface = Color(0x24D15555) // rgba(209,85,85,0.14)
+    val DangerBorder = Color(0x52FF8B8B) // rgba(255,139,139,0.32)
 
     // Glow
     val GlowDeep = Gray4

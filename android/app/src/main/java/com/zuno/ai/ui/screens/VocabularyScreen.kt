@@ -8,6 +8,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,7 +40,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -54,20 +58,27 @@ import com.zuno.ai.data.VocabLibrary
 import com.zuno.ai.data.VocabPhrase
 import com.zuno.ai.data.VocabPreview
 import com.zuno.ai.ui.components.CallAvatarItem
+import com.zuno.ai.ui.components.CoachStageHeader
+import com.zuno.ai.ui.components.TurnPillState
 import com.zuno.ai.ui.components.ZunoAssistantBubble
+import com.zuno.ai.ui.components.ZunoBlankCueTile
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
 import com.zuno.ai.ui.components.ZunoButtonVariant
 import com.zuno.ai.ui.components.ZunoCallControlsBar
 import com.zuno.ai.ui.components.ZunoCallTopBar
 import com.zuno.ai.ui.components.ZunoChip
+import com.zuno.ai.ui.components.ZunoCoachTilePill
 import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
+import com.zuno.ai.ui.components.ZunoFeedbackPill
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButtonSize
 import com.zuno.ai.ui.components.ZunoSectionTopBar
 import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.components.ZunoTextField
+import com.zuno.ai.ui.components.ZunoTurnPillRow
 import com.zuno.ai.ui.components.ZunoUserBubble
+import com.zuno.ai.ui.components.parseSyllables
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
@@ -752,11 +763,13 @@ fun VocabularyScreen(
 /**
  * `11.2–11.4` & `11.15 · Sprint — No Captions (Avatar Only)` (`7352:15637`).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VocabularySprintScreen(
     phrases: List<VocabPhrase>,
     languageName: String,
     tutor: TutorAvatarProfile = LocalActiveTutor.current,
+    isSpeaking: Boolean = false,
     onSpeakPhrase: (String) -> Unit,
     onSlowSpeakPhrase: (String) -> Unit,
     onReviewPhrase: (phraseId: String, passed: Boolean) -> Unit,
@@ -768,6 +781,7 @@ fun VocabularySprintScreen(
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
     var showHint by rememberSaveable(currentIndex) { mutableStateOf(false) }
     var revealed by rememberSaveable(currentIndex) { mutableStateOf(false) }
+    var matchedInterval by rememberSaveable(currentIndex) { mutableStateOf<String?>(null) }
     var captionsOn by rememberSaveable { mutableStateOf(true) }
     var isMuted by rememberSaveable { mutableStateOf(false) }
     var isCameraOn by rememberSaveable { mutableStateOf(false) }
@@ -789,21 +803,32 @@ fun VocabularySprintScreen(
 
     val current = deck.getOrNull(currentIndex) ?: deck.first()
 
-    fun recordResult(passed: Boolean) {
+    fun nextIntervalFor(passed: Boolean): String = if (!passed) "Tomorrow" else when (current.streak) {
+        0 -> "1d"
+        1 -> "3d"
+        2 -> "7d"
+        3 -> "14d"
+        else -> "30d"
+    }
+
+    fun advanceOrFinish(passed: Boolean) {
         onReviewPhrase(current.id, passed)
-        val nextInterval = if (!passed) "Tomorrow" else when (current.streak) {
-            0 -> "1d"
-            1 -> "3d"
-            2 -> "7d"
-            3 -> "14d"
-            else -> "30d"
-        }
-        results.add(SprintReviewResult(current, passed, nextInterval))
+        results.add(SprintReviewResult(current, passed, nextIntervalFor(passed)))
         if (currentIndex + 1 < deck.size) {
             currentIndex += 1
         } else {
             onFinishSprint(results.toList())
         }
+    }
+
+    fun markMasteredAndShowInterval() {
+        matchedInterval = nextIntervalFor(true)
+    }
+
+    val sprintPillState = when {
+        isSpeaking -> TurnPillState.Speaking
+        isMuted -> TurnPillState.Muted
+        else -> TurnPillState.Listening
     }
 
     Column(
@@ -837,7 +862,7 @@ fun VocabularySprintScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s8),
-                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
             ) {
                 Column(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
@@ -847,33 +872,45 @@ fun VocabularySprintScreen(
                         ZunoUserBubble(
                             message = "“${prev.phrase.phrase}”",
                             senderLabel = "You · Phrase ${results.size} · ${if (prev.passed) "+${prev.nextIntervalLabel}" else "Retry"}",
+                            modifier = Modifier.alpha(0.78f),
                         )
                     }
 
                     val cueText = current.recallCue?.takeIf { it.isNotBlank() } ?: "“${current.translation}”"
-                    ZunoAssistantBubble(
-                        message = cueText,
-                        senderLabel = "${tutor.displayName} · Recall cue",
-                        onListen = { showHint = true },
-                        listenLabel = stringResource(R.string.lesson_bubble_first_word),
-                        listenIcon = R.drawable.zuno_ic_sparkles,
-                        onExplain = {
-                            revealed = true
-                            onSpeakPhrase(current.phrase)
-                        },
-                        explainLabel = stringResource(R.string.lesson_bubble_reveal),
-                        explainIcon = R.drawable.zuno_ic_t_book_open,
-                    )
-
-                    if (showHint && !revealed) {
-                        val firstWord = current.phrase.trim().split(Regex("\\s+")).firstOrNull().orEmpty()
-                        ZunoUserBubble(
-                            message = "$firstWord …",
-                            senderLabel = "First word hint",
+                    if (!revealed && matchedInterval == null) {
+                        ZunoAssistantBubble(
+                            message = cueText,
+                            senderLabel = "${tutor.displayName} · Recall cue",
+                            onListen = { showHint = true },
+                            listenLabel = stringResource(R.string.lesson_bubble_first_word),
+                            listenIcon = R.drawable.zuno_ic_sparkles,
+                            onExplain = {
+                                revealed = true
+                                onSpeakPhrase(current.phrase)
+                            },
+                            explainLabel = stringResource(R.string.lesson_bubble_reveal),
+                            explainIcon = R.drawable.zuno_ic_t_book_open,
                         )
-                    }
-
-                    if (revealed) {
+                    } else if (matchedInterval != null) {
+                        ZunoAssistantBubble(
+                            message = cueText,
+                            senderLabel = "${tutor.displayName} · Recall cue",
+                            onListen = { onSpeakPhrase(current.phrase) },
+                            listenLabel = stringResource(R.string.voice_chip_listen),
+                            listenIcon = R.drawable.zuno_ic_t_volume,
+                            onExplain = { onSlowSpeakPhrase(current.phrase) },
+                            explainLabel = stringResource(R.string.voice_chip_speed_slow),
+                            explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                        )
+                        ZunoUserBubble(
+                            message = "“${current.phrase}”",
+                            senderLabel = "You · 94% match · +$matchedInterval",
+                        )
+                        ZunoFeedbackPill(
+                            text = stringResource(R.string.vocab_sprint_mastered_feedback, matchedInterval!!),
+                            fillWidth = true,
+                        )
+                    } else {
                         ZunoAssistantBubble(
                             message = current.phrase,
                             translation = current.translation,
@@ -885,75 +922,145 @@ fun VocabularySprintScreen(
                             explainLabel = stringResource(R.string.voice_chip_speed_slow),
                             explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.CenterEnd,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl))
-                                    .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s12),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.vocab_sprint_say_memory, languageName),
-                                    style = ZunoType.BodyMedium,
-                                    color = ZunoColors.TextTertiary,
-                                )
-                            }
+                        val stressLabel = current.syllableStress?.takeIf { it.isNotBlank() }
+                        if (stressLabel != null) {
+                            ZunoFeedbackPill(
+                                text = stringResource(R.string.vocab_sprint_retry_feedback, stressLabel),
+                                fillWidth = true,
+                            )
                         }
+                    }
+
+                    if (showHint && !revealed && matchedInterval == null) {
+                        val firstWord = current.phrase.trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+                        ZunoUserBubble(
+                            message = "$firstWord …",
+                            senderLabel = "First word hint",
+                        )
                     }
                 }
 
-                // Bottom Recall / Shadow Coach Card (`2733:12889` & `2733:13086`)
+                ZunoTurnPillRow(
+                    state = sprintPillState,
+                    speakerName = tutor.displayName,
+                    audioLevel = { if (isSpeaking) 0.55f else 0.12f },
+                    userAudioLevel = { 0.12f },
+                    onClick = if (sprintPillState == TurnPillState.Muted) {
+                        { isMuted = !isMuted }
+                    } else {
+                        null
+                    },
+                )
+
+                // Bottom Sprint Coach Card (`2733:12889`, `2733:12957`, `2733:13086`)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl))
-                        .padding(ZunoSpace.s14),
-                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+                        .zunoGlassSubtle(
+                            RoundedCornerShape(ZunoRadius.xxxl),
+                            fillColor = ZunoColors.SurfaceDefault,
+                            borderBrush = SolidColor(ZunoColors.BorderDefault),
+                        )
+                        .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
+                    verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = if (revealed) {
-                                "Shadow · Phrase ${currentIndex + 1} of ${deck.size}"
-                            } else {
-                                "Recall · Phrase ${currentIndex + 1} of ${deck.size}"
-                            },
-                            style = ZunoType.LabelSmall,
-                            color = ZunoColors.TextPrimary,
-                        )
-                        Text(
-                            text = current.syllableStress?.takeIf { revealed && it.isNotBlank() } ?: current.source,
-                            style = ZunoType.FootnoteRegular,
-                            color = ZunoColors.TextTertiary,
-                        )
+                    val headerLeft = if (revealed && matchedInterval == null) {
+                        "Shadow · Phrase ${currentIndex + 1} of ${deck.size}"
+                    } else {
+                        "Recall · Phrase ${currentIndex + 1} of ${deck.size}"
                     }
+                    val headerRight = current.syllableStress?.takeIf { revealed && matchedInterval == null && it.isNotBlank() }
+                        ?: current.source
+                    CoachStageHeader(left = headerLeft, right = headerRight)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
-                    ) {
-                        ZunoChip(
-                            label = stringResource(R.string.vocab_sprint_got_it),
-                            leadingIcon = R.drawable.zuno_ic_t_check,
-                            selected = true,
-                            onClick = { recordResult(true) },
-                        )
-                        ZunoChip(
-                            label = stringResource(R.string.vocab_sprint_retry),
-                            leadingIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
-                            onClick = { recordResult(false) },
-                        )
-                        ZunoChip(
-                            label = stringResource(R.string.voice_chip_listen),
-                            leadingIcon = R.drawable.zuno_ic_t_volume,
-                            onClick = { onSpeakPhrase(current.phrase) },
-                        )
+                    when {
+                        matchedInterval != null -> {
+                            ZunoButton(
+                                label = stringResource(R.string.vocab_sprint_next_phrase),
+                                onClick = { advanceOrFinish(true) },
+                                size = ZunoButtonSize.Small,
+                                trailingIcon = R.drawable.zuno_ic_t_arrow_right,
+                                trailingIconTint = ZunoColors.TextOnInverse,
+                            )
+                        }
+                        revealed -> {
+                            val syllables = parseSyllables(current.syllableStress.orEmpty())
+                            val words = current.phrase.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            ) {
+                                syllables.forEach { (part, stressed) ->
+                                    ZunoCoachTilePill(
+                                        text = part,
+                                        stressed = stressed,
+                                        onClick = { onSpeakPhrase(current.phrase) },
+                                    )
+                                }
+                                if (words.size >= 2) {
+                                    ZunoChip(
+                                        label = words.take(2).joinToString(" "),
+                                        leadingIcon = R.drawable.zuno_ic_t_volume,
+                                        onClick = { onSpeakPhrase(words.take(2).joinToString(" ")) },
+                                    )
+                                }
+                                ZunoChip(
+                                    label = stringResource(R.string.vocab_sprint_got_it),
+                                    leadingIcon = R.drawable.zuno_ic_t_check,
+                                    selected = true,
+                                    onClick = { advanceOrFinish(true) },
+                                )
+                                ZunoChip(
+                                    label = stringResource(R.string.vocab_sprint_retry),
+                                    leadingIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                    onClick = { advanceOrFinish(false) },
+                                )
+                            }
+                        }
+                        else -> {
+                            val blankLengths = remember(current.id) {
+                                current.phrase.trim()
+                                    .split(Regex("\\s+"))
+                                    .filter { it.isNotEmpty() }
+                                    .take(4)
+                                    .map { it.length.coerceIn(2, 7) }
+                                    .ifEmpty { listOf(5, 4, 6) }
+                            }
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            ) {
+                                blankLengths.forEach { len ->
+                                    ZunoBlankCueTile(wordLength = len)
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                            ) {
+                                ZunoChip(
+                                    label = stringResource(R.string.vocab_sprint_got_it),
+                                    leadingIcon = R.drawable.zuno_ic_t_check,
+                                    selected = true,
+                                    onClick = { markMasteredAndShowInterval() },
+                                )
+                                ZunoChip(
+                                    label = stringResource(R.string.vocab_sprint_retry),
+                                    leadingIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                    onClick = {
+                                        revealed = true
+                                        onSpeakPhrase(current.phrase)
+                                    },
+                                )
+                                ZunoChip(
+                                    label = stringResource(R.string.voice_chip_listen),
+                                    leadingIcon = R.drawable.zuno_ic_t_volume,
+                                    onClick = { onSpeakPhrase(current.phrase) },
+                                )
+                            }
+                        }
                     }
                 }
             }

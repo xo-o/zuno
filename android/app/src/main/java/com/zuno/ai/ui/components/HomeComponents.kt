@@ -707,6 +707,7 @@ fun ZunoVoiceWaveform(
     active: Boolean,
     audioLevel: () -> Float,
     modifier: Modifier = Modifier,
+    color: Color = ZunoColors.IconPrimary,
 ) {
     val currentLevel by rememberUpdatedState(audioLevel)
     val currentActive by rememberUpdatedState(active)
@@ -716,11 +717,12 @@ fun ZunoVoiceWaveform(
         var last = 0L
         while (true) {
             withFrameNanos { now ->
-                val dt = if (last == 0L) 0f else ((now - last) / 1_000_000_000f).coerceAtMost(0.1f)
+                val dt = if (last == 0L) 0.016f else ((now - last) / 1_000_000_000f).coerceAtMost(0.08f)
                 last = now
                 val target = if (currentActive) maxOf(currentLevel().coerceIn(0f, 1f), 0.25f) else 0.12f
-                motion.smoothed += (target - motion.smoothed) * (dt * 12f).coerceIn(0f, 1f)
-                motion.phase += dt * (if (currentActive) 7.5f else 2.0f)
+                val rate = if (target > motion.smoothed) 16f else 8f
+                motion.smoothed += (target - motion.smoothed) * (1f - kotlin.math.exp(-rate * dt))
+                motion.phase += dt * (if (currentActive) 7.5f else 2.2f)
             }
         }
     }
@@ -732,7 +734,6 @@ fun ZunoVoiceWaveform(
             0.75f, 0.50f, 0.34f, 0.58f, 0.84f, 0.66f, 0.42f, 0.25f, 0.18f, 0.18f,
         )
     }
-    val barColor = ZunoColors.IconPrimary
 
     Canvas(modifier = modifier.height(14.dp)) {
         val count = baseProfile.size
@@ -753,7 +754,7 @@ fun ZunoVoiceWaveform(
             val x = i * (barWidth + gap)
             val top = (size.height - barHeight) / 2f
             drawRoundRect(
-                color = barColor,
+                color = color,
                 topLeft = Offset(x, top),
                 size = Size(barWidth, barHeight),
                 cornerRadius = CornerRadius(radius, radius),

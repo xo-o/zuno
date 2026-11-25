@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -193,7 +194,11 @@ fun ZunoTabbedCoachCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .zunoGlassSubtle(cardShape)
+            .zunoGlassSubtle(
+                cardShape,
+                fillColor = ZunoColors.SurfaceDefault,
+                borderBrush = SolidColor(ZunoColors.BorderDefault),
+            )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
     ) {
@@ -231,9 +236,13 @@ fun ZunoTabbedCoachCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassElevated(rowShape)
+                        .zunoGlassSubtle(
+                            rowShape,
+                            fillColor = ZunoColors.SurfaceDefault,
+                            borderBrush = SolidColor(ZunoColors.BorderDefault),
+                        )
                         .clickable(role = Role.Button, onClick = { onSpeakPhrase(item.phrase) })
-                        .padding(horizontal = ZunoSpace.s12, vertical = 9.dp),
+                        .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
                 ) {
                     Row(
@@ -253,7 +262,7 @@ fun ZunoTabbedCoachCard(
                     }
                     Text(
                         text = item.translation,
-                        style = ZunoType.Micro,
+                        style = ZunoType.FootnoteRegular,
                         color = ZunoColors.TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

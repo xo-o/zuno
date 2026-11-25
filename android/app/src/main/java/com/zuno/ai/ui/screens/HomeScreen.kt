@@ -328,7 +328,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(Modifier.height(if (ongoingCallBanner != null) ZunoSpace.s12 else 68.dp))
+            Spacer(Modifier.height(if (ongoingCallBanner != null) ZunoSpace.s12 else 70.dp))
 
             // Agent Horizon (`7297:11494` in `7365:20293`)
             val holdLabel = stringResource(R.string.home_hold_glow_to_talk)
@@ -410,7 +410,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = ZunoSpace.s24)
-                        .padding(bottom = 48.dp),
+                        .padding(bottom = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {

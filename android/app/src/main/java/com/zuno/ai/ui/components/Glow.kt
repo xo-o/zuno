@@ -32,8 +32,6 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
@@ -42,7 +40,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -55,7 +52,6 @@ import androidx.compose.ui.unit.dp
 import com.zuno.ai.ui.theme.ZunoColors
 import kotlin.math.PI
 import kotlin.math.ceil
-import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -195,13 +191,12 @@ private fun rememberGlowMotion(
 
 private const val TWO_PI = (2.0 * PI).toFloat()
 private const val BREATH_PERIOD = 7f
-private const val BAND_COUNT = 3
 
 // Exact Figma Agent Horizon (`7297:11494`) Base gradient & Sheen stops for Mono (`7365:20294`) & Cobalt (`7383:13321`).
-private val MonoBaseOffsets = floatArrayOf(0f, 0.22f, 0.40f, 0.56f, 0.72f, 0.86f, 1.00f)
+private val BaseOffsets = floatArrayOf(0f, 0.22f, 0.40f, 0.56f, 0.72f, 0.86f, 1.00f)
 private val MonoBaseColors = arrayOf(
-    Color(0x00242424),
-    Color(0x00242424),
+    Color(0x00242424), // 0%
+    Color(0x00242424), // 0%
     Color(0x24242424), // 14%
     Color(0x66292929), // 40%
     Color(0xB83B3B3B), // 72%
@@ -209,8 +204,8 @@ private val MonoBaseColors = arrayOf(
     Color(0xFF595959), // 100%
 )
 private val CobaltBaseColors = arrayOf(
-    Color(0x001A307A),
-    Color(0x001A307A),
+    Color(0x001A307A), // 0%
+    Color(0x001A307A), // 0%
     Color(0x241F3D9E), // 14%
     Color(0x66264FC7), // 40%
     Color(0xB8305CE6), // 72%
@@ -218,47 +213,58 @@ private val CobaltBaseColors = arrayOf(
     Color(0xFF4775FF), // 100%
 )
 
-private val MonoSheenInner = Color(0xFFCCCCCC)
-private val MonoSheenMid = Color(0x7A8A8A8A) // 48%
-private val MonoSheenOuter = Color(0x00595959)
+private val SheenOffsets = floatArrayOf(0f, 0.42f, 1.00f)
+private val MonoSheenColors = arrayOf(
+    Color(0xFFCCCCCC), // 100%
+    Color(0x7A8A8A8A), // 48%
+    Color(0x00595959), // 0%
+)
+private val CobaltSheenColors = arrayOf(
+    Color(0xFFB8E3FF), // 100%
+    Color(0x7A54B5FF), // 48%
+    Color(0x003D6BFF), // 0%
+)
 
-private val CobaltSheenInner = Color(0xFFB8E3FF)
-private val CobaltSheenMid = Color(0x7A54B5FF) // 48%
-private val CobaltSheenOuter = Color(0x003D6BFF)
-
-private const val BASE_SAMPLE_COUNT = 21
-private const val SHEEN_SAMPLE_COUNT = 17
+private const val BASE_SAMPLE_COUNT = 33
+private const val SHEEN_SAMPLE_COUNT = 33
 
 /**
  * Agent Horizon glow — mirrors the Figma "Horizon" (`7297:11494`) component:
- * 1) 7-stop vertical base gradient sampled smoothly with hardware dithering (`Mono`: `#242424`→`#595959`;
- *    `Cobalt`: `#1A307A`→`#4775FF`).
- * 2) Elliptical radial sheen anchored at bottom-center with cosine-eased stops & dithering
+ * 1) 7-stop vertical base gradient (`Mono` `7365:20294`: `#242424`→`#595959`;
+ *    `Cobalt` `7383:13321`: `#1A307A`→`#4775FF`).
+ * 2) Elliptical radial sheen anchored at bottom-center (`translate(w/2, h) scale(0.62*w, 0.48*h)`)
  *    (`Mono`: `#CCCCCC`→`#8A8A8A`→`#595959`; `Cobalt`: `#B8E3FF`→`#54B5FF`→`#3D6BFF`).
  *
- * Smoothly cross-fades all stops between [GlowTheme.Mono] and [GlowTheme.Cobalt], drifts gently
- * at rest, and rises/brightens in proportion to [audioLevel] while talking.
+ * Resamples stops using straight (unpremultiplied) sRGB linear interpolation so Android's Skia
+ * premultiplied shader matches Figma's straight-sRGB gradient blending pixel-for-pixel without a
+ * brightness halo at `0.42`. Transitions between [GlowTheme.Mono] and [GlowTheme.Cobalt] and dim
+ * states ([Cancelling]/[Disabled]) use smooth color and brightness easing only (no waving).
  */
 @Composable
 fun ZunoAgentGlow(
     state: AgentGlowState,
     modifier: Modifier = Modifier,
-    audioLevel: () -> Float = { 0f },
+    @Suppress("UNUSED_PARAMETER") audioLevel: () -> Float = { 0f },
     intensity: Float = 1f,
     theme: GlowTheme = GlowTheme.Mono,
     @Suppress("UNUSED_PARAMETER") canvasColor: Color = ZunoColors.BgCanvas,
     shape: Shape = RoundedCornerShape(40.dp),
 ) {
-    val tune = animatedTune(state, intensity)
-    val targetThemeFraction = if (theme == GlowTheme.Cobalt) 1f else 0f
+    val targetBrightness = when (state) {
+        AgentGlowState.Cancelling -> 0.50f
+        AgentGlowState.Disabled -> 0.45f
+        else -> 1.00f
+    } * intensity
+    val brightness = animateFloatAsState(
+        targetValue = targetBrightness.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 850, easing = GlowStateEasing),
+        label = "glowBrightness",
+    )
     val themeFraction = animateFloatAsState(
-        targetValue = targetThemeFraction,
+        targetValue = if (theme == GlowTheme.Cobalt) 1f else 0f,
         animationSpec = tween(durationMillis = 1050, easing = GlowThemeEasing),
         label = "glowThemeFraction",
     )
-    val isTransitioning = kotlin.math.abs(themeFraction.value - targetThemeFraction) > 0.001f ||
-        kotlin.math.abs(tune.lift.value - tuneFor(state).lift) > 0.001f
-    val motion = rememberGlowMotion(state, tune, audioLevel, activeTransition = isTransitioning)
 
     Spacer(
         modifier
@@ -272,8 +278,7 @@ fun ZunoAgentGlow(
                 val sheenArgbs = IntArray(SHEEN_SAMPLE_COUNT)
                 onDrawBehind {
                     drawHorizon(
-                        motion = motion,
-                        tune = tune,
+                        brightness = brightness.value,
                         themeFraction = themeFraction.value,
                         paint = ditherPaint,
                         sheenMatrix = sheenMatrix,
@@ -287,37 +292,18 @@ fun ZunoAgentGlow(
     )
 }
 
-private fun smoothCosine(t: Float): Float = 0.5f - 0.5f * cos(t.coerceIn(0f, 1f) * PI.toFloat())
-
-/** Premultiplied sRGB interpolation so transparent stops blend without hue artifacts. */
-private fun lerpPremultiplied(a: Color, b: Color, t: Float): Color {
+/** Straight (unpremultiplied) sRGB interpolation matching Figma's CSS/canvas gradient math. */
+private fun lerpStraight(a: Color, b: Color, t: Float): Color {
     val u = t.coerceIn(0f, 1f)
-    val aa = a.alpha
-    val ba = b.alpha
-    val outA = aa + (ba - aa) * u
-    if (outA <= 0.0001f) {
-        return Color(
-            red = a.red + (b.red - a.red) * u,
-            green = a.green + (b.green - a.green) * u,
-            blue = a.blue + (b.blue - a.blue) * u,
-            alpha = 0f,
-        )
-    }
-    val ar = a.red * aa
-    val ag = a.green * aa
-    val ab = a.blue * aa
-    val br = b.red * ba
-    val bg = b.green * ba
-    val bb = b.blue * ba
     return Color(
-        red = ((ar + (br - ar) * u) / outA).coerceIn(0f, 1f),
-        green = ((ag + (bg - ag) * u) / outA).coerceIn(0f, 1f),
-        blue = ((ab + (bb - ab) * u) / outA).coerceIn(0f, 1f),
-        alpha = outA.coerceIn(0f, 1f),
+        red = (a.red + (b.red - a.red) * u).coerceIn(0f, 1f),
+        green = (a.green + (b.green - a.green) * u).coerceIn(0f, 1f),
+        blue = (a.blue + (b.blue - a.blue) * u).coerceIn(0f, 1f),
+        alpha = (a.alpha + (b.alpha - a.alpha) * u).coerceIn(0f, 1f),
     )
 }
 
-private fun sampleSmoothRamp(
+private fun sampleStraightRamp(
     offsets: FloatArray,
     colors: Array<Color>,
     u: Float,
@@ -329,16 +315,15 @@ private fun sampleSmoothRamp(
         val x0 = offsets[i]
         val x1 = offsets[i + 1]
         if (u <= x1) {
-            val local = ((u - x0) / (x1 - x0).coerceAtLeast(0.0001f)).coerceIn(0f, 1f)
-            return lerpPremultiplied(colors[i], colors[i + 1], smoothCosine(local))
+            val f = ((u - x0) / (x1 - x0).coerceAtLeast(0.0001f)).coerceIn(0f, 1f)
+            return lerpStraight(colors[i], colors[i + 1], f)
         }
     }
     return colors[last]
 }
 
 private fun DrawScope.drawHorizon(
-    motion: GlowMotion,
-    tune: AnimatedTune,
+    brightness: Float,
     themeFraction: Float,
     paint: NativePaint,
     sheenMatrix: NativeMatrix,
@@ -350,38 +335,17 @@ private fun DrawScope.drawHorizon(
     val w = size.width
     val h = size.height
     if (w <= 0f || h <= 0f) return
-    val cx = w / 2f
-    val t = motion.time
-    val e = motion.energy.coerceIn(0f, 1f)
-    val b = tune.brightness.value.coerceIn(0f, 1f)
-    val pulse = tune.pulse.value
-    val bandAlpha = tune.bandAlpha.value
+    val b = brightness.coerceIn(0f, 1f)
 
-    val breathing = sin(t * TWO_PI / BREATH_PERIOD)
-    val pulsing = 1f + pulse * 0.18f * sin(t * 3.2f)
-    // Lift shifts the non-bottom gradient stops upward when speaking / breathing.
-    val rise = (tune.lift.value + tune.breath.value * breathing + 0.16f * e).coerceIn(-0.14f, 0.24f)
-
-    // 1. Base gradient: smooth C1-sampled Figma 7-stop ramp with hardware dithering.
-    val keyOffsets = FloatArray(MonoBaseOffsets.size) { i ->
-        val raw = MonoBaseOffsets[i]
-        if (i == 0 || i == MonoBaseOffsets.lastIndex) raw
-        else (raw - rise * (1f - raw * 0.45f)).coerceIn(0.04f, 0.96f)
-    }
-    val highlightColor = lerpPremultiplied(MonoSheenInner, CobaltSheenInner, themeFraction)
-    val keyColors = Array(MonoBaseOffsets.size) { i ->
-        val c = lerpPremultiplied(MonoBaseColors[i], CobaltBaseColors[i], themeFraction)
-        val brightened = if (e > 0.001f && i >= 3) {
-            lerpPremultiplied(c, highlightColor.copy(alpha = c.alpha), 0.18f * e)
-        } else {
-            c
-        }
-        brightened.copy(alpha = brightened.alpha * b)
+    // 1. Base gradient: exact 7 Figma stops resampled in straight sRGB + hardware dithering.
+    val baseKeyColors = Array(BaseOffsets.size) { i ->
+        val c = lerpStraight(MonoBaseColors[i], CobaltBaseColors[i], themeFraction)
+        c.copy(alpha = c.alpha * b)
     }
     for (s in 0 until BASE_SAMPLE_COUNT) {
         val u = s.toFloat() / (BASE_SAMPLE_COUNT - 1)
         basePositions[s] = u
-        baseArgbs[s] = sampleSmoothRamp(keyOffsets, keyColors, u).toArgb()
+        baseArgbs[s] = sampleStraightRamp(BaseOffsets, baseKeyColors, u).toArgb()
     }
     drawIntoCanvas { canvas ->
         paint.shader = NativeLinearGradient(
@@ -396,42 +360,18 @@ private fun DrawScope.drawHorizon(
         canvas.nativeCanvas.drawRect(0f, 0f, w, h, paint)
     }
 
-    // 2. Thinking upward light bands (when connecting/thinking).
-    if (bandAlpha > 0.001f) {
-        val travel = h * 0.48f
-        for (i in 0 until BAND_COUNT) {
-            val phase = (motion.bandPhase + i.toFloat() / BAND_COUNT) % 1f
-            glowEllipse(
-                center = Offset(cx, h - phase * travel),
-                rx = w * 0.68f,
-                ry = h * 0.09f,
-                color = highlightColor,
-                alpha = bandAlpha * 0.65f * sin(phase * PI.toFloat()) * b,
-            )
-        }
-    }
-
-    // 3. Elliptical radial Sheen anchored at bottom-center (Figma transform: translate(193,600) scale(239.32,288)).
-    val rx = w * (239.32f / 386f) * (1f + 0.20f * e) * pulsing
-    val ry = h * (288f / 600f) * (1f + 0.34f * e + tune.lift.value * 0.8f + tune.breath.value * breathing) * pulsing
-    val sheenCenterX = cx + w * 0.022f * sin(t * 0.47f)
-    val sheenCenterY = h
-    val innerColor = lerpPremultiplied(MonoSheenInner, CobaltSheenInner, themeFraction)
-        .let { if (e > 0.01f) lerpPremultiplied(it, Color.White, 0.25f * e) else it }
-    val midColor = lerpPremultiplied(MonoSheenMid, CobaltSheenMid, themeFraction)
-    val outerColor = lerpPremultiplied(MonoSheenOuter, CobaltSheenOuter, themeFraction)
-
+    // 2. Elliptical radial Sheen anchored at bottom-center (Figma transform: translate(193,600) scale(239.32,288)).
+    val rx = w * (239.32f / 386f)
+    val ry = h * (288f / 600f)
     if (rx > 0f && ry > 0f) {
-        val sheenAnchors = floatArrayOf(0f, 0.42f, 1.00f)
-        val sheenColors = arrayOf(
-            innerColor.copy(alpha = (0.88f + 0.12f * e).coerceIn(0f, 1f) * b),
-            midColor.copy(alpha = 0.42f * b),
-            outerColor,
-        )
+        val sheenKeyColors = Array(SheenOffsets.size) { i ->
+            val c = lerpStraight(MonoSheenColors[i], CobaltSheenColors[i], themeFraction)
+            c.copy(alpha = c.alpha * b)
+        }
         for (s in 0 until SHEEN_SAMPLE_COUNT) {
             val u = s.toFloat() / (SHEEN_SAMPLE_COUNT - 1)
             sheenPositions[s] = u
-            sheenArgbs[s] = sampleSmoothRamp(sheenAnchors, sheenColors, u).toArgb()
+            sheenArgbs[s] = sampleStraightRamp(SheenOffsets, sheenKeyColors, u).toArgb()
         }
         drawIntoCanvas { canvas ->
             val radial = NativeRadialGradient(
@@ -444,7 +384,7 @@ private fun DrawScope.drawHorizon(
             )
             sheenMatrix.reset()
             sheenMatrix.setScale(1f, (ry / rx).coerceAtLeast(0.1f))
-            sheenMatrix.postTranslate(sheenCenterX, sheenCenterY)
+            sheenMatrix.postTranslate(w / 2f, h)
             radial.setLocalMatrix(sheenMatrix)
             paint.shader = radial
             canvas.nativeCanvas.drawRect(0f, 0f, w, h, paint)
@@ -602,26 +542,6 @@ private fun DrawScope.drawBlob(
         filterQuality = FilterQuality.Low,
     )
 }
-
-private fun DrawScope.glowEllipse(center: Offset, rx: Float, ry: Float, color: Color, alpha: Float) {
-    val a = alpha.coerceIn(0f, 1f)
-    if (a <= 0.001f || rx <= 0f || ry <= 0f) return
-    scale(scaleX = 1f, scaleY = ry / rx, pivot = center) {
-        drawCircle(
-            brush = Brush.radialGradient(
-                0f to color.copy(alpha = a),
-                0.45f to color.copy(alpha = a * 0.55f),
-                1f to Color.Transparent,
-                center = center,
-                radius = rx,
-            ),
-            radius = rx,
-            center = center,
-        )
-    }
-}
-
-private fun lerpF(a: Float, b: Float, t: Float) = a + (b - a) * t
 
 @Preview(name = "Agent Glow · Listening", widthDp = 386, heightDp = 600)
 @Composable

@@ -867,4 +867,19 @@
     <string name="live_rooms_menu_end_all">End room for all</string>
     <string name="live_rooms_zuno_prompt_sender">Zuno · System question</string>
     <string name="live_rooms_end_btn">End room</string>
+
+    <!-- Live Waveform Pill & Sprint -->
+    <string name="voice_pill_speaking">%1$s speaking</string>
+    <string name="voice_pill_speak_interrupt">· Speak to interrupt</string>
+    <string name="voice_pill_listening">Listening</string>
+    <string name="voice_pill_speak_anytime">· Speak anytime</string>
+    <string name="voice_pill_hearing_you">Hearing you…</string>
+    <string name="voice_pill_thinking">Thinking…</string>
+    <string name="voice_pill_loading">Loading voice…</string>
+    <string name="voice_pill_error">Connection lost</string>
+    <string name="voice_pill_muted">Muted</string>
+    <string name="voice_pill_tap_unmute">· Tap mic to unmute</string>
+    <string name="vocab_sprint_next_phrase">Next phrase</string>
+    <string name="vocab_sprint_mastered_feedback">Mastered · Next SRS review in %1$s</string>
+    <string name="vocab_sprint_retry_feedback">%1$s · Reset to due tomorrow</string>
 </resources>

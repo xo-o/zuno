@@ -603,4 +603,19 @@
     <string name="live_rooms_menu_end_all">Raum für alle beenden</string>
     <string name="live_rooms_zuno_prompt_sender">Zuno · Systemfrage</string>
     <string name="live_rooms_end_btn">Verlassen</string>
+
+    <!-- Live Waveform Pill & Sprint -->
+    <string name="voice_pill_speaking">%1$s spricht</string>
+    <string name="voice_pill_speak_interrupt">· Zum Unterbrechen sprechen</string>
+    <string name="voice_pill_listening">Hört zu</string>
+    <string name="voice_pill_speak_anytime">· Sprich jederzeit</string>
+    <string name="voice_pill_hearing_you">Ich höre dich…</string>
+    <string name="voice_pill_thinking">Denkt nach…</string>
+    <string name="voice_pill_loading">Stimme lädt…</string>
+    <string name="voice_pill_error">Verbindung verloren</string>
+    <string name="voice_pill_muted">Stumm</string>
+    <string name="voice_pill_tap_unmute">· Mikro antippen</string>
+    <string name="vocab_sprint_next_phrase">Nächste Phrase</string>
+    <string name="vocab_sprint_mastered_feedback">Gemeistert · Nächste Wiederholung in %1$s</string>
+    <string name="vocab_sprint_retry_feedback">%1$s · Auf morgen zurückgesetzt</string>
 </resources>

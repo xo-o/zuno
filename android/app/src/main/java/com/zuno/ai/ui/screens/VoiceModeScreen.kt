@@ -28,7 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -46,12 +46,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -82,6 +84,7 @@ import com.zuno.ai.ui.components.AgentGlowState
 import com.zuno.ai.ui.components.CallAvatarItem
 import com.zuno.ai.ui.components.GlowTheme
 import com.zuno.ai.ui.components.LiveKitVideoFeed
+import com.zuno.ai.ui.components.TurnPillState
 import com.zuno.ai.ui.components.VoiceOrbState
 import com.zuno.ai.ui.components.ZunoAgentGlow
 import com.zuno.ai.ui.components.ZunoAssistantBubble
@@ -108,9 +111,11 @@ import com.zuno.ai.ui.components.ZunoScaffoldCard
 import com.zuno.ai.ui.components.ZunoSpokenAssembly
 import com.zuno.ai.ui.components.ZunoTabbedCoachCard
 import com.zuno.ai.ui.components.ZunoTeachCard
+import com.zuno.ai.ui.components.ZunoTurnPillRow
 import com.zuno.ai.ui.components.ZunoUserBubble
 import com.zuno.ai.ui.components.ZunoVoiceOrb
 import com.zuno.ai.ui.components.ZunoVoiceWaveform
+import com.zuno.ai.ui.components.rememberTurnPillState
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
@@ -184,6 +189,9 @@ fun VoiceModeScreen(
     onTranslate: ((String) -> Unit)? = null,
     onSlowReplay: ((String) -> Unit)? = null,
     onSwitchTopic: (() -> Unit)? = null,
+    userAudioLevel: () -> Float = level,
+    activeSpeaker: Speaker? = null,
+    hasError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val defaultCaptions = initialCaptionsOn ?: isLessonMode
@@ -252,6 +260,9 @@ fun VoiceModeScreen(
             LessonAvatarVoiceBody(
                 status = status,
                 level = level,
+                userAudioLevel = userAudioLevel,
+                activeSpeaker = activeSpeaker,
+                hasError = hasError,
                 tutorLine = tutorLine,
                 userLine = userLine,
                 captionsOn = captionsOn,
@@ -283,6 +294,9 @@ fun VoiceModeScreen(
             PortraitVoiceCallBody(
                 status = status,
                 level = level,
+                userAudioLevel = userAudioLevel,
+                activeSpeaker = activeSpeaker,
+                hasError = hasError,
                 tutorLine = tutorLine,
                 userLine = userLine,
                 turns = turns,
@@ -336,6 +350,9 @@ fun VoiceModeScreen(
 private fun PortraitVoiceCallBody(
     status: VoiceCallStatus,
     level: () -> Float,
+    userAudioLevel: () -> Float,
+    activeSpeaker: Speaker?,
+    hasError: Boolean,
     tutorLine: String?,
     userLine: String?,
     turns: List<ChatMessage>,
@@ -382,14 +399,19 @@ private fun PortraitVoiceCallBody(
         }
     }
     val hasActiveUserSpeech = displayTurns.any { it.speaker == Speaker.USER && !it.isFinal }
-    val showListeningPlaceholder = !hasActiveUserSpeech &&
-        (status == VoiceCallStatus.Listening || status == VoiceCallStatus.Connecting || status == VoiceCallStatus.Speaking)
+    val turnPillState = rememberTurnPillState(
+        status = status,
+        userAudioLevel = userAudioLevel,
+        activeSpeaker = activeSpeaker,
+        hasActiveUserSpeech = hasActiveUserSpeech,
+        hasError = hasError,
+    )
     val listState = rememberLazyListState()
     val lastTurnText = displayTurns.lastOrNull()?.text.orEmpty()
 
-    LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, showListeningPlaceholder) {
+    LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, rescuePayload) {
         if (!captionsOn) return@LaunchedEffect
-        val total = displayTurns.size + if (showListeningPlaceholder) 1 else 0
+        val total = displayTurns.size + if (rescuePayload != null && rescuePayload.text.isNotBlank()) 1 else 0
         if (total > 0) {
             delay(50)
             listState.animateScrollToItem(total - 1)
@@ -444,7 +466,9 @@ private fun PortraitVoiceCallBody(
                             contentPadding = PaddingValues(vertical = ZunoSpace.s4),
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                         ) {
-                            items(displayTurns, key = { it.id }) { turn ->
+                            itemsIndexed(displayTurns, key = { _, turn -> turn.id }) { index, turn ->
+                                val isOlder = index < displayTurns.lastIndex
+                                val turnMod = if (isOlder) Modifier.alpha(0.78f) else Modifier
                                 when (turn.speaker) {
                                     Speaker.AGENT -> {
                                         val baseLabel = if (cameraActive) tutor.displayName else "${tutor.displayName} · $sessionKindLabel"
@@ -458,12 +482,14 @@ private fun PortraitVoiceCallBody(
                                             onExplain = { onSlowReplay?.invoke(turn.text) },
                                             explainLabel = stringResource(R.string.voice_chip_speed_slow),
                                             explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                            modifier = turnMod,
                                         )
                                     }
                                     Speaker.USER -> {
                                         ZunoUserBubble(
                                             message = turn.text,
                                             senderLabel = if (turn.isFinal) "You" else stringResource(R.string.voice_you_speaking),
+                                            modifier = turnMod,
                                         )
                                     }
                                 }
@@ -471,16 +497,24 @@ private fun PortraitVoiceCallBody(
 
                             if (rescuePayload != null && rescuePayload.text.isNotBlank()) {
                                 item(key = "free_talk_rescue_pill") {
-                                    ZunoFeedbackPill(text = rescuePayload.text)
-                                }
-                            }
-
-                            if (showListeningPlaceholder) {
-                                item(key = "listening_placeholder") {
-                                    ListeningTurnPlaceholderBubble()
+                                    ZunoFeedbackPill(text = rescuePayload.text, fillWidth = true)
                                 }
                             }
                         }
+
+                        ZunoTurnPillRow(
+                            state = turnPillState,
+                            speakerName = tutor.displayName,
+                            audioLevel = level,
+                            userAudioLevel = userAudioLevel,
+                            onClick = {
+                                when (turnPillState) {
+                                    TurnPillState.Speaking -> onInterrupt()
+                                    TurnPillState.Muted -> onToggleMute()
+                                    else -> Unit
+                                }
+                            },
+                        )
 
                         if (cameraActive) {
                             ZunoTabbedCoachCard(
@@ -491,7 +525,6 @@ private fun PortraitVoiceCallBody(
                             FreeTalkCoachCard(
                                 sessionKindLabel = sessionKindLabel,
                                 languageLevelLabel = languageLevelLabel,
-                                status = status,
                                 coachPrompts = coachPrompts,
                                 onSpeakCoachPhrase = onSpeakCoachPhrase,
                                 onSwitchTopic = onSwitchTopic,
@@ -987,68 +1020,31 @@ private fun ListeningTurnPlaceholderBubble(
 private fun FreeTalkCoachCard(
     sessionKindLabel: String,
     languageLevelLabel: String,
-    status: VoiceCallStatus,
     coachPrompts: CoachPrompts,
     onSpeakCoachPhrase: (String) -> Unit,
     onSwitchTopic: (() -> Unit)?,
 ) {
     var expandedTab by rememberSaveable { mutableStateOf<Int?>(null) }
     val cardShape = RoundedCornerShape(ZunoRadius.xxxl)
-    val statusColor = when (status) {
-        VoiceCallStatus.Speaking -> ZunoColors.StatusSpeaking
-        VoiceCallStatus.Listening -> ZunoColors.StatusListening
-        VoiceCallStatus.Muted -> ZunoColors.IconTertiary
-        VoiceCallStatus.Thinking -> ZunoColors.TextSecondary
-        VoiceCallStatus.Connecting -> ZunoColors.TextTertiary
-    }
-    val statusLabel = stringResource(
-        when (status) {
-            VoiceCallStatus.Speaking -> R.string.voice_status_dot_speaking
-            VoiceCallStatus.Listening -> R.string.voice_status_dot_listening
-            VoiceCallStatus.Thinking -> R.string.voice_status_dot_thinking
-            VoiceCallStatus.Muted -> R.string.voice_status_dot_muted
-            VoiceCallStatus.Connecting -> R.string.voice_status_dot_connecting
-        },
-    )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .zunoGlassSubtle(cardShape)
+            .zunoGlassSubtle(
+                cardShape,
+                fillColor = ZunoColors.SurfaceDefault,
+                borderBrush = SolidColor(ZunoColors.BorderDefault),
+            )
             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "$sessionKindLabel · $languageLevelLabel",
-                style = ZunoType.LabelSmall,
-                color = ZunoColors.TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false).padding(end = ZunoSpace.s8),
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(statusColor),
-                )
-                Text(
-                    text = statusLabel,
-                    style = ZunoType.LabelSmall,
-                    color = ZunoColors.TextTertiary,
-                    maxLines = 1,
-                )
-            }
-        }
+        Text(
+            text = "$sessionKindLabel · $languageLevelLabel",
+            style = ZunoType.LabelSmall,
+            color = ZunoColors.TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
 
         Row(
             modifier = Modifier
@@ -1090,7 +1086,11 @@ private fun FreeTalkCoachCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassElevated(rowShape)
+                            .zunoGlassSubtle(
+                                rowShape,
+                                fillColor = ZunoColors.SurfaceDefault,
+                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            )
                             .clickable(role = Role.Button, onClick = { onSpeakCoachPhrase(item.phrase) })
                             .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s8),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
@@ -1128,6 +1128,9 @@ private fun FreeTalkCoachCard(
 private fun LessonAvatarVoiceBody(
     status: VoiceCallStatus,
     level: () -> Float,
+    userAudioLevel: () -> Float,
+    activeSpeaker: Speaker?,
+    hasError: Boolean,
     tutorLine: String?,
     userLine: String?,
     captionsOn: Boolean,
@@ -1221,18 +1224,20 @@ private fun LessonAvatarVoiceBody(
     val liveUserText = userLine?.trim()?.takeIf { it.isNotEmpty() }
     val lastUserBubble = displayTurns.lastOrNull { it.isUser }?.text?.trim('“', '”', '"', ' ')
     val showLiveUserBubble = liveUserText != null && liveUserText != lastUserBubble
-    val awaitingUserTurn = displayTurns.lastOrNull()?.isUser != true
-    val showPlaceholder = !showLiveUserBubble && awaitingUserTurn && (
-        status == VoiceCallStatus.Listening ||
-            status == VoiceCallStatus.Connecting ||
-            status == VoiceCallStatus.Speaking
-        )
+    val hasActiveUserSpeech = showLiveUserBubble || displayTurns.any { it.isUser && !it.isFinal }
+    val turnPillState = rememberTurnPillState(
+        status = status,
+        userAudioLevel = userAudioLevel,
+        activeSpeaker = activeSpeaker,
+        hasActiveUserSpeech = hasActiveUserSpeech,
+        hasError = hasError,
+    )
     val listState = rememberLazyListState()
     val lastTurnText = displayTurns.lastOrNull()?.text.orEmpty()
 
-    LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, liveUserText, showLiveUserBubble, showPlaceholder, rescuePayload) {
+    LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, liveUserText, showLiveUserBubble, rescuePayload) {
         if (!captionsOn) return@LaunchedEffect
-        val total = displayTurns.size + (if (showLiveUserBubble || showPlaceholder) 1 else 0) + (if (rescuePayload != null) 1 else 0)
+        val total = displayTurns.size + (if (showLiveUserBubble) 1 else 0) + (if (rescuePayload != null) 1 else 0)
         if (total > 0) {
             delay(50)
             listState.animateScrollToItem(total - 1)
@@ -1274,14 +1279,18 @@ private fun LessonAvatarVoiceBody(
                         displayTurns = displayTurns,
                         listState = listState,
                         stageKind = stageKind,
-                        tutorSpeaking = tutorSpeaking,
+                        tutorName = tutorName,
+                        turnPillState = turnPillState,
+                        audioLevel = level,
+                        userAudioLevel = userAudioLevel,
                         liveUserText = liveUserText,
                         showLiveUserBubble = showLiveUserBubble,
-                        showPlaceholder = showPlaceholder,
                         lessonStage = lessonStage,
                         pronunciationEval = pronunciationEval,
                         rescuePayload = rescuePayload,
                         pulseFirstWord = pulseFirstWord,
+                        onInterrupt = onInterrupt,
+                        onToggleMute = onToggleMute,
                         onLessonAction = onLessonAction,
                         modifier = Modifier
                             .fillMaxSize()
@@ -1327,14 +1336,18 @@ private fun LessonConversationAndCoach(
     displayTurns: List<LessonTurnUi>,
     listState: androidx.compose.foundation.lazy.LazyListState,
     stageKind: LessonStageKind?,
-    tutorSpeaking: Boolean,
+    tutorName: String,
+    turnPillState: TurnPillState,
+    audioLevel: () -> Float,
+    userAudioLevel: () -> Float,
     liveUserText: String?,
     showLiveUserBubble: Boolean,
-    showPlaceholder: Boolean,
     lessonStage: LessonStageUi?,
     pronunciationEval: PronunciationEvalUi?,
     rescuePayload: RescuePayloadUi?,
     pulseFirstWord: Boolean,
+    onInterrupt: () -> Unit,
+    onToggleMute: () -> Unit,
     onLessonAction: (action: String, payload: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1348,9 +1361,11 @@ private fun LessonConversationAndCoach(
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = PaddingValues(vertical = ZunoSpace.s4),
-            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         ) {
-            items(displayTurns, key = { it.id }) { turn ->
+            itemsIndexed(displayTurns, key = { _, turn -> turn.id }) { index, turn ->
+                val isOlder = index < displayTurns.lastIndex && !showLiveUserBubble
+                val turnMod = if (isOlder) Modifier.alpha(0.78f) else Modifier
                 if (!turn.isUser) {
                     val a1 = turn.actions.getOrNull(0)
                     val a2 = turn.actions.getOrNull(1)
@@ -1371,18 +1386,30 @@ private fun LessonConversationAndCoach(
                         onExplain = cb2,
                         explainLabel = l2,
                         explainIcon = i2,
+                        modifier = turnMod,
                     )
                 } else {
+                    val evalSuffix = if (
+                        stageKind == LessonStageKind.ShadowDrill &&
+                        index == displayTurns.lastIndex &&
+                        pronunciationEval != null &&
+                        !turn.senderLabel.contains("%")
+                    ) {
+                        "You · ${pronunciationEval.score}% match"
+                    } else {
+                        turn.senderLabel
+                    }
                     ZunoUserBubble(
                         message = turn.text,
-                        senderLabel = turn.senderLabel,
+                        senderLabel = evalSuffix,
+                        modifier = turnMod,
                     )
                 }
             }
 
             if (rescuePayload != null && rescuePayload.text.isNotBlank() && rescuePayload.action != "translate") {
                 item(key = "rescue_pill") {
-                    ZunoFeedbackPill(text = rescuePayload.text)
+                    ZunoFeedbackPill(text = rescuePayload.text, fillWidth = true)
                 }
             }
 
@@ -1400,23 +1427,22 @@ private fun LessonConversationAndCoach(
                         senderLabel = label,
                     )
                 }
-            } else if (showPlaceholder) {
-                item(key = "lesson_placeholder") {
-                    val (senderLabel, placeholderText) = when {
-                        stageKind == LessonStageKind.ActiveRecall ->
-                            stringResource(R.string.lesson_you_spoken_recall) to stringResource(R.string.lesson_placeholder_recall)
-                        stageKind == LessonStageKind.Roleplay && tutorSpeaking ->
-                            "You · Next" to stringResource(R.string.voice_listening_turn_placeholder)
-                        else ->
-                            stringResource(R.string.voice_you_listening) to stringResource(R.string.lesson_placeholder_speak_or_ask)
-                    }
-                    ListeningTurnPlaceholderBubble(
-                        senderLabel = senderLabel,
-                        placeholderText = placeholderText,
-                    )
-                }
             }
         }
+
+        ZunoTurnPillRow(
+            state = turnPillState,
+            speakerName = tutorName,
+            audioLevel = audioLevel,
+            userAudioLevel = userAudioLevel,
+            onClick = {
+                when (turnPillState) {
+                    TurnPillState.Speaking -> onInterrupt()
+                    TurnPillState.Muted -> onToggleMute()
+                    else -> Unit
+                }
+            },
+        )
 
         if (lessonStage != null) {
             ZunoLessonCoachCard(

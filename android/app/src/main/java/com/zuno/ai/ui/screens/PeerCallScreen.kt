@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -49,6 +49,7 @@ import com.zuno.ai.model.ChatMessage
 import com.zuno.ai.model.Speaker
 import com.zuno.ai.ui.components.CallAvatarItem
 import com.zuno.ai.ui.components.LiveKitVideoFeed
+import com.zuno.ai.ui.components.TurnPillState
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoCallControlsBar
 import com.zuno.ai.ui.components.ZunoCallTopBar
@@ -59,8 +60,10 @@ import com.zuno.ai.ui.components.ZunoIconButtonSize
 import com.zuno.ai.ui.components.ZunoMenuAction
 import com.zuno.ai.ui.components.ZunoOverflowMenu
 import com.zuno.ai.ui.components.ZunoTabbedCoachCard
+import com.zuno.ai.ui.components.ZunoTurnPillRow
 import com.zuno.ai.ui.components.ZunoUserBubble
 import com.zuno.ai.ui.components.ZunoVoiceWaveform
+import com.zuno.ai.ui.components.rememberTurnPillState
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
@@ -102,6 +105,9 @@ fun PeerCallScreen(
     onTranslate: (String) -> Unit,
     onSlowReplay: (String) -> Unit,
     onSpeakCoachPhrase: (String) -> Unit,
+    userAudioLevel: () -> Float = audioLevel,
+    activeSpeaker: Speaker? = null,
+    hasError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var captionsOn by rememberSaveable { mutableStateOf(true) }
@@ -290,12 +296,14 @@ fun PeerCallScreen(
                     contentPadding = PaddingValues(vertical = ZunoSpace.s4),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 ) {
-                    items(displayTurns, key = { it.id }) { turn ->
+                    itemsIndexed(displayTurns, key = { _, turn -> turn.id }) { index, turn ->
+                        val turnMod = if (index < displayTurns.lastIndex) Modifier.alpha(0.78f) else Modifier
                         when (turn.speaker) {
                             Speaker.USER -> {
                                 ZunoUserBubble(
                                     message = turn.text,
                                     senderLabel = if (turn.isFinal) "You" else stringResource(R.string.voice_you_speaking),
+                                    modifier = turnMod,
                                 )
                             }
                             Speaker.AGENT -> {
@@ -314,11 +322,30 @@ fun PeerCallScreen(
                                     onExplain = { onSlowReplay(turn.text) },
                                     explainLabel = stringResource(R.string.voice_chip_replay),
                                     explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                    modifier = turnMod,
                                 )
                             }
                         }
                     }
                 }
+            }
+
+            if (partnerJoined && captionsOn) {
+                val hasActiveUserSpeech = turns.any { it.speaker == Speaker.USER && !it.isFinal }
+                val turnPillState = rememberTurnPillState(
+                    status = status,
+                    userAudioLevel = userAudioLevel,
+                    activeSpeaker = activeSpeaker,
+                    hasActiveUserSpeech = hasActiveUserSpeech,
+                    hasError = hasError,
+                )
+                ZunoTurnPillRow(
+                    state = turnPillState,
+                    speakerName = partnerShort,
+                    audioLevel = audioLevel,
+                    userAudioLevel = userAudioLevel,
+                    onClick = if (turnPillState == TurnPillState.Muted) onToggleMute else null,
+                )
             }
 
             if (captionsOn) {

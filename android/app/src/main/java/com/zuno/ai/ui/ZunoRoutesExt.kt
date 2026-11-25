@@ -18,7 +18,9 @@ import com.zuno.ai.data.CartesiaAudioPlayer
 import com.zuno.ai.data.LearningLanguage
 import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.Profile
+import com.zuno.ai.model.AgentState
 import com.zuno.ai.model.ChatMessage
+import com.zuno.ai.model.Speaker
 import com.zuno.ai.push.CallNotification
 import com.zuno.ai.ui.components.ToastController
 import com.zuno.ai.ui.components.ZunoSpinner
@@ -31,6 +33,7 @@ import com.zuno.ai.ui.screens.SprintReviewResult
 import com.zuno.ai.ui.screens.SystemRoomDetailScreen
 import com.zuno.ai.ui.screens.VocabularyScreen
 import com.zuno.ai.ui.screens.VocabularySprintScreen
+import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.displayName
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.viewmodel.ToastEvent
@@ -123,10 +126,12 @@ internal fun VocabularyRouteHost(
                     else -> all
                 }
             }
+            val isSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
             VocabularySprintScreen(
                 phrases = deck,
                 languageName = language.displayName(appLanguage),
                 tutor = activeTutor,
+                isSpeaking = isSpeaking,
                 onSpeakPhrase = { phrase ->
                     tts.speak(
                         text = phrase,
@@ -214,6 +219,9 @@ internal fun LiveRoomsRouteHost(
     val liveRooms by zunoViewModel.liveRooms.collectAsStateWithLifecycle()
     val activeLiveRoom by zunoViewModel.activeLiveRoom.collectAsStateWithLifecycle()
     val localVideoTrack by voiceViewModel.localVideoTrack.collectAsStateWithLifecycle()
+    val agentState by voiceViewModel.agentState.collectAsStateWithLifecycle()
+    val activeSpeaker by voiceViewModel.activeSpeaker.collectAsStateWithLifecycle()
+    val voiceError by voiceViewModel.errorMessage.collectAsStateWithLifecycle()
 
     when (screen) {
         ZunoRoute.LiveRooms -> {
@@ -426,6 +434,22 @@ internal fun LiveRoomsRouteHost(
                         CallNotification.cancel(context)
                         zunoViewModel.endLiveRoom(roomObj.id) { pop() }
                     },
+                    status = when (agentState) {
+                        AgentState.DISCONNECTED, AgentState.CONNECTING -> VoiceCallStatus.Connecting
+                        AgentState.THINKING -> VoiceCallStatus.Thinking
+                        AgentState.SPEAKING -> VoiceCallStatus.Speaking
+                        AgentState.IDLE, AgentState.LISTENING -> if (isMuted) VoiceCallStatus.Muted else VoiceCallStatus.Listening
+                    },
+                    audioLevel = {
+                        when (agentState) {
+                            AgentState.SPEAKING -> voiceViewModel.agentAudioLevel.value
+                            AgentState.IDLE, AgentState.LISTENING -> maxOf(voiceViewModel.userAudioLevel.value, 0.12f)
+                            else -> 0f
+                        }
+                    },
+                    userAudioLevel = { voiceViewModel.userAudioLevel.value },
+                    activeSpeaker = activeSpeaker,
+                    hasError = !voiceError.isNullOrBlank(),
                     modifier = modifier,
                 )
             } else {

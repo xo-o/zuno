@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -58,6 +59,7 @@ import com.zuno.ai.model.ChatMessage
 import com.zuno.ai.model.Speaker
 import com.zuno.ai.ui.components.CallAvatarItem
 import com.zuno.ai.ui.components.LiveKitVideoFeed
+import com.zuno.ai.ui.components.TurnPillState
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoAvatar
 import com.zuno.ai.ui.components.ZunoBackTitleTopBar
@@ -77,8 +79,10 @@ import com.zuno.ai.ui.components.ZunoSectionTopBar
 import com.zuno.ai.ui.components.ZunoSegmentedTabs
 import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.components.ZunoTextField
+import com.zuno.ai.ui.components.ZunoTurnPillRow
 import com.zuno.ai.ui.components.ZunoUserBubble
 import com.zuno.ai.ui.components.ZunoVoiceWaveform
+import com.zuno.ai.ui.components.rememberTurnPillState
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoGlassHairline
 import com.zuno.ai.ui.theme.ZunoRadius
@@ -1010,6 +1014,12 @@ fun ActiveLiveRoomScreen(
     onTranslate: (String) -> Unit,
     onSlowReplay: (String) -> Unit,
     onEndRoom: () -> Unit,
+    status: VoiceCallStatus = if (isMuted) VoiceCallStatus.Muted else VoiceCallStatus.Listening,
+    audioLevel: () -> Float = { 0f },
+    userAudioLevel: () -> Float = audioLevel,
+    activeSpeaker: Speaker? = null,
+    activeSpeakerName: String? = null,
+    hasError: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var captionsOn by rememberSaveable { mutableStateOf(true) }
@@ -1154,7 +1164,8 @@ fun ActiveLiveRoomScreen(
                     contentPadding = PaddingValues(vertical = ZunoSpace.s4),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                 ) {
-                    items(displayTurns, key = { it.id }) { turn ->
+                    itemsIndexed(displayTurns, key = { _, turn -> turn.id }) { index, turn ->
+                        val turnMod = if (index < displayTurns.lastIndex) Modifier.alpha(0.78f) else Modifier
                         if (turn.speaker == Speaker.USER) {
                             val youName = stringResource(R.string.call_you_name, userName)
                             val userLabel = if (!turn.isFinal) {
@@ -1165,6 +1176,7 @@ fun ActiveLiveRoomScreen(
                             ZunoUserBubble(
                                 message = "“${turn.text.trim('“', '”')}”",
                                 senderLabel = userLabel,
+                                modifier = turnMod,
                             )
                         } else {
                             val baseSender = turn.senderName?.takeIf { it.isNotBlank() }
@@ -1183,16 +1195,41 @@ fun ActiveLiveRoomScreen(
                                 onExplain = { onSlowReplay(turn.text) },
                                 explainLabel = stringResource(R.string.voice_chip_speed_slow),
                                 explainIcon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                                modifier = turnMod,
                             )
                         }
                     }
                 }
 
+                val hasActiveUserSpeech = turns.any { it.speaker == Speaker.USER && !it.isFinal }
+                val turnPillState = rememberTurnPillState(
+                    status = status,
+                    userAudioLevel = userAudioLevel,
+                    activeSpeaker = activeSpeaker,
+                    hasActiveUserSpeech = hasActiveUserSpeech,
+                    hasError = hasError,
+                )
+                val remoteSpeaker = activeSpeakerName?.takeIf { it.isNotBlank() }
+                    ?: turns.lastOrNull { it.speaker == Speaker.AGENT && !it.senderName.isNullOrBlank() }?.senderName
+                    ?: displayMembers.firstOrNull { !it.isYou }?.name?.substringBefore(" ")
+                    ?: "Zuno"
+                ZunoTurnPillRow(
+                    state = turnPillState,
+                    speakerName = remoteSpeaker,
+                    audioLevel = audioLevel,
+                    userAudioLevel = userAudioLevel,
+                    onClick = if (turnPillState == TurnPillState.Muted) onToggleMute else null,
+                )
+
                 // Round Coach Card (`2704:12814`)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl))
+                        .zunoGlassSubtle(
+                            RoundedCornerShape(ZunoRadius.xxxl),
+                            fillColor = ZunoColors.SurfaceDefault,
+                            borderBrush = SolidColor(ZunoColors.BorderDefault),
+                        )
                         .padding(horizontal = ZunoSpace.s12, vertical = ZunoSpace.s10),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                 ) {

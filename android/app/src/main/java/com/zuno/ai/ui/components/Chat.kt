@@ -161,11 +161,16 @@ fun ZunoAssistantBubble(
 
 /** Inline AI feedback under a user message (grammar, pronunciation). */
 @Composable
-fun ZunoFeedbackPill(text: String, modifier: Modifier = Modifier) {
+fun ZunoFeedbackPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    fillWidth: Boolean = false,
+) {
     val shape = RoundedCornerShape(ZunoRadius.md)
     Row(
         modifier = modifier
-            .zunoGlassSubtle(shape)
+            .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
+            .zunoGlassSubtle(shape, borderBrush = SolidColor(ZunoColors.BorderSubtle))
             .padding(start = ZunoSpace.s10, end = ZunoSpace.s12, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.Top,
@@ -175,7 +180,7 @@ fun ZunoFeedbackPill(text: String, modifier: Modifier = Modifier) {
             text,
             style = ZunoType.FootnoteStrong,
             color = ZunoColors.TextSecondary,
-            modifier = Modifier.widthIn(max = 306.dp),
+            modifier = if (fillWidth) Modifier.weight(1f) else Modifier.widthIn(max = 306.dp),
         )
     }
 }
@@ -292,7 +297,7 @@ fun ZunoComposer(
     }
 }
 
-/** Assistant placeholder while the tutor is composing a reply. */
+/** Assistant placeholder while the tutor is composing a reply (`2021:1526` Typing Indicator). */
 @Composable
 fun ZunoTypingBubble(modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(
@@ -302,22 +307,32 @@ fun ZunoTypingBubble(modifier: Modifier = Modifier) {
         bottomStart = ZunoRadius.xl,
     )
     val transition = rememberInfiniteTransition(label = "typing")
-    val alpha by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-        label = "typingAlpha",
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Restart),
+        label = "typingPhase",
     )
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
         Text("ZunoAI", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
         Row(
             modifier = Modifier
                 .zunoGlassSubtle(shape)
-                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14)
-                .alpha(alpha),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+                .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s14),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            repeat(3) { Box(Modifier.size(6.dp).clip(CircleShape).background(ZunoColors.TextSecondary)) }
+            repeat(3) { idx ->
+                val dist = kotlin.math.abs(phase - idx).coerceAtMost(1f)
+                val dotAlpha = 0.35f + 0.60f * (1f - dist)
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .alpha(dotAlpha)
+                        .clip(CircleShape)
+                        .background(ZunoColors.TextPrimary),
+                )
+            }
         }
     }
 }
