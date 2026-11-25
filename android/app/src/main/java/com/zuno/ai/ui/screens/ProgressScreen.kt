@@ -283,8 +283,9 @@ fun ProgressScreen(
             }
 
             // Speaking & consistency
+            val activeDaysLabel = if (data.activeDaysLast12Weeks == 1) "1 active day" else "${data.activeDaysLast12Weeks} active days"
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10)) {
-                ProgressSectionHeader("Speaking & consistency", "${data.activeDaysLast12Weeks} active days")
+                ProgressSectionHeader("Speaking & consistency", activeDaysLabel)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -321,7 +322,7 @@ fun ProgressScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text("Last 12 weeks", style = ZunoType.FootnoteStrong, color = ZunoColors.TextSecondary)
-                        Text("${data.activeDaysLast12Weeks} active days", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                        Text(activeDaysLabel, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
                     }
 
                     ConsistencyHeatmap(days = data.heatmapDays)

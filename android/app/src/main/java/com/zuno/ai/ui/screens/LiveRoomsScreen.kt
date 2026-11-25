@@ -396,12 +396,19 @@ fun LiveRoomsScreen(
                                             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            if (room.isLive) {
+                                            if (room.hasActiveParticipants) {
                                                 Box(
                                                     modifier = Modifier
                                                         .size(6.dp)
                                                         .clip(CircleShape)
                                                         .background(ZunoColors.StatusSpeaking),
+                                                )
+                                            } else if (room.isLive) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .clip(CircleShape)
+                                                        .background(ZunoColors.TextTertiary),
                                                 )
                                             }
                                             Text(
