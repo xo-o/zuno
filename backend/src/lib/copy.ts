@@ -252,6 +252,36 @@ const STRINGS = {
     nl: "Nieuw bericht",
     pl: "Nowa wiadomość",
   },
+  onboardingRetryName: {
+    en: "What should I call you?",
+    es: "¿Cómo te gustaría que te llame?",
+    fr: "Comment dois-je t’appeler ?",
+    de: "Wie soll ich dich nennen?",
+    it: "Come dovrei chiamarti?",
+    pt: "Como devo chamar você?",
+    nl: "Hoe zal ik je noemen?",
+    pl: "Jak mam się do Ciebie zwracać?",
+  },
+  onboardingRetryLevel: {
+    en: "How much {language} do you know so far?",
+    es: "¿Cuánto sabes de {language} hasta ahora?",
+    fr: "Quel est ton niveau en {language} pour l’instant ?",
+    de: "Wie viel {language} kannst du schon?",
+    it: "Quanto {language} conosci finora?",
+    pt: "Quanto de {language} você já sabe?",
+    nl: "Hoeveel {language} ken je tot nu toe?",
+    pl: "Ile {language} już znasz?",
+  },
+  onboardingRetryGoals: {
+    en: "Tell me a bit about why you’re learning {language}.",
+    es: "Cuéntame un poco por qué estás aprendiendo {language}.",
+    fr: "Dis-m’en un peu plus sur pourquoi tu apprends le {language}.",
+    de: "Erzähl mir kurz, warum du {language} lernst.",
+    it: "Raccontami un po’ perché stai imparando {language}.",
+    pt: "Me conte um pouco por que você está aprendendo {language}.",
+    nl: "Vertel me kort waarom je {language} leert.",
+    pl: "Powiedz mi krótko, dlaczego uczysz się {language}.",
+  },
 } satisfies Record<string, Record<AppLanguageCode, string>>;
 
 export type CopyKey = keyof typeof STRINGS;

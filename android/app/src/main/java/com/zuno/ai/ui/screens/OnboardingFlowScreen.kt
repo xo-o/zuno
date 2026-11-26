@@ -177,7 +177,7 @@ fun OnboardingFlowScreen(
             )
             if (!parsed.valid) {
                 val retry = parsed.retryPrompt?.takeIf { it.isNotBlank() } ?: currentPrompt
-                onboardingViewModel.appendUserAndRetry(step, displayText, retry)
+                onboardingViewModel.appendUserAndRetry(step, displayText, retry, parsed.correctedName)
             } else {
                 onboardingViewModel.applyParsedTurn(
                     step = step,

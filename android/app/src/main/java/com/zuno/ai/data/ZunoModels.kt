@@ -169,6 +169,7 @@ data class OnboardingTurnResult(
     val focus: String = "conversation",
     val interests: List<String> = emptyList(),
     val goalNote: String = "",
+    val correctedName: String? = null,
     val retryPrompt: String? = null,
 )
 
@@ -659,6 +660,7 @@ internal fun JSONObject.toOnboardingTurnResult() = OnboardingTurnResult(
     focus = optString("focus", "conversation"),
     interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) }.filter { it.isNotBlank() } }.orEmpty(),
     goalNote = optString("goalNote"),
+    correctedName = optStringOrNull("correctedName")?.takeIf { it.isNotBlank() },
     retryPrompt = optStringOrNull("retryPrompt"),
 )
 

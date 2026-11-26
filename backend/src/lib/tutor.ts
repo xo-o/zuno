@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { RecommendedTopic } from "../db/app-schema.js";
+import { t } from "./copy.js";
 import { generateJson, type GeminiFile, type GeminiTurn } from "./gemini.js";
 import { accentLabel, languageInfo, languageName } from "./languages.js";
 import type { LearnerProfile } from "./profile.js";
@@ -267,23 +268,25 @@ export async function generateTopicRecommendations(
 
 // ── Onboarding conversational turn extraction ───────────────────────────────
 
-const nameTurnSchema = z.object({
+export const nameTurnSchema = z.object({
   valid: z.boolean(),
   name: z.string().max(60),
   retryPrompt: z.string().max(120),
 });
 
-const levelTurnSchema = z.object({
+export const levelTurnSchema = z.object({
   valid: z.boolean(),
   level: z.enum(["A1", "A2", "B1", "B2", "C1", "C2"]),
+  correctedName: z.string().max(60),
   retryPrompt: z.string().max(120),
 });
 
-const goalsTurnSchema = z.object({
+export const goalsTurnSchema = z.object({
   valid: z.boolean(),
   focus: z.enum(["conversation", "travel", "work", "exams", "culture"]),
   interests: z.array(z.string().min(1).max(60)).max(6),
   goalNote: z.string().max(160),
+  correctedName: z.string().max(60),
   retryPrompt: z.string().max(120),
 });
 
@@ -303,26 +306,20 @@ export async function parseOnboardingTurn(input: OnboardingTurnInput) {
 
   if (input.step === "name") {
     if (!raw) {
-      return { step: "name" as const, valid: false, name: "", retryPrompt: `What should I call you?` };
-    }
-    // Fast-path clean 1-2 word name without conversational filler
-    const stripped = raw
-      .replace(/^(?:hi|hey|hello)[,!\s]+/i, "")
-      .replace(/^(?:call me|my name is|i am|i'm|im|it's|its)\s+/i, "")
-      .replace(/[.!?]+$/g, "")
-      .trim();
-    if (/^[\p{L}][\p{L}'\- ]{0,30}$/u.test(stripped) && stripped.split(/\s+/).length <= 3) {
-      const formatted = stripped
-        .split(/\s+/)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-      return { step: "name" as const, valid: true, name: formatted };
+      return {
+        step: "name" as const,
+        valid: false,
+        name: "",
+        retryPrompt: t(input.nativeLanguage, "onboardingRetryName"),
+      };
     }
     const parsed = await generateJson({
       system: [
-        "Extract the learner's preferred name from their reply to 'What should I call you?'.",
-        `If they gave a usable name or nickname, set "valid": true, "name": clean capitalized name (without "Call me" or punctuation), "retryPrompt": "".`,
-        `If the reply has no name or is unintelligible, set "valid": false, "name": "", and write a warm 1-sentence "retryPrompt" in ${native} asking what to call them.`,
+        "Extract the learner's preferred name or nickname from their reply (in any language) to 'What should I call you?'.",
+        `- Strip conversational framing in ANY language (e.g. "call me", "my name is", "I'm", "llámame", "llamame", "me llamo", "mi nombre es", "soy", "je m'appelle", "ich heiße", "mi chiamo", "meu nome é", etc.) and trailing punctuation.`,
+        `- Preserve the learner's chosen name or nickname with clean capitalization (e.g. "llamame Pablito" -> "Pablito", "Pablituuu" -> "Pablituuu").`,
+        `- If they gave any usable name, first name, or nickname, set "valid": true, "name": clean name, "retryPrompt": "".`,
+        `- Only if the reply contains NO name (e.g. just a greeting like "hola"/"hi", a question, "I don't know", or gibberish), set "valid": false, "name": "", and write a warm 1-sentence "retryPrompt" in ${native} asking what to call them.`,
       ].join("\n"),
       contents: `Learner reply: "${raw}"`,
       schema: nameTurnSchema,
@@ -333,52 +330,26 @@ export async function parseOnboardingTurn(input: OnboardingTurnInput) {
   }
 
   if (input.step === "level") {
-    const normalized = raw.toLowerCase();
-    if (
-      normalized === "beginner" ||
-      normalized === "principiante" ||
-      normalized === "débutant" ||
-      normalized === "anfänger" ||
-      normalized === "iniciante" ||
-      normalized === "początkujący"
-    ) {
-      return { step: "level" as const, valid: true, level: "A1" as const };
-    }
-    if (
-      normalized === "intermediate" ||
-      normalized === "intermedio" ||
-      normalized === "intermédiaire" ||
-      normalized === "mittelstufe" ||
-      normalized === "intermediário" ||
-      normalized === "gemiddeld" ||
-      normalized === "średnio zaawansowany"
-    ) {
-      return { step: "level" as const, valid: true, level: "B1" as const };
-    }
-    if (
-      normalized === "advanced" ||
-      normalized === "avanzado" ||
-      normalized === "avancé" ||
-      normalized === "fortgeschritten" ||
-      normalized === "avanzato" ||
-      normalized === "avançado" ||
-      normalized === "gevorderd" ||
-      normalized === "zaawansowany"
-    ) {
-      return { step: "level" as const, valid: true, level: "C1" as const };
-    }
     if (!raw) {
-      return { step: "level" as const, valid: false, level: "A1" as const, retryPrompt: `How much ${target} do you know so far?` };
+      return {
+        step: "level" as const,
+        valid: false,
+        level: "A1" as const,
+        correctedName: "",
+        retryPrompt: t(input.nativeLanguage, "onboardingRetryLevel", { language: target }),
+      };
     }
     const parsed = await generateJson({
       system: [
-        `Map the learner's self-reported ${target} experience to a CEFR level (A1, A2, B1, B2, C1, C2).`,
+        `Map the learner's self-reported ${target} experience (in any language) to a CEFR level (A1, A2, B1, B2, C1, C2).`,
         `- Complete beginner / nothing / a few words -> A1`,
         `- Tourist basics / studied briefly -> A2`,
         `- Intermediate / everyday basics / conversational -> B1`,
         `- Upper-intermediate / comfortable in most situations -> B2`,
         `- Advanced / fluent / professional -> C1 or C2`,
-        `Set "valid": true unless the text is completely unrelated gibberish (if gibberish, set "valid": false and write a short "retryPrompt" in ${native}).`,
+        `- If the learner is actually correcting or stating their name instead of answering their ${target} level (e.g. "my name is Pablituuu", "llamame Pablo"), set "valid": false, "correctedName": the clean extracted name, "level": "A1", and write a warm 1-sentence "retryPrompt" in ${native} acknowledging the corrected name and asking how much ${target} they know.`,
+        `- Otherwise set "correctedName": "".`,
+        `- Set "valid": true only if the reply meaningfully indicates their ${target} level; if off-topic, unclear, or gibberish, set "valid": false and write a short "retryPrompt" in ${native}.`,
       ].join("\n"),
       contents: `Learner reply: "${raw}"`,
       schema: levelTurnSchema,
@@ -390,25 +361,6 @@ export async function parseOnboardingTurn(input: OnboardingTurnInput) {
 
   // step === "goals"
   const combined = [raw, ...(chips.length ? [`Selected tags: ${chips.join(", ")}`] : [])].filter(Boolean).join(". ");
-  if (!raw && chips.length > 0) {
-    const lowerChips = chips.map((c) => c.toLowerCase());
-    const focus: LearnerProfile["focus"] = lowerChips.some((c) => c.includes("work") || c.includes("interview"))
-      ? "work"
-      : lowerChips.some((c) => c.includes("travel"))
-        ? "travel"
-        : lowerChips.some((c) => c.includes("exam"))
-          ? "exams"
-          : lowerChips.some((c) => c.includes("culture"))
-            ? "culture"
-            : "conversation";
-    return {
-      step: "goals" as const,
-      valid: true,
-      focus,
-      interests: chips.slice(0, 6),
-      goalNote: chips.join(", "),
-    };
-  }
   if (!combined) {
     return {
       step: "goals" as const,
@@ -416,16 +368,19 @@ export async function parseOnboardingTurn(input: OnboardingTurnInput) {
       focus: "conversation" as const,
       interests: [] as string[],
       goalNote: "",
-      retryPrompt: `Tell me a bit about why you're learning ${target}.`,
+      correctedName: "",
+      retryPrompt: t(input.nativeLanguage, "onboardingRetryGoals", { language: target }),
     };
   }
   const parsed = await generateJson({
     system: [
-      `Extract the learner's motivation and specific interests for learning ${target}.`,
-      `- "focus": pick the closest primary focus among "conversation", "travel", "work", "exams", "culture" (interviews/career -> "work", trips/moving -> "travel", daily chat/friends -> "conversation").`,
+      `Extract the learner's motivation and specific interests for learning ${target} from their reply (in any language).`,
+      `- "focus": pick the closest primary focus among "conversation", "travel", "work", "exams", "culture" (interviews/career/work -> "work", trips/moving -> "travel", daily chat/friends -> "conversation", exams/certifications -> "exams", movies/music/culture -> "culture").`,
       `- "interests": 1 to 5 concise topic tags in ${native} (max 40 chars each, e.g. ["Backend interviews", "Mexico", "Specialty coffee", "Travel"]).`,
       `- "goalNote": concise summary of their goal in ${native} (max 150 chars, preserving concrete details like countries, roles, or hobbies).`,
-      `- "valid": true if any goal, reason, or interest was expressed (even "just for fun" -> valid: true, focus: "conversation"); false only for empty/gibberish noise, with a short "retryPrompt" in ${native}.`,
+      `- If the learner is actually correcting or stating their name instead of sharing why they are learning ${target} (e.g. "my name isn't X, my name is Pablituuu"), set "valid": false, "correctedName": the clean extracted name, "focus": "conversation", "interests": [], "goalNote": "", and write a warm 1-sentence "retryPrompt" in ${native} greeting them by the corrected name and asking why they are learning ${target}.`,
+      `- Otherwise set "correctedName": "".`,
+      `- "valid": true if any goal, reason, tag, or interest was expressed (even "just for fun" -> valid: true, focus: "conversation"); false for off-topic replies, empty/gibberish noise, or name-only corrections, with a short "retryPrompt" in ${native}.`,
     ].join("\n"),
     contents: combined,
     schema: goalsTurnSchema,

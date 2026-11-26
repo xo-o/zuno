@@ -122,4 +122,28 @@ class OnboardingViewModelTest {
 
         assertFalse(vm.stepBack("Name?") { "Level?" })
     }
+
+    @Test
+    fun appendUserAndRetryUpdatesCorrectedNameWhenProvided() {
+        val vm = OnboardingViewModel()
+        vm.continueFromLanguage("What should I call you?")
+        vm.applyParsedTurn(
+            step = OnboardingStep.Name,
+            userDisplayText = "llamame Pablito",
+            parsed = OnboardingTurnResult(step = "name", valid = true, name = "Llamame Pablito"),
+            levelPromptBuilder = { fn -> "Nice to meet you, $fn." },
+            goalsPromptBuilder = { fn -> "Why, $fn?" },
+        )
+        assertEquals("Llamame Pablito", vm.state.value.name)
+
+        vm.appendUserAndRetry(
+            step = OnboardingStep.Level,
+            userText = "my name is Pablituuu",
+            retryPrompt = "¡Hola, Pablituuu! ¿Cuánto inglés sabes?",
+            correctedName = "Pablituuu",
+        )
+        assertEquals(OnboardingStep.Level, vm.state.value.step)
+        assertEquals("Pablituuu", vm.state.value.name)
+        assertEquals("Pablituuu", vm.state.value.firstName)
+    }
 }

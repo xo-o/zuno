@@ -3,8 +3,12 @@ import assert from "node:assert/strict";
 import type { LearnerProfile } from "./profile.js";
 import {
   cefrGuidelines,
+  goalsTurnSchema,
+  levelTurnSchema,
   MAX_LESSONS_PER_TOPIC,
   MIN_LESSONS_PER_TOPIC,
+  nameTurnSchema,
+  parseOnboardingTurn,
   topicBuilderTurnSchema,
   topicSchema,
   voiceInstructions,
@@ -120,4 +124,32 @@ test("tutor: voiceInstructions injects CEFR guidelines for Free Talk, Roleplay, 
 
   const levelCheck = voiceInstructions({ kind: "levelcheck" }, makeProfile({ level: "C1" }));
   assert.doesNotMatch(levelCheck, /CEFR C1 \(Advanced\)/);
+});
+
+test("tutor: onboarding turn schemas support correctedName and empty inputs return localized retry prompts", async () => {
+  assert.equal(nameTurnSchema.safeParse({ valid: true, name: "Pablito", retryPrompt: "" }).success, true);
+  assert.equal(levelTurnSchema.safeParse({ valid: false, level: "A1", correctedName: "Pablituuu", retryPrompt: "¡Hola, Pablituuu!" }).success, true);
+  assert.equal(
+    goalsTurnSchema.safeParse({
+      valid: false,
+      focus: "conversation",
+      interests: [],
+      goalNote: "",
+      correctedName: "Pablituuu",
+      retryPrompt: "¡Hola, Pablituuu! ¿Cuál es tu objetivo?",
+    }).success,
+    true,
+  );
+
+  const emptyNameEs = await parseOnboardingTurn({ step: "name", answer: "   ", targetLanguage: "en", nativeLanguage: "es" });
+  assert.equal(emptyNameEs.valid, false);
+  assert.match(emptyNameEs.retryPrompt, /llame/i);
+
+  const emptyLevelEs = await parseOnboardingTurn({ step: "level", answer: "", targetLanguage: "en", nativeLanguage: "es" });
+  assert.equal(emptyLevelEs.valid, false);
+  assert.match(emptyLevelEs.retryPrompt, /English/i);
+
+  const emptyGoalsEs = await parseOnboardingTurn({ step: "goals", answer: "", chips: [], targetLanguage: "en", nativeLanguage: "es" });
+  assert.equal(emptyGoalsEs.valid, false);
+  assert.match(emptyGoalsEs.retryPrompt, /aprendiendo/i);
 });

@@ -1881,6 +1881,7 @@ fun ZunoApp(
                     onConfirmAppLanguage = { newLang ->
                         appLanguage = newLang
                         zunoViewModel.updateProfile(appLanguage = newLang)
+                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(newLang.bcp47))
                     },
                     onParseTurn = zunoViewModel::parseOnboardingTurn,
                     onCompleteOnboarding = zunoViewModel::completeOnboarding,

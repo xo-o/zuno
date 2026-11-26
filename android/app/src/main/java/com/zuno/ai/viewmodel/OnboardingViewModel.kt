@@ -225,7 +225,12 @@ class OnboardingViewModel : ViewModel() {
         _state.update { it.copy(submittingTurn = submitting) }
     }
 
-    fun appendUserAndRetry(step: OnboardingStep, userText: String, retryPrompt: String) {
+    fun appendUserAndRetry(
+        step: OnboardingStep,
+        userText: String,
+        retryPrompt: String,
+        correctedName: String? = null,
+    ) {
         _state.update { current ->
             val items = buildList {
                 addAll(current.chatHistory)
@@ -234,7 +239,8 @@ class OnboardingViewModel : ViewModel() {
                 }
                 add(OnboardingChatItem(nextId(), OnboardingChatRole.Assistant, retryPrompt, step))
             }
-            current.copy(chatHistory = items, draftText = "", submittingTurn = false)
+            val nextName = correctedName?.trim()?.takeIf { it.isNotEmpty() } ?: current.name
+            current.copy(name = nextName, chatHistory = items, draftText = "", submittingTurn = false)
         }
     }
 
