@@ -415,8 +415,8 @@ private fun ParticipantTile(
                     .background(
                         Brush.verticalGradient(
                             0f to Color.Transparent,
-                            0.55f to Color(0x910D0D0F),
-                            1f to Color(0xE00D0D0F),
+                            0.55f to ZunoColors.ScrimVideoMid,
+                            1f to ZunoColors.ScrimVideoBottom,
                         ),
                     ),
             )

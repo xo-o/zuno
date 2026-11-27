@@ -361,7 +361,7 @@ fun ZunoSegmentedTabs(
                             Modifier.zunoGlassElevated(
                                 CircleShape,
                                 fillColor = ZunoColors.SurfaceControlActive,
-                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                                borderBrush = SolidColor(ZunoColors.BorderControlActive),
                             )
                         } else {
                             Modifier.clip(CircleShape)
@@ -737,7 +737,7 @@ fun ZunoStatusPill(
     }
     val borderColor = when (tone) {
         StatusPillTone.Success -> ZunoColors.BorderSuccessSubtle
-        StatusPillTone.Neutral -> ZunoColors.BorderSubtle
+        StatusPillTone.Neutral -> ZunoColors.BorderDefault
         StatusPillTone.Danger -> ZunoColors.DangerBorder
     }
     val contentColor = when (tone) {

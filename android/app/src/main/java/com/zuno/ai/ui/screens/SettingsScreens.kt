@@ -124,7 +124,7 @@ import kotlin.math.roundToInt
 // ── Shared Settings Components (Form Row, Card Group, Switch) ────────────────
 
 /**
- * Rounded 20dp card group (`bg-surface-default`, `border-subtle`) with an optional section label above it.
+ * Rounded 14dp card group (`surface/default`, `border/subtle`) with an optional section label above it.
  */
 @Composable
 fun ZunoSettingsGroup(
@@ -148,7 +148,7 @@ fun ZunoSettingsGroup(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .zunoGlassSubtle(shape),
+                .zunoGlassSubtle(shape, fillColor = ZunoColors.SurfaceDefault),
             content = content,
         )
     }
@@ -255,8 +255,8 @@ fun ZunoSettingsRow(
 
 /**
  * Figma `Switch` (node 2102:1652): 48×28dp pill track with 20dp circular knob.
- * On: `SurfaceInverse` (`rgba(255,255,255,0.92)`) track, `#121212` knob at x=34.
- * Off: `rgba(255,255,255,0.14)` track, `rgba(255,255,255,0.44)` knob at x=14.
+ * On: `SurfaceInverse` track, `IconOnInverse` (`bg/canvas`) knob.
+ * Off: `SurfaceStronger` (`carbon-alpha/14`) track, `SurfaceInverseMuted` (`carbon-alpha/44`) knob.
  */
 @Composable
 fun ZunoSwitch(
@@ -269,8 +269,8 @@ fun ZunoSwitch(
         animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
         label = "zunoSwitchThumb",
     )
-    val trackColor = if (checked) ZunoColors.SurfaceInverse else Color(0x24FFFFFF)
-    val thumbColor = if (checked) ZunoColors.IconOnInverse else ZunoColors.TextTertiary
+    val trackColor = if (checked) ZunoColors.SurfaceInverse else ZunoColors.SurfaceStronger
+    val thumbColor = if (checked) ZunoColors.IconOnInverse else ZunoColors.SurfaceInverseMuted
 
     Box(
         modifier = modifier
@@ -929,7 +929,7 @@ private fun TutorSelectionCard(
     onPreview: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val cardShape = RoundedCornerShape(ZunoRadius.xl)
+    val cardShape = RoundedCornerShape(ZunoRadius.xxl)
     val borderColor = if (selected) ZunoColors.SurfaceInverse else ZunoColors.BorderSubtle
     val borderWidth = if (selected) 1.5.dp else 1.dp
     val bgColor = if (selected) ZunoColors.SurfaceStrong else ZunoColors.SurfaceDefault
@@ -945,7 +945,7 @@ private fun TutorSelectionCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp)
-                .background(Color(0xFF161618)),
+                .background(ZunoColors.BgElevated),
         ) {
             val poster = tutor.stagePoster
             if (poster is TutorPosterSource.DrawableRes) {
@@ -1188,7 +1188,11 @@ fun SettingsLearningScreen(
                                         .size(44.dp)
                                         .then(
                                             if (isSelected) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
-                                            else Modifier.zunoGlassSubtle(CircleShape),
+                                            else Modifier.zunoGlassSubtle(
+                                                CircleShape,
+                                                fillColor = ZunoColors.SurfaceDefault,
+                                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                                            ),
                                         )
                                         .clickable(role = Role.RadioButton, onClick = { onLevelChange(item) }),
                                     contentAlignment = Alignment.Center,

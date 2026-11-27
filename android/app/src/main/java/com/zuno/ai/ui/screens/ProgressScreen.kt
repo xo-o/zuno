@@ -237,7 +237,7 @@ fun ProgressScreen(
             }
 
             // Recommended Drill card
-            val drillTint = Color(0xFFF87171)
+            val drillTint = ZunoColors.Coral400
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -250,7 +250,7 @@ fun ProgressScreen(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(RoundedCornerShape(ZunoRadius.md))
-                        .background(drillTint.copy(alpha = 0.12f)),
+                        .background(ZunoColors.CoralAlpha12),
                     contentAlignment = Alignment.Center,
                 ) {
                     ZunoIcon(R.drawable.zuno_ic_t_volume, 16.dp, tint = drillTint)
@@ -342,12 +342,17 @@ fun ProgressScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text("Less", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
-                            listOf(0.08f, 0.22f, 0.48f, 0.92f).forEach { alpha ->
+                            listOf(
+                                ZunoColors.SurfaceSubtle,
+                                ZunoColors.SurfaceStrong,
+                                ZunoColors.SurfaceStronger,
+                                ZunoColors.SurfaceInverse,
+                            ).forEach { cellColor ->
                                 Box(
                                     modifier = Modifier
                                         .size(10.dp)
                                         .clip(RoundedCornerShape(3.dp))
-                                        .background(Color.White.copy(alpha = alpha)),
+                                        .background(cellColor),
                                 )
                             }
                             Text("More", style = ZunoType.Micro, color = ZunoColors.TextTertiary)
@@ -440,8 +445,8 @@ private fun SkillRadarChart(values: List<Float>, modifier: Modifier = Modifier) 
         }
         dataPath.close()
 
-        val coral = Color(0xFFF87171)
-        val amber = Color(0xFFFBBF24)
+        val coral = ZunoColors.Coral400
+        val amber = ZunoColors.Amber400
         val emerald = ZunoColors.Emerald400
         val start = Offset(cx - maxR * 0.35f, cy - maxR * 0.85f)
         val end = Offset(cx + maxR * 0.55f, cy + maxR * 0.85f)
@@ -492,7 +497,7 @@ private fun WeeklyBarChart(bars: List<Pair<String, Float>>, highlightIndex: Int)
                                 when {
                                     idx == highlightIndex && fraction > 0.01f -> ZunoColors.SurfaceInverse
                                     fraction > 0.01f -> ZunoColors.SurfaceStrong
-                                    else -> Color.White.copy(alpha = 0.08f)
+                                    else -> ZunoColors.SurfaceSubtle
                                 },
                             ),
                     )
@@ -512,7 +517,12 @@ private fun ConsistencyHeatmap(days: List<HeatmapDay>) {
     // 12 columns (weeks) x 7 rows (Mon..Sun) or padded 84-day grid
     val cols = 12
     val rows = 7
-    val levels = listOf(0.07f, 0.22f, 0.48f, 0.92f)
+    val levels = listOf(
+        ZunoColors.SurfaceSubtle,
+        ZunoColors.SurfaceStrong,
+        ZunoColors.SurfaceStronger,
+        ZunoColors.SurfaceInverse,
+    )
     val totalCells = cols * rows
     val padded = if (days.size >= totalCells) {
         days.takeLast(totalCells)
@@ -537,7 +547,7 @@ private fun ConsistencyHeatmap(days: List<HeatmapDay>) {
                             .weight(1f)
                             .height(14.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = levels[levelIdx])),
+                            .background(levels[levelIdx]),
                     )
                 }
             }

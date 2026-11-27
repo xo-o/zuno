@@ -298,7 +298,11 @@ fun VocabularyScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                                .zunoGlassSubtle(
+                                    RoundedCornerShape(ZunoRadius.xxl),
+                                    fillColor = ZunoColors.SurfaceDefault,
+                                    borderBrush = SolidColor(ZunoColors.BorderDefault),
+                                )
                                 .padding(ZunoSpace.s16),
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                         ) {
@@ -463,7 +467,7 @@ fun VocabularyScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
+                                .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
                         ) {
                             visible.forEachIndexed { index, item ->
                                 if (index > 0) ZunoGlassHairline()

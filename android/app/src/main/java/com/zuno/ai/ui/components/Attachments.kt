@@ -571,7 +571,7 @@ fun ZunoImageViewer(attachment: Attachment, onDismiss: () -> Unit) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(ZunoColors.Black)
                 .clickable(role = Role.Button, onClick = onDismiss),
         ) {
             AsyncImage(

@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -253,7 +254,7 @@ fun ScheduledScreen(
                                 Column(
                                     Modifier
                                         .fillMaxWidth()
-                                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
+                                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
                                 ) {
                                     rows.forEachIndexed { idx, schedule ->
                                         if (idx > 0) ZunoGlassHairline()
@@ -531,7 +532,7 @@ fun NewScheduleScreen(
                         )
                     } else {
                         Column(
-                            Modifier.fillMaxWidth().zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
+                            Modifier.fillMaxWidth().zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
                         ) {
                             rows.forEachIndexed { idx, row ->
                                 if (idx > 0) ZunoGlassHairline()
@@ -566,7 +567,7 @@ fun NewScheduleScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl), fillColor = ZunoColors.SurfaceDefault)
                         .padding(ZunoSpace.s16),
                     horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                     verticalAlignment = Alignment.CenterVertically,
@@ -830,7 +831,11 @@ private fun DayChip(label: String, selected: Boolean, modifier: Modifier = Modif
             .size(44.dp)
             .then(
                 if (selected) Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
-                else Modifier.zunoGlassSubtle(CircleShape),
+                else Modifier.zunoGlassSubtle(
+                    CircleShape,
+                    fillColor = ZunoColors.SurfaceDefault,
+                    borderBrush = SolidColor(ZunoColors.BorderDefault),
+                ),
             )
             .clickable(role = Role.Checkbox, onClick = onClick),
         contentAlignment = Alignment.Center,

@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -142,7 +143,10 @@ fun PaywallScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl)),
+                        .zunoGlassSubtle(
+                            RoundedCornerShape(ZunoRadius.xl),
+                            borderBrush = SolidColor(ZunoColors.BorderDefault),
+                        ),
                 ) {
                     PaywallPlanRow(
                         icon = R.drawable.zuno_ic_t_calendar,
@@ -243,7 +247,11 @@ private fun PaywallFeatureRow(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.md)),
+                .zunoGlassSubtle(
+                    RoundedCornerShape(ZunoRadius.md),
+                    borderBrush = null,
+                    fillColor = ZunoColors.SurfaceDefault,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             ZunoIcon(icon, 18.dp, tint = ZunoColors.IconPrimary)
@@ -274,7 +282,10 @@ private fun PaywallPlanRow(
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .then(if (selected) Modifier.zunoGlassElevated(CircleShape) else Modifier.zunoGlassSubtle(CircleShape)),
+                .then(
+                    if (selected) Modifier.zunoGlassElevated(CircleShape, fillColor = ZunoColors.SurfaceStrong, borderBrush = null)
+                    else Modifier.zunoGlassSubtle(CircleShape, fillColor = ZunoColors.SurfaceDefault, borderBrush = null),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             ZunoIcon(icon, 16.dp, tint = ZunoColors.IconSecondary)
@@ -318,7 +329,11 @@ fun WelcomeToProScreen(
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Box(
-                modifier = Modifier.size(60.dp).zunoGlassSubtle(CircleShape),
+                modifier = Modifier.size(60.dp).zunoGlassSubtle(
+                    CircleShape,
+                    fillColor = ZunoColors.SurfaceDefault,
+                    borderBrush = SolidColor(ZunoColors.BorderDefault),
+                ),
                 contentAlignment = Alignment.Center,
             ) {
                 ZunoIcon(R.drawable.zuno_ic_t_sparkles, 24.dp, tint = ZunoColors.IconPrimary)
@@ -397,7 +412,11 @@ private fun WelcomePerkRow(title: String, subtitle: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(32.dp).zunoGlassSubtle(CircleShape),
+            modifier = Modifier.size(32.dp).zunoGlassSubtle(
+                CircleShape,
+                fillColor = ZunoColors.SurfaceDefault,
+                borderBrush = null,
+            ),
             contentAlignment = Alignment.Center,
         ) {
             ZunoIcon(R.drawable.zuno_ic_t_check, 15.dp, tint = ZunoColors.IconSuccess)

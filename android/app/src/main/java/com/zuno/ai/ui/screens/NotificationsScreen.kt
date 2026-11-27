@@ -278,9 +278,9 @@ private fun AppUpdateHeroNotificationCard(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF0F1738),
-                            Color(0xFF29459E),
-                            Color(0xFF6170D9),
+                            ZunoColors.NotificationsBannerStart,
+                            ZunoColors.NotificationsBannerMid,
+                            ZunoColors.NotificationsBannerEnd,
                         ),
                     ),
                 ),
@@ -293,7 +293,7 @@ private fun AppUpdateHeroNotificationCard(
                     .background(
                         Brush.radialGradient(
                             colors = listOf(
-                                Color(0x8C8CB8FF),
+                                ZunoColors.NotificationsBannerGlow,
                                 Color.Transparent,
                             ),
                             center = Offset.Unspecified,
@@ -389,7 +389,7 @@ private fun AppUpdateHeroNotificationCard(
                         style = ZunoType.FootnoteStrong,
                         color = ZunoColors.TextPrimary,
                     )
-                    ZunoIcon(R.drawable.zuno_ic_chevron_right_small, 14.dp, tint = ZunoColors.IconPrimary)
+                    ZunoIcon(R.drawable.zuno_ic_t_chevron_right, 14.dp, tint = ZunoColors.IconPrimary)
                 }
             }
         }
@@ -456,7 +456,7 @@ private fun CompactNotificationRow(
                         .clip(RoundedCornerShape(ZunoRadius.sm))
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(Color(0xFF19265C), Color(0xFF476BD9)),
+                                colors = listOf(ZunoColors.NotificationsThumbStart, ZunoColors.NotificationsThumbEnd),
                             ),
                         ),
                     contentAlignment = Alignment.Center,

@@ -1295,7 +1295,7 @@ private fun LiveRoomGridTile(
     modifier: Modifier = Modifier,
 ) {
     val tileShape = RoundedCornerShape(ZunoRadius.xxl)
-    val scrim = Brush.verticalGradient(0f to Color.Transparent, 0.55f to Color(0x910D0D0F), 1f to Color(0xE00D0D0F))
+    val scrim = Brush.verticalGradient(0f to Color.Transparent, 0.55f to ZunoColors.ScrimVideoMid, 1f to ZunoColors.ScrimVideoBottom)
     Box(
         modifier = modifier
             .clip(tileShape)
@@ -1325,7 +1325,7 @@ private fun LiveRoomGridTile(
                             .zunoGlassMediaPill(CircleShape)
                             .padding(horizontal = ZunoSpace.s8, vertical = 3.dp),
                     ) {
-                        Text("Host", style = ZunoType.Micro, color = Color.White)
+                        Text("Host", style = ZunoType.Micro, color = ZunoColors.TextPrimary)
                     }
                 }
                 Box(
@@ -1337,7 +1337,7 @@ private fun LiveRoomGridTile(
                     ZunoIcon(
                         icon = if (isMuted) R.drawable.zuno_ic_mic_off else R.drawable.zuno_ic_t_mic,
                         size = 13.dp,
-                        tint = if (isMuted) ZunoColors.TextDanger else Color.White,
+                        tint = if (isMuted) ZunoColors.TextDanger else ZunoColors.IconPrimary,
                     )
                 }
             }
@@ -1345,7 +1345,7 @@ private fun LiveRoomGridTile(
                 Text(
                     text = if (member.isYou) stringResource(R.string.call_you_name, member.name) else member.name,
                     style = ZunoType.BodyMediumStrong,
-                    color = Color.White,
+                    color = ZunoColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

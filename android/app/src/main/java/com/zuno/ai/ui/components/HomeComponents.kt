@@ -299,7 +299,7 @@ fun ZunoHomeGreetingSection(
                         .fillMaxHeight()
                         .fillMaxWidth(progress)
                         .clip(CircleShape)
-                        .background(ZunoColors.TextPrimary),
+                        .background(ZunoColors.SurfaceInverse),
                 )
             }
         }

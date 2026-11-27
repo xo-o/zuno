@@ -63,7 +63,7 @@ fun Modifier.zunoGlassSubtle(
     )
 
 /**
- * Default/elevated control surface (`surface/default` 6% white + `border/default` 8% white).
+ * Default/elevated control surface (`surface/default` 4.3% carbon-alpha + `border/default` 14% carbon-alpha).
  */
 fun Modifier.zunoGlassElevated(
     shape: Shape,
@@ -117,13 +117,13 @@ fun Modifier.zunoGlassMediaPill(
     .border(borderWidth, ZunoColors.BorderSubtle, shape)
 
 /**
- * Progress bar track (`surface/strong` 10% white).
+ * Progress bar track (`surface/strong` 9% carbon-alpha).
  */
 fun Modifier.zunoRecessedTrack(shape: Shape): Modifier = this
     .clip(shape)
     .background(ZunoColors.SurfaceStrong)
 
-/** Horizontal hairline divider (`white-alpha/8` 8% white). */
+/** Horizontal hairline divider (`divider/subtle` 8% carbon-alpha). */
 @Composable
 fun ZunoGlassHairline(modifier: Modifier = Modifier) {
     Box(

@@ -503,7 +503,7 @@ private fun OpenToSpeakToggleCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .zunoGlassSubtle(shape)
+            .zunoGlassSubtle(shape, fillColor = ZunoColors.SurfaceDefault)
             .clickable(role = Role.Switch, onClick = { onToggle(!openToSpeak) })
             .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s10),
         horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
@@ -563,7 +563,8 @@ fun ChatsSearchField(
             .height(42.dp)
             .zunoGlassSubtle(
                 shape = shape,
-                borderBrush = if (query.isNotEmpty()) SolidColor(ZunoColors.BorderFocus) else ZunoGlassBorderSubtleBrush,
+                fillColor = ZunoColors.SurfaceControlTrack,
+                borderBrush = SolidColor(if (query.isNotEmpty()) ZunoColors.BorderFocus else ZunoColors.BorderDefault),
             )
             .padding(horizontal = zunoLayout.cardPaddingH),
         horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
@@ -631,7 +632,11 @@ private fun StartAiChatCard(onChat: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .zunoGlassSubtle(shape)
+            .zunoGlassSubtle(
+                shape = shape,
+                fillColor = ZunoColors.SurfaceDefault,
+                borderBrush = SolidColor(ZunoColors.BorderDefault),
+            )
             .clickable(role = Role.Button, onClick = onChat)
             .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s12),
         horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
@@ -683,7 +688,7 @@ private fun ConversationsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .zunoGlassSubtle(shape),
+                .zunoGlassSubtle(shape, fillColor = ZunoColors.SurfaceDefault),
         ) {
             items.forEachIndexed { index, item ->
                 if (index > 0) {
@@ -828,7 +833,7 @@ private fun AddedPartnersSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .zunoGlassSubtle(shape),
+                .zunoGlassSubtle(shape, fillColor = ZunoColors.SurfaceDefault),
         ) {
             partners.forEachIndexed { index, partner ->
                 if (index > 0) {
@@ -865,7 +870,7 @@ private fun OpenSpeakersFullListSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .zunoGlassSubtle(shape),
+                .zunoGlassSubtle(shape, fillColor = ZunoColors.SurfaceDefault),
         ) {
             speakers.forEachIndexed { index, speaker ->
                 if (index > 0) {
@@ -1219,7 +1224,11 @@ private fun NewChatSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(aiCardShape)
+                    .zunoGlassSubtle(
+                        shape = aiCardShape,
+                        fillColor = ZunoColors.SurfaceDefault,
+                        borderBrush = SolidColor(ZunoColors.BorderDefault),
+                    )
                     .clickable(role = Role.Button, onClick = onChatAi)
                     .padding(ZunoSpace.s14),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -1273,7 +1282,7 @@ private fun NewChatSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(listShape),
+                            .zunoGlassSubtle(listShape, fillColor = ZunoColors.SurfaceDefault),
                     ) {
                         filteredSpeakers.take(4).forEachIndexed { idx, speaker ->
                             if (idx > 0) ZunoGlassHairline()
@@ -1301,7 +1310,7 @@ private fun NewChatSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(listShape),
+                            .zunoGlassSubtle(listShape, fillColor = ZunoColors.SurfaceDefault),
                     ) {
                         filteredPartners.forEachIndexed { idx, partner ->
                             if (idx > 0) ZunoGlassHairline()

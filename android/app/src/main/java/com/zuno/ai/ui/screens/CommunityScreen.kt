@@ -147,7 +147,7 @@ private fun PartnersTabBody(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl))
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault)
                     .clickable(role = Role.Switch, onClick = { onToggleOpenToSpeak(!openToSpeak) })
                     .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
@@ -195,7 +195,7 @@ private fun PartnersTabBody(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
                 ) {
                     if (partners.isNotEmpty()) {
                         partners.forEachIndexed { idx, p ->
@@ -253,7 +253,7 @@ private fun PartnersTabBody(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
                 ) {
                     if (onlineLearners.isNotEmpty()) {
                         onlineLearners.forEachIndexed { idx, learner ->
@@ -400,7 +400,7 @@ private fun LeagueTabBody(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl), fillColor = ZunoColors.SurfaceDefault)
                     .padding(ZunoSpace.s16),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
             ) {
@@ -459,7 +459,7 @@ private fun LeagueTabBody(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl)),
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xl), fillColor = ZunoColors.SurfaceDefault),
                 ) {
                     restStandings.forEachIndexed { idx, row ->
                         if (idx > 0) ZunoGlassHairline()

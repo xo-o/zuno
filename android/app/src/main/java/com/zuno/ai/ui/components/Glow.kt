@@ -461,9 +461,9 @@ private fun DrawScope.drawHorizon(
 }
 
 // Tutor palette for the live indicator: emerald → teal → blue.
-private val TutorGreen = Color(0xFF4ADE80)
-private val TutorTeal = Color(0xFF14C8B4)
-private val TutorBlue = Color(0xFF60A5FA)
+private val TutorGreen = ZunoColors.Emerald400
+private val TutorTeal = ZunoColors.Teal400
+private val TutorBlue = ZunoColors.StatusListening
 
 private fun liveLabel(state: AgentGlowState): String = when (state) {
     AgentGlowState.Speaking -> "Zuno is speaking"
@@ -550,8 +550,8 @@ private fun DrawScope.drawLiveGlow(
         drawBlob(tinted, cx + drift * sin(t * 0.52f + 4.2f), y + 2f * d, grow * 0.9f, TutorTeal, colorful * b)
     }
 
-    val innerMono = lerp(ZunoColors.GlowHighlight, Color.White, 0.6f * e)
-    val innerTutor = lerp(lerp(TutorTeal, Color.White, 0.45f), Color.White, 0.3f * e)
+    val innerMono = lerp(ZunoColors.GlowHighlight, ZunoColors.White, 0.6f * e)
+    val innerTutor = lerp(lerp(TutorTeal, ZunoColors.White, 0.45f), ZunoColors.White, 0.3f * e)
     drawBlob(
         inner,
         cx + 4f * d * sin(t * 0.41f + 1.3f),

@@ -673,8 +673,8 @@ private fun AiTutorVideoTile(
     val tileShape = RoundedCornerShape(ZunoRadius.xxl)
     val scrim = Brush.verticalGradient(
         0f to Color.Transparent,
-        0.55f to Color(0x910D0D0F),
-        1f to Color(0xE00D0D0F),
+        0.55f to ZunoColors.ScrimVideoMid,
+        1f to ZunoColors.ScrimVideoBottom,
     )
 
     Box(
@@ -727,12 +727,12 @@ private fun AiTutorVideoTile(
                     ZunoIcon(
                         icon = R.drawable.zuno_ic_t_sparkles,
                         size = 11.dp,
-                        tint = Color.White,
+                        tint = ZunoColors.IconPrimary,
                     )
                     Text(
                         text = stringResource(R.string.chats_filter_ai_tutor),
                         style = ZunoType.Micro,
-                        color = Color.White,
+                        color = ZunoColors.TextPrimary,
                         maxLines = 1,
                     )
                 }
@@ -760,7 +760,7 @@ private fun AiTutorVideoTile(
                         ZunoIcon(
                             icon = R.drawable.zuno_ic_t_mic,
                             size = 12.dp,
-                            tint = Color.White,
+                            tint = ZunoColors.IconPrimary,
                         )
                     }
                 }
@@ -769,7 +769,7 @@ private fun AiTutorVideoTile(
                 Text(
                     text = tutor.displayName,
                     style = ZunoType.BodyMediumStrong,
-                    color = Color.White,
+                    color = ZunoColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -802,8 +802,8 @@ private fun UserVideoTile(
     val tileShape = RoundedCornerShape(ZunoRadius.xxl)
     val scrim = Brush.verticalGradient(
         0f to Color.Transparent,
-        0.55f to Color(0x910D0D0F),
-        1f to Color(0xE00D0D0F),
+        0.55f to ZunoColors.ScrimVideoMid,
+        1f to ZunoColors.ScrimVideoBottom,
     )
 
     Box(
@@ -863,7 +863,7 @@ private fun UserVideoTile(
                     ZunoIcon(
                         icon = if (isMuted) R.drawable.zuno_ic_mic_off else R.drawable.zuno_ic_t_mic,
                         size = 12.dp,
-                        tint = if (isMuted) ZunoColors.TextDanger else Color.White,
+                        tint = if (isMuted) ZunoColors.TextDanger else ZunoColors.IconPrimary,
                     )
                 }
             }
@@ -871,7 +871,7 @@ private fun UserVideoTile(
                 Text(
                     text = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
                     style = ZunoType.BodyMediumStrong,
-                    color = Color.White,
+                    color = ZunoColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

@@ -58,15 +58,25 @@ object ZunoColors {
     val EmeraldAlpha14 = Color(0x244ADE80) // 14%
     val EmeraldAlpha34 = Color(0x574ADE80) // 34%
 
-    // Primitives — Red
+    // Primitives — Red & Warm Accents
     val Red300 = Color(0xFFFF8B8B)
     val Red500 = Color(0xFFD15555)
+    val Coral400 = Color(0xFFF87171)
+    val CoralAlpha12 = Color(0x1FF87171) // 12%
+    val Amber400 = Color(0xFFFBBF24)
+    val Teal400 = Color(0xFF14C8B4)
+
+    // Primitives — Pure Black / White
+    val White = Color(0xFFFFFFFF)
+    val Black = Color(0xFF000000)
 
     // Background
     val BgCanvas = Gray3
     val BgElevated = Gray3_5
     val BgOverlay = Gray3_5
     val BgScrim = Color(0xB8000000) // black-alpha/72
+    val ScrimVideoMid = Color(0x910B0B0D)    // bg/canvas @57%
+    val ScrimVideoBottom = Color(0xE00B0B0D) // bg/canvas @88%
 
     // Surface
     val SurfaceSubtle = CarbonAlpha2_5
@@ -110,7 +120,15 @@ object ZunoColors {
     // Status
     val StatusListening = Color(0xFF60A5FA)
     val StatusSpeaking = Emerald400
-    val StatusConnecting = Color(0xFFFBBF24)
+    val StatusConnecting = Amber400
+
+    // Notification hero gradients (`Home · 5a · Notifications`)
+    val NotificationsBannerStart = Color(0xFF0F1738)
+    val NotificationsBannerMid = Color(0xFF29459E)
+    val NotificationsBannerEnd = Color(0xFF6170D9)
+    val NotificationsBannerGlow = Color(0x8C8CB8FF)
+    val NotificationsThumbStart = Color(0xFF1A265C)
+    val NotificationsThumbEnd = Color(0xFF476BD9)
 
     val Divider = CarbonAlpha9
     val DividerSubtle = CarbonAlpha8
