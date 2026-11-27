@@ -27,15 +27,25 @@ import com.zuno.ai.data.ChatsFilter
 import com.zuno.ai.data.ChatsOverview
 import com.zuno.ai.data.CoachPromptItem
 import com.zuno.ai.data.CoachPrompts
+import com.zuno.ai.data.HeatmapDay
+import com.zuno.ai.data.LeagueOverview
+import com.zuno.ai.data.LeagueStanding
 import com.zuno.ai.data.LearningLanguages
+import com.zuno.ai.data.LiveRoom
+import com.zuno.ai.data.LiveRoomMember
+import com.zuno.ai.data.LiveRoomsBrowse
 import com.zuno.ai.data.Message
 import com.zuno.ai.data.Profile
+import com.zuno.ai.data.ProgressDailyGoal
+import com.zuno.ai.data.ProgressOverview
 import com.zuno.ai.data.RecentKind
 import com.zuno.ai.data.RecentSession
 import com.zuno.ai.data.Schedule
 import com.zuno.ai.data.ScheduleRepeat
+import com.zuno.ai.data.SkillBreakdown
 import com.zuno.ai.data.UnifiedChatItem
 import com.zuno.ai.data.UnifiedChatKind
+import com.zuno.ai.data.WeeklyBarDay
 import com.zuno.ai.ui.components.ContinueSessionUi
 import com.zuno.ai.ui.components.ZunoDialog
 import com.zuno.ai.ui.screens.ChatScreen
@@ -209,6 +219,81 @@ class HomeScreensUiTest {
             providers = listOf("google"),
         )
         val now = System.currentTimeMillis()
+        val sampleProgress = ProgressOverview(
+            language = "es",
+            level = "B1",
+            cefrProgressPercent = 68,
+            streakDays = 22,
+            totalSpokenMinutes = 186,
+            wordsCount = 248,
+            hoursUntilReset = 6,
+            dailyGoals = listOf(
+                ProgressDailyGoal("speak", "Speak for 10 minutes", current = 10, target = 10, unit = "m"),
+                ProgressDailyGoal("vocab", "Use 3 due words in chat", current = 2, target = 3, unit = ""),
+                ProgressDailyGoal("lessons", "Complete 2 shadow drills", current = 1, target = 2, unit = ""),
+            ),
+            skills = SkillBreakdown(
+                hasData = true,
+                pronunciation = 84,
+                listening = 88,
+                vocabulary = 82,
+                fluency = 79,
+                grammar = 76,
+                wordStress = 72,
+                focusArea = "Word stress",
+                focusScore = 72,
+            ),
+            weeklyXp = 1240,
+            avgMinutesPerDay = 26,
+            weeklyBars = listOf(
+                WeeklyBarDay("M", "2026-11-16", 18, 120),
+                WeeklyBarDay("T", "2026-11-17", 28, 210),
+                WeeklyBarDay("W", "2026-11-18", 12, 90),
+                WeeklyBarDay("T", "2026-11-19", 34, 260),
+                WeeklyBarDay("F", "2026-11-20", 22, 160),
+                WeeklyBarDay("S", "2026-11-21", 45, 320, isToday = true),
+                WeeklyBarDay("S", "2026-11-22", 14, 80),
+            ),
+            activeDaysLast12Weeks = 58,
+            heatmapMonths = listOf("Sep", "Oct", "Nov"),
+            heatmapDays = List(84) { idx ->
+                HeatmapDay("2026-09-${(idx % 28) + 1}", level = (idx * 7) % 4, minutes = ((idx * 7) % 4) * 10)
+            },
+        )
+        val sampleLeague = LeagueOverview(
+            language = "es",
+            weekStartDate = "2026-11-16",
+            resetsAtMillis = now + 2 * 86_400_000L,
+            myRank = 4,
+            myXp = 1240,
+            myMinutesSpoken = 186,
+            totalParticipants = 24,
+            standings = listOf(
+                LeagueStanding(1, "u1", "Elena R.", "E", null, 240, 1620),
+                LeagueStanding(2, "u2", "Marcus T.", "M", null, 210, 1480),
+                LeagueStanding(3, "u3", "Priya K.", "P", null, 198, 1340),
+                LeagueStanding(4, "you", "Noah Carter", "N", null, 186, 1240, isYou = true),
+            ),
+        )
+        val sampleBrowse = LiveRoomsBrowse(
+            featured = LiveRoom(
+                id = "lr1",
+                title = "Café culture & morning routines",
+                description = "System-guided topic room.",
+                language = "es",
+                level = "B1",
+                maxMembers = 4,
+                visibility = "public",
+                sourceKind = "system",
+                status = "live",
+                hostName = "Zuno",
+                members = listOf(
+                    LiveRoomMember("z", "Zuno", "Z", isHost = true),
+                    LiveRoomMember("m", "Mateo R.", "M"),
+                ),
+            ),
+            rooms = emptyList(),
+        )
         val sampleSchedules = listOf(
             Schedule("s1", false, "t1", null, "Encuentra la parada de autobús", "Topic · Lesson 2", ScheduleRepeat.Once, "18:00", null, emptyList(), null, "UTC", 10, true, 10, false, now + 3_600_000L),
             Schedule("s2", false, "t2", null, "Job interview basics", "Topic · Lesson 4", ScheduleRepeat.Daily, "08:00", null, emptyList(), null, "UTC", 15, true, 10, false, now + 86_400_000L),
@@ -237,6 +322,8 @@ class HomeScreensUiTest {
                                     showUpgrade = true,
                                     continueSession = if (stage == "home_active") activeSession else null,
                                     recentSessions = recentSessions,
+                                    vocabDueCount = 12,
+                                    unreadChatsCount = 2,
                                     onStreakClick = {},
                                     onAvatarClick = {},
                                     onDailyGoalContinue = {},
@@ -286,6 +373,7 @@ class HomeScreensUiTest {
                                 languageName = "Spanish",
                                 level = "B1",
                                 streakDays = 22,
+                                progress = Loadable(sampleProgress),
                                 onBack = {},
                                 onStartDrill = {},
                                 modifier = Modifier.fillMaxSize(),
@@ -300,6 +388,7 @@ class HomeScreensUiTest {
                                 openToSpeak = true,
                                 partners = emptyList(),
                                 onlineLearners = emptyList(),
+                                league = Loadable(sampleLeague),
                                 onToggleOpenToSpeak = {},
                                 onTalkToPartner = {},
                                 onInviteClick = {},
@@ -311,6 +400,7 @@ class HomeScreensUiTest {
                             "live_rooms" -> LiveRoomsScreen(
                                 languageName = "Spanish",
                                 level = "B1",
+                                browse = Loadable(sampleBrowse),
                                 onBack = {},
                                 onJoinRoom = {},
                                 onCreateRoom = {},
@@ -370,15 +460,21 @@ class HomeScreensUiTest {
                                 modifier = Modifier.fillMaxSize(),
                             )
 
-                            "voice" -> {
+                            "voice", "voice_connecting", "voice_listening" -> {
+                                val voiceStatus = when (stage) {
+                                    "voice_connecting" -> VoiceCallStatus.Connecting
+                                    "voice_listening" -> VoiceCallStatus.Listening
+                                    else -> VoiceCallStatus.Speaking
+                                }
                                 VoiceModeScreen(
-                                    status = VoiceCallStatus.Speaking,
-                                    level = { 0.55f },
-                                    startedAtMillis = System.currentTimeMillis() - 42_000L,
+                                    status = voiceStatus,
+                                    level = { if (voiceStatus == VoiceCallStatus.Connecting) 0f else 0.55f },
+                                    startedAtMillis = if (voiceStatus == VoiceCallStatus.Connecting) null else System.currentTimeMillis() - 42_000L,
                                     tutorLine = "Imagina que estás en un café en Madrid. ¿Qué vas a pedir? ¿Con leche o solo?",
                                     userLine = null,
                                     isMuted = false,
                                     menu = emptyList(),
+                                    initialCaptionsOn = false,
                                     sessionKindLabel = "Free talk",
                                     languageLevelLabel = "Spanish B1",
                                     coachPrompts = CoachPrompts(
@@ -498,14 +594,27 @@ class HomeScreensUiTest {
             waitForText("Type instead")
             saveScreenshot(scenario, "04_home_empty")
 
-            // 5. Home · 6 · Speaking — No captions (`7383:13309` Agent Horizon)
+            // 5. Home · 6 / 6a / 6b — Connecting, Listening, Speaking (No captions, V3 Wide Horizon)
+            stage = "voice_connecting"
+            waitForText("Free talk")
+            waitForText("ZunoAI")
+            waitForText("Connecting…")
+            Thread.sleep(950)
+            saveScreenshot(scenario, "05a_voice_connecting")
+
+            stage = "voice_listening"
+            waitForText("Free talk · 00:", substring = true)
+            waitForText("Listening…")
+            Thread.sleep(950)
+            saveScreenshot(scenario, "05b_voice_listening")
+
             stage = "voice"
             waitForText("Free talk · 00:", substring = true)
             waitForText("ZunoAI")
             waitForText("Speak anytime to interrupt")
             waitForText("End call")
             waitForText("Show captions")
-            Thread.sleep(950) // allow smooth Mono -> Cobalt transition to complete
+            Thread.sleep(950) // allow smooth Horizon transition to complete
             saveScreenshot(scenario, "05_voice_no_captions")
 
             // 6. Home · 7 · Speaking — Captions
@@ -514,8 +623,8 @@ class HomeScreensUiTest {
             waitForText("¿Qué vas a pedir?", substring = true)
             waitForText("Translate")
             waitForText("0.75×")
-            waitForText("You · Listening")
-            waitForText("Listen · Your turn next…")
+            waitForText("Sofía speaking")
+            waitForText("Speak to interrupt", substring = true)
             waitForText("Free talk · Spanish B1")
             waitForText("Answers")
             waitForText("Switch topic")
@@ -549,12 +658,16 @@ class HomeScreensUiTest {
             waitForText("pedir la cuenta")
             saveScreenshot(scenario, "09_vocabulary")
 
-            // 10. Progress
+            // 10. Progress (`3127:14332` — Smoked Carbon + Emerald CEFR stepper + Daily Goal Rows + Gradient Radar)
             stage = "progress"
             waitForText("Progress")
-            waitForText("Skill balance")
+            waitForText("68% to B2")
             waitForText("Daily goals")
-            saveScreenshot(scenario, "10_progress")
+            waitForText("Speak for 10 minutes")
+            waitForText("Skill balance")
+            waitForText("Drill")
+            Thread.sleep(600)
+            saveScreenshot(scenario, "10_progress", useFullScreen = false)
 
             // 11. Community — Partners & League
             stage = "community"

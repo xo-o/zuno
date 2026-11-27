@@ -59,6 +59,7 @@ import com.zuno.ai.data.VocabPhrase
 import com.zuno.ai.data.VocabPreview
 import com.zuno.ai.ui.components.CallAvatarItem
 import com.zuno.ai.ui.components.CoachStageHeader
+import com.zuno.ai.ui.components.StatusPillTone
 import com.zuno.ai.ui.components.TurnPillState
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoBlankCueTile
@@ -75,6 +76,7 @@ import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButtonSize
 import com.zuno.ai.ui.components.ZunoSectionTopBar
 import com.zuno.ai.ui.components.ZunoSheet
+import com.zuno.ai.ui.components.ZunoStatusPill
 import com.zuno.ai.ui.components.ZunoTextField
 import com.zuno.ai.ui.components.ZunoTurnPillRow
 import com.zuno.ai.ui.components.ZunoUserBubble
@@ -87,6 +89,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -215,7 +218,7 @@ fun VocabularyScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s32),
+                    .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s32),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
             ) {
@@ -276,7 +279,7 @@ fun VocabularyScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
+                contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
             ) {
                 if (searchOpen) {
@@ -432,15 +435,19 @@ fun VocabularyScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
-                                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s32),
+                                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s32),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                         ) {
                             Box(
-                                modifier = Modifier.size(44.dp).zunoGlassSubtle(CircleShape),
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(ZunoColors.SurfaceSuccessSubtle)
+                                    .border(1.dp, ZunoColors.BorderSuccessSubtle, CircleShape),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                ZunoIcon(R.drawable.zuno_ic_t_check_circle, 20.dp, tint = ZunoColors.IconPrimary)
+                                ZunoIcon(R.drawable.zuno_ic_t_check_circle, 20.dp, tint = ZunoColors.IconSuccess)
                             }
                             Text(stringResource(R.string.vocab_zero_due_title), style = ZunoType.Headline, color = ZunoColors.TextPrimary)
                             Text(
@@ -488,31 +495,16 @@ fun VocabularyScreen(
                                         )
                                     }
 
-                                    if (item.dueNow) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(CircleShape)
-                                                .background(ZunoColors.SurfaceInverse)
-                                                .padding(horizontal = ZunoSpace.s10, vertical = 4.dp),
-                                        ) {
-                                            Text(
-                                                text = item.intervalLabel,
-                                                style = ZunoType.FootnoteStrong,
-                                                color = ZunoColors.TextOnInverse,
-                                            )
-                                        }
+                                    if (item.dueNow || item.bucket == VocabBucket.Mastered) {
+                                        ZunoStatusPill(
+                                            label = item.intervalLabel,
+                                            tone = StatusPillTone.Success,
+                                        )
                                     } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .zunoGlassElevated(CircleShape)
-                                                .padding(horizontal = ZunoSpace.s10, vertical = 4.dp),
-                                        ) {
-                                            Text(
-                                                text = item.intervalLabel,
-                                                style = ZunoType.FootnoteStrong,
-                                                color = ZunoColors.TextSecondary,
-                                            )
-                                        }
+                                        ZunoStatusPill(
+                                            label = item.intervalLabel,
+                                            tone = StatusPillTone.Neutral,
+                                        )
                                     }
 
                                     Box(
@@ -1117,7 +1109,7 @@ fun SprintEvaluationScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s4)) {
@@ -1148,13 +1140,21 @@ fun SprintEvaluationScreen(
                                 modifier = Modifier
                                     .size(28.dp)
                                     .clip(CircleShape)
-                                    .background(if (res.passed) ZunoColors.SurfaceInverse else ZunoColors.SurfaceStrong),
+                                    .then(
+                                        if (res.passed) {
+                                            Modifier
+                                                .background(ZunoColors.SurfaceSuccessSubtle)
+                                                .border(1.dp, ZunoColors.BorderSuccessSubtle, CircleShape)
+                                        } else {
+                                            Modifier.background(ZunoColors.SurfaceStrong)
+                                        },
+                                    ),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 ZunoIcon(
                                     icon = if (res.passed) R.drawable.zuno_ic_t_check else R.drawable.zuno_ic_rotate_ccw_secondary,
                                     size = 14.dp,
-                                    tint = if (res.passed) ZunoColors.TextOnInverse else ZunoColors.IconPrimary,
+                                    tint = if (res.passed) ZunoColors.IconSuccess else ZunoColors.IconPrimary,
                                 )
                             }
                             Text(
@@ -1166,9 +1166,9 @@ fun SprintEvaluationScreen(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = if (res.passed) "Next: ${res.nextIntervalLabel}" else "Tomorrow",
-                                style = ZunoType.FootnoteRegular,
-                                color = ZunoColors.TextTertiary,
+                                text = if (res.passed) "Mastered · ${res.nextIntervalLabel}" else "Tomorrow",
+                                style = ZunoType.FootnoteStrong,
+                                color = if (res.passed) ZunoColors.TextSuccess else ZunoColors.TextTertiary,
                             )
                             ZunoIcon(R.drawable.zuno_ic_t_volume, 16.dp, tint = ZunoColors.IconSecondary)
                         }
@@ -1180,7 +1180,7 @@ fun SprintEvaluationScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s16),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s16),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {
             if (missed > 0) {

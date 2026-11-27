@@ -53,6 +53,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -122,7 +123,7 @@ fun LessonEvaluationScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s14, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s14, bottom = ZunoSpace.s16),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             // Summary + 3x Eval Stat cards
@@ -220,7 +221,7 @@ fun LessonEvaluationScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s12),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s12),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {
             val nextId = evaluation.nextLessonId
@@ -350,7 +351,9 @@ private fun PhraseRow(
                 .clip(CircleShape)
                 .then(
                     if (isMastered) {
-                        Modifier.background(ZunoColors.SurfaceInverse)
+                        Modifier
+                            .background(ZunoColors.SurfaceSuccessSubtle)
+                            .border(1.dp, ZunoColors.BorderSuccessSubtle, CircleShape)
                     } else {
                         Modifier
                             .background(ZunoColors.SurfaceStrong)
@@ -360,7 +363,7 @@ private fun PhraseRow(
             contentAlignment = Alignment.Center,
         ) {
             if (isMastered) {
-                ZunoIcon(R.drawable.zuno_ic_check_inverse, 13.dp)
+                ZunoIcon(R.drawable.zuno_ic_t_check, 13.dp, tint = ZunoColors.IconSuccess)
             } else {
                 ZunoIcon(R.drawable.zuno_ic_t_repeat, 13.dp, tint = ZunoColors.IconSecondary)
             }
@@ -375,8 +378,8 @@ private fun PhraseRow(
 
         Text(
             text = if (isMastered) "Mastered" else "Practice",
-            style = if (isMastered) ZunoType.FootnoteRegular else ZunoType.FootnoteStrong,
-            color = if (isMastered) ZunoColors.TextTertiary else ZunoColors.TextSecondary,
+            style = ZunoType.FootnoteStrong,
+            color = if (isMastered) ZunoColors.TextSuccess else ZunoColors.TextSecondary,
         )
 
         ZunoIcon(R.drawable.zuno_ic_volume_secondary, 16.dp)

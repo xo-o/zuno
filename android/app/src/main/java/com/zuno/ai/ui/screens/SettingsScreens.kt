@@ -64,17 +64,22 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import com.zuno.ai.BuildConfig
 import com.zuno.ai.R
 import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
 import com.zuno.ai.avatar.model.TutorAvatarProfile
 import com.zuno.ai.avatar.model.TutorPosterSource
 import com.zuno.ai.data.AppLanguage
+import com.zuno.ai.data.AppReleaseCatalog
+import com.zuno.ai.data.AppReleaseNote
+import com.zuno.ai.data.AppUpdateInfo
 import com.zuno.ai.data.DailyGoals
 import com.zuno.ai.data.Focuses
 import com.zuno.ai.data.LearningLanguage
@@ -84,14 +89,20 @@ import com.zuno.ai.data.NotificationPrefs
 import com.zuno.ai.data.Preferences
 import com.zuno.ai.data.PrivacySettings
 import com.zuno.ai.data.Profile
+import com.zuno.ai.data.ReleaseHighlightCategory
 import com.zuno.ai.data.TeachingStyles
 import com.zuno.ai.data.TutorVoices
 import com.zuno.ai.ui.components.ZunoAvatar
 import com.zuno.ai.ui.components.ZunoBackTitleTopBar
+import com.zuno.ai.ui.components.ZunoButton
+import com.zuno.ai.ui.components.ZunoButtonSize
+import com.zuno.ai.ui.components.ZunoButtonVariant
+import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoDialog
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoIconButton
 import com.zuno.ai.ui.components.ZunoIconButtonSize
+import com.zuno.ai.ui.components.ZunoIconButtonStyle
 import com.zuno.ai.ui.components.ZunoInputDialog
 import com.zuno.ai.ui.components.ZunoSheet
 import com.zuno.ai.ui.components.ZunoSpinner
@@ -107,6 +118,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import kotlin.math.roundToInt
 
 // ── Shared Settings Components (Form Row, Card Group, Switch) ────────────────
@@ -151,8 +163,10 @@ fun ZunoSettingsRow(
     title: String,
     modifier: Modifier = Modifier,
     @DrawableRes icon: Int? = null,
+    iconTint: Color = ZunoColors.IconPrimary,
     subtitle: String? = null,
     value: String? = null,
+    valueColor: Color = ZunoColors.TextSecondary,
     showChevron: Boolean = false,
     checked: Boolean? = null,
     selected: Boolean = false,
@@ -183,17 +197,17 @@ fun ZunoSettingsRow(
                     Modifier
                 }
             )
-            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s10)
+            .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s10)
 
         Row(
             modifier = rowModifier,
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
                 leading()
             } else if (icon != null) {
-                ZunoIcon(icon = icon, size = 18.dp, tint = if (destructive) ZunoColors.IconDanger else null)
+                ZunoIcon(icon = icon, size = 18.dp, tint = iconTint)
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -222,7 +236,7 @@ fun ZunoSettingsRow(
                 Text(
                     text = value,
                     style = ZunoType.BodySmall,
-                    color = ZunoColors.TextSecondary,
+                    color = valueColor,
                     maxLines = 1,
                 )
             }
@@ -231,9 +245,9 @@ fun ZunoSettingsRow(
             } else if (checked != null) {
                 ZunoSwitch(checked = checked, onCheckedChange = { if (enabled) onClick?.invoke() })
             } else if (selected) {
-                ZunoIcon(icon = R.drawable.zuno_ic_check_20, size = 18.dp)
+                ZunoIcon(icon = R.drawable.zuno_ic_t_check, size = 18.dp, tint = ZunoColors.IconPrimary)
             } else if (showChevron) {
-                ZunoIcon(icon = R.drawable.zuno_ic_chevron_right_muted, size = 18.dp)
+                ZunoIcon(icon = R.drawable.zuno_ic_t_chevron_right, size = 18.dp, tint = ZunoColors.IconPrimary)
             }
         }
     }
@@ -304,6 +318,9 @@ fun SettingsOverviewScreen(
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
     modifier: Modifier = Modifier,
+    appVersionName: String = BuildConfig.VERSION_NAME,
+    appVersionCode: Int = BuildConfig.VERSION_CODE,
+    availableUpdateVersion: String? = null,
 ) {
     val density = LocalDensity.current
     val scrollState = rememberScrollState()
@@ -349,7 +366,7 @@ fun SettingsOverviewScreen(
                 .fillMaxSize()
                 .padding(top = HeaderHeight)
                 .verticalScroll(scrollState)
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             // Reserves the 200dp Hero Profile space in the scroll container
@@ -377,7 +394,7 @@ fun SettingsOverviewScreen(
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_learning),
-                    icon = R.drawable.zuno_ic_trending_up,
+                    icon = R.drawable.zuno_ic_t_trending_up,
                     value = learningSummary,
                     showChevron = true,
                     showDivider = true,
@@ -385,7 +402,7 @@ fun SettingsOverviewScreen(
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_ai_tutor),
-                    icon = R.drawable.zuno_ic_volume_secondary,
+                    icon = R.drawable.zuno_ic_t_volume,
                     value = activeTutor.displayName,
                     showChevron = true,
                     showDivider = true,
@@ -397,38 +414,47 @@ fun SettingsOverviewScreen(
             ZunoSettingsGroup {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_app_language),
-                    icon = R.drawable.zuno_ic_languages,
+                    icon = R.drawable.zuno_ic_t_languages,
                     value = appLanguage.nativeLabel,
                     showChevron = true,
                     onClick = onAppLanguage,
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_preferences),
-                    icon = R.drawable.zuno_ic_sliders_menu,
+                    icon = R.drawable.zuno_ic_t_sliders,
                     showChevron = true,
                     showDivider = true,
                     onClick = onPreferences,
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_notifications),
-                    icon = R.drawable.zuno_ic_bell_secondary,
+                    icon = R.drawable.zuno_ic_t_bell,
                     showChevron = true,
                     showDivider = true,
                     onClick = onNotifications,
                 )
             }
 
-            // About · Contact support
+            // About · Contact support (`1a` shows update badge when available)
             ZunoSettingsGroup {
+                val hasUpdate = !availableUpdateVersion.isNullOrBlank()
                 ZunoSettingsRow(
-                    title = stringResource(R.string.settings_about),
-                    icon = R.drawable.zuno_ic_info,
+                    title = stringResource(
+                        if (hasUpdate) R.string.settings_about_and_updates else R.string.settings_about,
+                    ),
+                    icon = R.drawable.zuno_ic_t_info,
+                    value = if (hasUpdate) {
+                        stringResource(R.string.settings_update_available_short, availableUpdateVersion.orEmpty())
+                    } else {
+                        stringResource(R.string.settings_version_short, appVersionName)
+                    },
+                    valueColor = if (hasUpdate) ZunoColors.StatusSpeaking else ZunoColors.TextSecondary,
                     showChevron = true,
                     onClick = onAbout,
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_contact_support),
-                    icon = R.drawable.zuno_ic_mail_secondary,
+                    icon = R.drawable.zuno_ic_t_mail,
                     showChevron = true,
                     showDivider = true,
                     onClick = onContactSupport,
@@ -439,11 +465,22 @@ fun SettingsOverviewScreen(
             ZunoSettingsGroup {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_sign_out),
-                    icon = R.drawable.zuno_ic_log_out,
+                    icon = R.drawable.zuno_ic_t_log_out,
                     showChevron = true,
                     onClick = onSignOut,
                 )
             }
+
+            // Subtle app version footer
+            Text(
+                text = stringResource(R.string.settings_app_version_footer, appVersionName, appVersionCode),
+                style = ZunoType.FootnoteRegular,
+                color = ZunoColors.TextTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = ZunoSpace.s4),
+            )
         }
 
         // Top Bar background matching CanvasTop so scrolled cards slide cleanly underneath the header
@@ -701,20 +738,20 @@ fun SettingsPreferencesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoSettingsGroup {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_voice),
-                    icon = R.drawable.zuno_ic_volume_secondary,
+                    icon = R.drawable.zuno_ic_t_volume,
                     value = "${activeTutor.displayName} · ${voiceLabel(activeTutor.voicePreset)}",
                     showChevron = true,
                     onClick = onOpenTutor,
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_teaching_style),
-                    icon = R.drawable.zuno_ic_book_open_secondary,
+                    icon = R.drawable.zuno_ic_t_book_open,
                     value = styleLabel(preferences.teachingStyle),
                     showChevron = true,
                     showDivider = true,
@@ -726,14 +763,14 @@ fun SettingsPreferencesScreen(
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_strict_mode),
                     subtitle = stringResource(R.string.settings_pref_strict_mode_sub),
-                    icon = R.drawable.zuno_ic_alert_circle_secondary,
+                    icon = R.drawable.zuno_ic_t_alert_circle,
                     checked = preferences.strictMode,
                     onClick = { onChange { it.copy(strictMode = !it.strictMode) } },
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_hands_free),
                     subtitle = stringResource(R.string.settings_pref_hands_free_sub),
-                    icon = R.drawable.zuno_ic_mic_secondary,
+                    icon = R.drawable.zuno_ic_t_mic,
                     checked = preferences.handsFree,
                     showDivider = true,
                     onClick = { onChange { it.copy(handsFree = !it.handsFree) } },
@@ -741,7 +778,7 @@ fun SettingsPreferencesScreen(
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_suggest),
                     subtitle = stringResource(R.string.settings_pref_suggest_sub),
-                    icon = R.drawable.zuno_ic_sparkles_secondary,
+                    icon = R.drawable.zuno_ic_t_sparkles,
                     checked = preferences.suggestReplies,
                     showDivider = true,
                     onClick = { onChange { it.copy(suggestReplies = !it.suggestReplies) } },
@@ -751,14 +788,14 @@ fun SettingsPreferencesScreen(
             ZunoSettingsGroup(sectionLabel = targetLangName) {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_show_translations),
-                    icon = R.drawable.zuno_ic_captions_secondary,
+                    icon = R.drawable.zuno_ic_captions,
                     checked = preferences.showTranslations,
                     onClick = { onChange { it.copy(showTranslations = !it.showTranslations) } },
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_pref_teach_in_lang, targetLangName),
                     subtitle = stringResource(R.string.settings_pref_teach_in_lang_sub, targetLangName, stringResource(appLanguage.subtitleRes)),
-                    icon = R.drawable.zuno_ic_languages,
+                    icon = R.drawable.zuno_ic_t_languages,
                     checked = preferences.teachInTarget,
                     showDivider = true,
                     onClick = { onChange { it.copy(teachInTarget = !it.teachInTarget) } },
@@ -829,7 +866,7 @@ fun SettingsTutorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
         ) {
             Text(
@@ -986,7 +1023,7 @@ private fun TutorSelectionCard(
                 contentAlignment = Alignment.Center,
             ) {
                 ZunoIcon(
-                    icon = R.drawable.zuno_ic_volume_secondary,
+                    icon = R.drawable.zuno_ic_t_volume,
                     size = 16.dp,
                     tint = if (isPlaying) ZunoColors.TextOnInverse else ZunoColors.IconPrimary,
                 )
@@ -1029,7 +1066,7 @@ fun SettingsAppLanguageScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Text(
@@ -1101,20 +1138,20 @@ fun SettingsLearningScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_learn_studying)) {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_learn_language),
-                    icon = R.drawable.zuno_ic_languages,
+                    icon = R.drawable.zuno_ic_t_languages,
                     value = languageName,
                     showChevron = true,
                     onClick = onOpenLanguages,
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_learn_accent),
-                    icon = R.drawable.zuno_ic_waveform,
+                    icon = R.drawable.zuno_ic_t_audio_lines,
                     value = language.accentLabel(profile?.accent),
                     showChevron = language.accents.size > 1,
                     showDivider = true,
@@ -1128,7 +1165,7 @@ fun SettingsLearningScreen(
                     ZunoSettingsRow(
                         title = stringResource(R.string.settings_learn_find_level),
                         subtitle = stringResource(R.string.settings_learn_find_level_sub, languageName),
-                        icon = R.drawable.zuno_ic_check_circle_secondary,
+                        icon = R.drawable.zuno_ic_t_check_circle,
                         showChevron = true,
                         onClick = onFindLevel,
                     )
@@ -1172,7 +1209,7 @@ fun SettingsLearningScreen(
                     ZunoSettingsRow(
                         title = stringResource(R.string.settings_learn_retake_check),
                         subtitle = stringResource(R.string.settings_learn_retake_check_sub),
-                        icon = R.drawable.zuno_ic_check_circle_secondary,
+                        icon = R.drawable.zuno_ic_t_check_circle,
                         showChevron = true,
                         showDivider = true,
                         onClick = onFindLevel,
@@ -1183,14 +1220,14 @@ fun SettingsLearningScreen(
             ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_learn_goals)) {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_learn_daily_goal),
-                    icon = R.drawable.zuno_ic_clock_secondary,
+                    icon = R.drawable.zuno_ic_t_clock,
                     value = stringResource(R.string.settings_learn_daily_goal_min, preferences.dailyGoalMin),
                     showChevron = true,
                     onClick = { picker = "goal" },
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_learn_focus),
-                    icon = R.drawable.zuno_ic_users_secondary,
+                    icon = R.drawable.zuno_ic_t_users,
                     value = focusLabel(preferences.focus),
                     showChevron = true,
                     showDivider = true,
@@ -1198,7 +1235,7 @@ fun SettingsLearningScreen(
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_learn_interests),
-                    icon = R.drawable.zuno_ic_sparkles_secondary,
+                    icon = R.drawable.zuno_ic_t_sparkles,
                     value = interestsValue,
                     showChevron = true,
                     showDivider = true,
@@ -1291,7 +1328,7 @@ fun SettingsLearningLanguageScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             if (!searching) {
@@ -1406,7 +1443,7 @@ fun ZunoSearchField(query: String, onQueryChange: (String) -> Unit, placeholder:
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ZunoIcon(R.drawable.zuno_ic_t_search, 18.dp, tint = ZunoColors.IconSecondary)
+                ZunoIcon(R.drawable.zuno_ic_t_search, 18.dp, tint = ZunoColors.IconPrimary)
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) Text(placeholder, style = ZunoType.BodyMedium, color = ZunoColors.TextPlaceholder, maxLines = 1)
                     inner()
@@ -1416,6 +1453,7 @@ fun ZunoSearchField(query: String, onQueryChange: (String) -> Unit, placeholder:
                         icon = R.drawable.zuno_ic_t_x,
                         onClick = { onQueryChange("") },
                         size = ZunoIconButtonSize.Small,
+                        tint = ZunoColors.IconPrimary,
                         contentDescription = stringResource(R.string.common_clear),
                     )
                 }
@@ -1462,7 +1500,7 @@ fun SettingsAccountScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Column(
@@ -1519,13 +1557,13 @@ fun SettingsAccountScreen(
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_acc_email),
                     subtitle = email,
-                    icon = R.drawable.zuno_ic_mail_secondary,
+                    icon = R.drawable.zuno_ic_t_mail,
                     showDivider = true,
                 )
                 if (profile?.signedInWithGoogle == true) {
                     ZunoSettingsRow(
                         title = stringResource(R.string.settings_acc_signed_in_google),
-                        icon = R.drawable.zuno_ic_google,
+                        icon = R.drawable.zuno_ic_t_google,
                         showDivider = true,
                     )
                 }
@@ -1534,7 +1572,7 @@ fun SettingsAccountScreen(
             ZunoSettingsGroup(sectionLabel = "Subscription & Privacy") {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_acc_plan),
-                    icon = R.drawable.zuno_ic_sparkles_secondary,
+                    icon = R.drawable.zuno_ic_t_sparkles,
                     value = stringResource(if (profile?.isPro == true) R.string.settings_acc_plan_pro else R.string.settings_acc_plan_free),
                     showChevron = profile?.isPro != true,
                     onClick = if (profile?.isPro == true) null else onPlanClick,
@@ -1542,7 +1580,7 @@ fun SettingsAccountScreen(
                 // Purchases can't be restored until in-app billing exists.
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_acc_restore_purchases),
-                    icon = R.drawable.zuno_ic_rotate_ccw_secondary,
+                    icon = R.drawable.zuno_ic_t_rotate_ccw,
                     showDivider = true,
                     enabled = false,
                 )
@@ -1561,7 +1599,7 @@ fun SettingsAccountScreen(
             ZunoSettingsGroup {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_acc_download_data),
-                    icon = R.drawable.zuno_ic_file_text_secondary,
+                    icon = R.drawable.zuno_ic_t_file_text,
                     showChevron = true,
                     onClick = onDownloadData,
                 )
@@ -1606,7 +1644,7 @@ fun SettingsAccountScreen(
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.account_photo_library),
-                    icon = R.drawable.zuno_ic_image,
+                    icon = R.drawable.zuno_ic_t_image,
                     showDivider = true,
                     onClick = {
                         showPhotoSheet = false
@@ -1681,7 +1719,7 @@ fun SettingsPrivacyScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             ZunoSettingsGroup {
@@ -1814,20 +1852,20 @@ fun SettingsNotificationsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_notif_practice)) {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_notif_daily_reminder),
                     subtitle = stringResource(R.string.settings_notif_daily_reminder_sub),
-                    icon = R.drawable.zuno_ic_bell_secondary,
+                    icon = R.drawable.zuno_ic_t_bell,
                     checked = prefs.dailyReminder,
                     onClick = { onChange { it.copy(dailyReminder = !it.dailyReminder) } },
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_notif_reminder_time),
-                    icon = R.drawable.zuno_ic_clock_secondary,
+                    icon = R.drawable.zuno_ic_t_clock,
                     value = formattedReminderTime,
                     showChevron = true,
                     showDivider = true,
@@ -1837,7 +1875,7 @@ fun SettingsNotificationsScreen(
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_notif_scheduled),
                     subtitle = stringResource(R.string.settings_notif_scheduled_sub),
-                    icon = R.drawable.zuno_ic_calendar_secondary,
+                    icon = R.drawable.zuno_ic_t_calendar,
                     checked = prefs.scheduledSessions,
                     showDivider = true,
                     onClick = { onChange { it.copy(scheduledSessions = !it.scheduledSessions) } },
@@ -1847,13 +1885,13 @@ fun SettingsNotificationsScreen(
             ZunoSettingsGroup(sectionLabel = stringResource(R.string.settings_notif_updates)) {
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_notif_progress),
-                    icon = R.drawable.zuno_ic_trending_up,
+                    icon = R.drawable.zuno_ic_t_trending_up,
                     checked = prefs.progressMilestones,
                     onClick = { onChange { it.copy(progressMilestones = !it.progressMilestones) } },
                 )
                 ZunoSettingsRow(
                     title = stringResource(R.string.settings_notif_new_topics),
-                    icon = R.drawable.zuno_ic_book_open_secondary,
+                    icon = R.drawable.zuno_ic_t_book_open,
                     checked = prefs.newContent,
                     showDivider = true,
                     onClick = { onChange { it.copy(newContent = !it.newContent) } },
@@ -1865,13 +1903,13 @@ fun SettingsNotificationsScreen(
                     ZunoSettingsRow(
                         title = stringResource(R.string.settings_notif_weekly_summary),
                         subtitle = stringResource(R.string.settings_notif_weekly_summary_sub),
-                        icon = R.drawable.zuno_ic_mail_secondary,
+                        icon = R.drawable.zuno_ic_t_mail,
                         checked = prefs.weeklySummaryEmail,
                         onClick = { onChange { it.copy(weeklySummaryEmail = !it.weeklySummaryEmail) } },
                     )
                     ZunoSettingsRow(
                         title = stringResource(R.string.settings_notif_product_news),
-                        icon = R.drawable.zuno_ic_sparkles_secondary,
+                        icon = R.drawable.zuno_ic_t_sparkles,
                         checked = prefs.productNewsEmail,
                         showDivider = true,
                         onClick = { onChange { it.copy(productNewsEmail = !it.productNewsEmail) } },
@@ -1890,4 +1928,467 @@ fun SettingsNotificationsScreen(
             }
         }
     }
+}
+
+// ── 10 · Settings · About (`7424:13733` & `7435:14587`) ────────────────────────
+
+@Composable
+fun SettingsAboutScreen(
+    availableUpdate: AppUpdateInfo?,
+    onWhatsNew: () -> Unit,
+    onUpdateNow: () -> Unit,
+    onRateApp: () -> Unit,
+    onTerms: () -> Unit,
+    onPrivacy: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onCheckForUpdates: () -> Unit = {},
+    isCheckingUpdates: Boolean = false,
+    appVersionName: String = BuildConfig.VERSION_NAME,
+    appVersionCode: Int = BuildConfig.VERSION_CODE,
+) {
+    var showLicenses by rememberSaveable { mutableStateOf(false) }
+    val hasUpdate = availableUpdate?.hasUpdate == true
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .zunoCanvasBackground()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        ZunoBackTitleTopBar(title = stringResource(R.string.settings_about), onBack = onBack)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
+        ) {
+            // App identity header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = ZunoSpace.s8, bottom = ZunoSpace.s4),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .zunoGlassSubtle(
+                            shape = RoundedCornerShape(ZunoRadius.xxl),
+                            borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            fillColor = ZunoColors.SurfaceDefault,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ZunoIcon(R.drawable.zuno_logo_mark, 32.dp)
+                }
+                Text(
+                    text = stringResource(R.string.about_brand_name),
+                    style = ZunoType.Headline,
+                    color = ZunoColors.TextPrimary,
+                )
+                Text(
+                    text = stringResource(R.string.about_version_build, appVersionName, appVersionCode),
+                    style = ZunoType.BodySmall,
+                    color = ZunoColors.TextSecondary,
+                )
+            }
+
+            // Slim 1-line update status strip (`V2.2a` update available / `V2.2b` up to date)
+            val stripShape = RoundedCornerShape(ZunoRadius.xl)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (hasUpdate) {
+                            Modifier.zunoGlassElevated(
+                                shape = stripShape,
+                                fillColor = ZunoColors.SurfaceStrong,
+                                borderBrush = SolidColor(ZunoColors.BorderDefault),
+                            )
+                        } else {
+                            Modifier.zunoGlassSubtle(
+                                shape = stripShape,
+                                fillColor = ZunoColors.SurfaceDefault,
+                                borderBrush = SolidColor(ZunoColors.BorderSubtle),
+                            )
+                        },
+                    )
+                    .padding(
+                        start = ZunoSpace.s16,
+                        end = ZunoSpace.s12,
+                        top = ZunoSpace.s10,
+                        bottom = ZunoSpace.s10,
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (hasUpdate) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(ZunoColors.StatusSpeaking),
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.settings_update_available_short,
+                            availableUpdate!!.latestVersion,
+                        ),
+                        style = ZunoType.BodyMediumStrong,
+                        color = ZunoColors.TextPrimary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ZunoButton(
+                        label = stringResource(R.string.about_update_short),
+                        onClick = onUpdateNow,
+                        variant = ZunoButtonVariant.Primary,
+                        size = ZunoButtonSize.Small,
+                    )
+                } else {
+                    ZunoIcon(
+                        icon = R.drawable.zuno_ic_t_check_circle,
+                        size = 18.dp,
+                        tint = ZunoColors.StatusSpeaking,
+                    )
+                    Text(
+                        text = stringResource(R.string.about_up_to_date),
+                        style = ZunoType.BodyMediumStrong,
+                        color = ZunoColors.TextPrimary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isCheckingUpdates) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.SurfaceStrong),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ZunoSpinner(size = 16.dp, color = ZunoColors.IconSecondary)
+                        }
+                    } else {
+                        ZunoIconButton(
+                            icon = R.drawable.zuno_ic_t_rotate_ccw,
+                            onClick = onCheckForUpdates,
+                            style = ZunoIconButtonStyle.Subtle,
+                            size = ZunoIconButtonSize.Small,
+                            tint = ZunoColors.IconSecondary,
+                            contentDescription = stringResource(R.string.about_check_updates),
+                        )
+                    }
+                }
+            }
+
+            // Releases & Legal links
+            ZunoSettingsGroup {
+                ZunoSettingsRow(
+                    title = stringResource(R.string.about_whats_new),
+                    icon = R.drawable.zuno_ic_t_sparkles,
+                    value = stringResource(
+                        R.string.settings_version_short,
+                        if (hasUpdate) availableUpdate!!.latestVersion else appVersionName,
+                    ),
+                    valueColor = if (hasUpdate) ZunoColors.StatusSpeaking else ZunoColors.TextSecondary,
+                    showChevron = true,
+                    onClick = onWhatsNew,
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.about_rate_app),
+                    icon = R.drawable.zuno_ic_award,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = onRateApp,
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.about_terms),
+                    icon = R.drawable.zuno_ic_t_file_text,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = onTerms,
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.about_privacy),
+                    icon = R.drawable.zuno_ic_t_lock,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = onPrivacy,
+                )
+                ZunoSettingsRow(
+                    title = stringResource(R.string.about_licenses),
+                    icon = R.drawable.zuno_ic_t_file_text,
+                    showChevron = true,
+                    showDivider = true,
+                    onClick = { showLicenses = true },
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.about_copyright),
+                style = ZunoType.FootnoteRegular,
+                color = ZunoColors.TextTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    if (showLicenses) {
+        ZunoDialog(
+            title = stringResource(R.string.about_licenses),
+            body = stringResource(R.string.about_licenses_body),
+            confirmLabel = stringResource(R.string.common_done),
+            showDismiss = false,
+            onConfirm = { showLicenses = false },
+            onDismiss = { showLicenses = false },
+        )
+    }
+}
+
+// ── 10a · Settings · What's New / Release Notes (`7424:13848`) ───────────────
+
+@Composable
+fun SettingsWhatsNewScreen(
+    availableUpdate: AppUpdateInfo?,
+    onUpdateNow: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    appVersionName: String = BuildConfig.VERSION_NAME,
+    appVersionCode: Int = BuildConfig.VERSION_CODE,
+) {
+    val bundled = remember(appVersionName, appVersionCode) {
+        AppReleaseCatalog.bundledReleases(appVersionName, appVersionCode)
+    }
+    val hasUpdate = availableUpdate?.hasUpdate == true
+    val releases = remember(availableUpdate, bundled) {
+        if (hasUpdate) {
+            val upd = availableUpdate!!
+            listOf(upd.releaseNotes) + bundled.filterNot { it.version == upd.latestVersion }
+        } else {
+            bundled
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .zunoCanvasBackground()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        ZunoBackTitleTopBar(title = stringResource(R.string.whats_new_title), onBack = onBack)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s48),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+        ) {
+            releases.forEachIndexed { index, release ->
+                val isAvailableUpdate = hasUpdate && index == 0
+                val isInstalledCurrent = release.version == appVersionName
+                val badgeLabel = when {
+                    isAvailableUpdate -> stringResource(R.string.whats_new_badge_available)
+                    isInstalledCurrent -> stringResource(R.string.whats_new_badge_latest)
+                    else -> stringResource(R.string.whats_new_badge_installed)
+                }
+                ReleaseNotesCard(
+                    release = release,
+                    badgeLabel = badgeLabel,
+                    highlighted = isAvailableUpdate || isInstalledCurrent,
+                    showUpdateCta = isAvailableUpdate,
+                    onUpdateNow = onUpdateNow,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleaseNotesCard(
+    release: AppReleaseNote,
+    badgeLabel: String,
+    highlighted: Boolean,
+    showUpdateCta: Boolean,
+    onUpdateNow: () -> Unit,
+) {
+    val shape = RoundedCornerShape(ZunoRadius.xl)
+    val cardModifier = if (highlighted) {
+        Modifier.zunoGlassElevated(
+            shape = shape,
+            fillColor = ZunoColors.SurfaceStrong,
+            borderBrush = SolidColor(ZunoColors.BorderSubtle),
+        )
+    } else {
+        Modifier.zunoGlassSubtle(
+            shape = shape,
+            fillColor = ZunoColors.SurfaceDefault,
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(cardModifier)
+            .padding(ZunoSpace.s16),
+        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.whats_new_version_heading, release.version),
+                    style = ZunoType.Headline,
+                    color = ZunoColors.TextPrimary,
+                )
+                ZunoChip(
+                    label = badgeLabel,
+                    onClick = {},
+                    selected = highlighted,
+                )
+            }
+            Text(
+                text = release.dateLabel,
+                style = ZunoType.FootnoteRegular,
+                color = ZunoColors.TextSecondary,
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10)) {
+            release.highlights.forEach { item ->
+                val tagLabel = stringResource(
+                    when (item.category) {
+                        ReleaseHighlightCategory.New -> R.string.whats_new_tag_new
+                        ReleaseHighlightCategory.Improved -> R.string.whats_new_tag_improved
+                        ReleaseHighlightCategory.Fixed -> R.string.whats_new_tag_fixed
+                    },
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (item.category == ReleaseHighlightCategory.New && highlighted) {
+                                        ZunoColors.StatusSpeaking
+                                    } else {
+                                        ZunoColors.TextSecondary
+                                    },
+                                ),
+                        )
+                        Text(
+                            text = "$tagLabel · ${item.title}",
+                            style = ZunoType.LabelMedium,
+                            color = ZunoColors.TextPrimary,
+                        )
+                    }
+                    Text(
+                        text = item.description,
+                        style = ZunoType.BodySmall,
+                        color = ZunoColors.TextSecondary,
+                    )
+                }
+            }
+        }
+
+        if (showUpdateCta) {
+            ZunoButton(
+                label = stringResource(R.string.whats_new_update_cta, release.version),
+                onClick = onUpdateNow,
+                variant = ZunoButtonVariant.Primary,
+                size = ZunoButtonSize.Medium,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+// ── 10b · Optional Update Sheet & 10c · Required Update Dialog ──────────────
+
+@Composable
+fun AppUpdateSheet(
+    update: AppUpdateInfo,
+    onUpdateNow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ZunoSheet(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.update_sheet_title, update.latestVersion),
+        description = stringResource(R.string.update_sheet_subtitle),
+    ) {
+        Text(
+            text = stringResource(R.string.update_sheet_eyebrow, update.latestVersion),
+            style = ZunoType.FootnoteStrong,
+            color = ZunoColors.StatusSpeaking,
+            modifier = Modifier.padding(horizontal = ZunoSpace.s12),
+        )
+        ZunoSettingsGroup(modifier = Modifier.padding(horizontal = ZunoSpace.s12)) {
+            update.releaseNotes.highlights.take(3).forEachIndexed { idx, hl ->
+                val icon = when (hl.category) {
+                    ReleaseHighlightCategory.New -> R.drawable.zuno_ic_t_sparkles
+                    ReleaseHighlightCategory.Improved -> R.drawable.zuno_ic_zap
+                    ReleaseHighlightCategory.Fixed -> R.drawable.zuno_ic_t_volume
+                }
+                ZunoSettingsRow(
+                    title = hl.title,
+                    subtitle = hl.description,
+                    icon = icon,
+                    showDivider = idx > 0,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ZunoSpace.s12),
+            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+        ) {
+            ZunoButton(
+                label = stringResource(R.string.common_not_now),
+                onClick = onDismiss,
+                variant = ZunoButtonVariant.Secondary,
+                size = ZunoButtonSize.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            ZunoButton(
+                label = stringResource(R.string.about_update_now),
+                onClick = onUpdateNow,
+                variant = ZunoButtonVariant.Primary,
+                size = ZunoButtonSize.Medium,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+fun RequiredUpdateDialog(
+    currentVersion: String,
+    latestVersion: String,
+    onWhatsNew: () -> Unit,
+    onUpdateNow: () -> Unit,
+) {
+    ZunoDialog(
+        title = stringResource(R.string.update_required_title),
+        body = stringResource(R.string.update_required_body, currentVersion, latestVersion),
+        confirmLabel = stringResource(R.string.about_update_now),
+        dismissLabel = stringResource(R.string.about_whats_new),
+        onConfirm = onUpdateNow,
+        onDismiss = onWhatsNew,
+    )
 }

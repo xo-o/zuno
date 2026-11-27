@@ -75,6 +75,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 import java.time.DayOfWeek
 import java.time.Instant
@@ -237,7 +238,7 @@ fun ScheduledScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
+                            .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
                     ) {
                         ScheduleGroup.entries.forEach { group ->
@@ -482,7 +483,7 @@ fun NewScheduleScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             if (step == 1) {
@@ -737,7 +738,7 @@ fun NewScheduleScreen(
             },
             enabled = if (step == 1) canContinue else canSave,
             loading = busy,
-            modifier = Modifier.fillMaxWidth().padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+            modifier = Modifier.fillMaxWidth().padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, bottom = ZunoSpace.s16),
         )
     }
 }

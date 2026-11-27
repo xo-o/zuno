@@ -36,6 +36,7 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoLayout
 import kotlinx.coroutines.delay
 
 /** 1 · Splash — centered 64dp mark. */
@@ -97,7 +98,7 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, bottom = ZunoSpace.s16),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {

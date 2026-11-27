@@ -29,7 +29,7 @@ object ZunoGlassTokens {
     val SubtleFill = ZunoColors.SurfaceSubtle
     val ElevatedFill = ZunoColors.SurfaceDefault
     val OverlayDarkBase = ZunoColors.BgElevated
-    val MediaPillDarkBase = Color(0x8A121316)
+    val MediaPillDarkBase = ZunoColors.SurfaceOverlayPill
 
     val Hairline = ZunoColors.DividerSubtle
 }
@@ -43,12 +43,12 @@ val ZunoGlassHairlineBrush: Brush = SolidColor(ZunoColors.DividerSubtle)
 val ZunoGlassVerticalHairlineBrush: Brush = SolidColor(ZunoColors.DividerSubtle)
 
 /**
- * Full-screen `bg/canvas` (`#171717`).
+ * Full-screen `bg/canvas` (`#0B0B0D`).
  */
 fun Modifier.zunoCanvasBackground(): Modifier = this.background(ZunoColors.BgCanvas)
 
 /**
- * Subtle surface card/pill (`surface/subtle` 4% white + `border/subtle` 6% white).
+ * Subtle surface card/pill (`surface/subtle` 2.5% carbon-alpha + `border/subtle` 8% carbon-alpha).
  */
 fun Modifier.zunoGlassSubtle(
     shape: Shape,
@@ -78,7 +78,7 @@ fun Modifier.zunoGlassElevated(
     )
 
 /**
- * Elevated overlay surface (`bg/elevated` `#1E1E1E` + `border/subtle` + elevation shadow).
+ * Elevated overlay surface (`bg/elevated` `#16161B` + `border/subtle` + elevation shadow).
  * Used for Drawer, Bottom Sheets, Dialogs, Dropdown Menus, and Floating Banners.
  */
 fun Modifier.zunoGlassOverlay(

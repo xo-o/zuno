@@ -56,6 +56,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.ui.theme.zunoRecessedTrack
 
 /** Top Bar — Type=Back + Title (`2063:1580`). 56dp, Header/Title (20sp Regular), Ghost Large actions. */
@@ -73,7 +74,7 @@ fun ZunoBackTitleTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -103,7 +104,7 @@ fun ZunoSearchTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -160,8 +161,8 @@ fun ZunoTopicUpNextCard(
                 borderBrush = SolidColor(ZunoColors.BorderDefault),
             )
             .clickable(enabled = !busy, role = Role.Button, onClick = onAction)
-            .padding(start = ZunoSpace.s16, end = ZunoSpace.s14, top = ZunoSpace.s14, bottom = ZunoSpace.s14),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s14),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
@@ -222,8 +223,8 @@ fun ZunoCollectionCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(role = Role.Button, onClick = onClick)
-                .padding(start = ZunoSpace.s16, end = ZunoSpace.s8, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                .padding(start = zunoLayout.cardPaddingH, end = zunoLayout.cardTrailingMenuEndPadding, top = ZunoSpace.s12, bottom = ZunoSpace.s12),
+            horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(

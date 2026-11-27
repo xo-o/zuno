@@ -93,6 +93,7 @@ import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassMediaPill
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
@@ -158,7 +159,7 @@ fun LiveRoomsScreen(
             addDescription = stringResource(R.string.live_rooms_create_action),
         )
 
-        Box(Modifier.padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s6)) {
+        Box(Modifier.padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s6)) {
             ZunoSegmentedTabs(
                 labels = listOf(
                     stringResource(R.string.chats_filter_all),
@@ -181,7 +182,7 @@ fun LiveRoomsScreen(
         } else {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
+            contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             if (searchOpen) {
@@ -521,7 +522,7 @@ fun CreateLiveRoomScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Text(
@@ -589,7 +590,7 @@ fun CreateLiveRoomScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s16),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s16),
         ) {
             ZunoButton(
                 label = stringResource(R.string.live_rooms_create_btn),
@@ -662,7 +663,7 @@ fun LiveRoomLobbyScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Column(
@@ -803,7 +804,7 @@ fun LiveRoomLobbyScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s16),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s16),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         ) {
             if (room.isHost) {
@@ -873,7 +874,7 @@ fun SystemRoomDetailScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Column(
@@ -971,7 +972,7 @@ fun SystemRoomDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s16),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s16),
         ) {
             ZunoButton(
                 label = stringResource(R.string.live_rooms_join_cta),

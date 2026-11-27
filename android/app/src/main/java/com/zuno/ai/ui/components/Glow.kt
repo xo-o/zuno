@@ -58,15 +58,17 @@ import kotlin.math.sin
 
 /**
  * What the agent glow is expressing.
- * - [Idle]: resting, slow drift and breathing.
- * - [Listening]: the user is talking; the glow grows with the user's voice level.
- * - [Thinking]: waiting for the tutor's reply; upward sweeps and a soft pulse.
- * - [Speaking]: the tutor is talking; the glow grows with the tutor's voice level.
- * - [Cancelling]: the user is sliding away to cancel; the glow sinks and dims.
- * - [Disabled]: mic blocked or muted; a slow, dim baseline.
+ * - [Idle]: resting Smoked Carbon horizon (`#1E1E24`→`#52525B`).
+ * - [Connecting]: opening voice session; warm amber horizon (`#2E1B04`→`#AD6F12` / `#FBBF24`).
+ * - [Listening]: the user is talking; cool blue horizon (`#132B52`→`#3D7CE0` / `#60A5FA`).
+ * - [Thinking]: waiting for the tutor's reply; transitions through amber horizon.
+ * - [Speaking]: the tutor is talking; emerald horizon (`#082D1B`→`#26A364` / `#4ADE80`).
+ * - [Cancelling]: the user is sliding away to cancel; the glow dims.
+ * - [Disabled]: mic blocked or muted; dim Smoked Carbon baseline.
  */
 enum class AgentGlowState(val reactsToVoice: Boolean) {
     Idle(false),
+    Connecting(false),
     Listening(true),
     Thinking(false),
     Speaking(true),
@@ -95,6 +97,7 @@ private class GlowTune(
 
 private fun tuneFor(state: AgentGlowState): GlowTune = when (state) {
     AgentGlowState.Idle -> GlowTune(1.0f, 0.012f, 1.00f, 0.00f, 0.10f, 0.00f, 0f)
+    AgentGlowState.Connecting -> GlowTune(1.4f, 0.012f, 1.00f, 0.02f, 0.45f, 0.12f, 0.6f)
     AgentGlowState.Listening -> GlowTune(2.0f, 0.008f, 1.00f, 0.02f, 0.32f, 0.00f, 0f)
     AgentGlowState.Thinking -> GlowTune(1.6f, 0.012f, 1.00f, 0.03f, 0.55f, 0.18f, 1f)
     AgentGlowState.Speaking -> GlowTune(2.0f, 0.008f, 1.00f, 0.02f, 0.40f, 0.00f, 0f)
@@ -192,53 +195,104 @@ private fun rememberGlowMotion(
 private const val TWO_PI = (2.0 * PI).toFloat()
 private const val BREATH_PERIOD = 7f
 
-// Exact Figma Agent Horizon (`7297:11494`) Base gradient & Sheen stops for Mono (`7365:20294`) & Cobalt (`7383:13321`).
+// Exact Figma V3 · Wide Horizon (`02 · Home`: 7365:20294, 7383:13321, 11015:14537, 11015:14588) stops.
 private val BaseOffsets = floatArrayOf(0f, 0.22f, 0.40f, 0.56f, 0.72f, 0.86f, 1.00f)
-private val MonoBaseColors = arrayOf(
-    Color(0x00242424), // 0%
-    Color(0x00242424), // 0%
-    Color(0x24242424), // 14%
-    Color(0x66292929), // 40%
-    Color(0xB83B3B3B), // 72%
-    Color(0xE64A4A4A), // 90%
-    Color(0xFF595959), // 100%
+
+private class HorizonPalette(
+    val base: Array<Color>,
+    val sheen: Array<Color>,
 )
-private val CobaltBaseColors = arrayOf(
-    Color(0x001A307A), // 0%
-    Color(0x001A307A), // 0%
-    Color(0x241F3D9E), // 14%
-    Color(0x66264FC7), // 40%
-    Color(0xB8305CE6), // 72%
-    Color(0xE63B69FA), // 90%
-    Color(0xFF4775FF), // 100%
+
+private val ActiveHorizonPalette = HorizonPalette(
+    base = arrayOf(
+        Color(0x001E1E24), // 0%
+        Color(0x001E1E24), // 0%
+        Color(0x241E1E24), // 14%
+        Color(0x6624242B), // 40%
+        Color(0xB833333D), // 72%
+        Color(0xE642424E), // 90%
+        Color(0xFF52525B), // 100%
+    ),
+    sheen = arrayOf(
+        Color(0xE0C8C8D2), // 88%
+        Color(0x7082828E), // 44%
+        Color(0x0052525B), // 0%
+    ),
+)
+
+private val SpeakingHorizonPalette = HorizonPalette(
+    base = arrayOf(
+        Color(0x00082D1B), // 0%
+        Color(0x00082D1B), // 0%
+        Color(0x240B3B24), // 14%
+        Color(0x660F4F30), // 40%
+        Color(0xB815693F), // 72%
+        Color(0xE61C8550), // 90%
+        Color(0xFF26A364), // 100%
+    ),
+    sheen = arrayOf(
+        Color(0xE0B8FAD2), // 88%
+        Color(0x704ADE80), // 44%
+        Color(0x001E8E55), // 0%
+    ),
+)
+
+private val ListeningHorizonPalette = HorizonPalette(
+    base = arrayOf(
+        Color(0x00132B52), // 0%
+        Color(0x00132B52), // 0%
+        Color(0x2418386B), // 14%
+        Color(0x661E4687), // 40%
+        Color(0xB82656A6), // 72%
+        Color(0xE63168C4), // 90%
+        Color(0xFF3D7CE0), // 100%
+    ),
+    sheen = arrayOf(
+        Color(0xE0C4E2FF), // 88%
+        Color(0x7060A5FA), // 44%
+        Color(0x00336FD1), // 0%
+    ),
+)
+
+private val ConnectingHorizonPalette = HorizonPalette(
+    base = arrayOf(
+        Color(0x002E1B04), // 0%
+        Color(0x002E1B04), // 0%
+        Color(0x243D2506), // 14%
+        Color(0x66543308), // 40%
+        Color(0xB870450B), // 72%
+        Color(0xE68F5A0E), // 90%
+        Color(0xFFAD6F12), // 100%
+    ),
+    sheen = arrayOf(
+        Color(0xE0FDE68A), // 88%
+        Color(0x70FBBF24), // 44%
+        Color(0x009E6310), // 0%
+    ),
 )
 
 private val SheenOffsets = floatArrayOf(0f, 0.42f, 1.00f)
-private val MonoSheenColors = arrayOf(
-    Color(0xFFCCCCCC), // 100%
-    Color(0x7A8A8A8A), // 48%
-    Color(0x00595959), // 0%
-)
-private val CobaltSheenColors = arrayOf(
-    Color(0xFFB8E3FF), // 100%
-    Color(0x7A54B5FF), // 48%
-    Color(0x003D6BFF), // 0%
-)
 
 private const val BASE_SAMPLE_COUNT = 33
 private const val SHEEN_SAMPLE_COUNT = 33
 
+private fun paletteFor(state: AgentGlowState, theme: GlowTheme): HorizonPalette = when (state) {
+    AgentGlowState.Speaking -> SpeakingHorizonPalette
+    AgentGlowState.Listening -> ListeningHorizonPalette
+    AgentGlowState.Connecting, AgentGlowState.Thinking -> ConnectingHorizonPalette
+    AgentGlowState.Idle -> if (theme == GlowTheme.Cobalt) ListeningHorizonPalette else ActiveHorizonPalette
+    AgentGlowState.Cancelling, AgentGlowState.Disabled -> ActiveHorizonPalette
+}
+
 /**
- * Agent Horizon glow — mirrors the Figma "Horizon" (`7297:11494`) component:
- * 1) 7-stop vertical base gradient (`Mono` `7365:20294`: `#242424`→`#595959`;
- *    `Cobalt` `7383:13321`: `#1A307A`→`#4775FF`).
- * 2) Elliptical radial sheen anchored at bottom-center (`translate(w/2, h) scale(0.62*w, 0.48*h)`)
- *    (`Mono`: `#CCCCCC`→`#8A8A8A`→`#595959`; `Cobalt`: `#B8E3FF`→`#54B5FF`→`#3D6BFF`).
+ * Agent Horizon glow — mirrors Figma V3 · Wide Horizon (`02 · Home`):
+ * 1) 7-stop vertical base gradient (`Active` Smoked Carbon, `Speaking` Emerald `#4ADE80`,
+ *    `Listening` Blue `#60A5FA`, `Connecting` Amber `#FBBF24`).
+ * 2) Elliptical radial sheen anchored at bottom-center (`rx = 0.78*w`, `ry = 0.54*h`,
+ *    opacities `0.88 → 0.44 → 0.00`).
  *
  * Resamples stops using straight (unpremultiplied) sRGB linear interpolation so Android's Skia
- * premultiplied shader matches Figma's straight-sRGB gradient blending pixel-for-pixel without a
- * brightness halo at `0.42`. Transitions between [GlowTheme.Mono] and [GlowTheme.Cobalt] and dim
- * states ([Cancelling]/[Disabled]) use smooth color and brightness easing only (no waving).
+ * premultiplied shader matches Figma's straight-sRGB gradient blending pixel-for-pixel.
  */
 @Composable
 fun ZunoAgentGlow(
@@ -260,11 +314,22 @@ fun ZunoAgentGlow(
         animationSpec = tween(durationMillis = 850, easing = GlowStateEasing),
         label = "glowBrightness",
     )
-    val themeFraction = animateFloatAsState(
-        targetValue = if (theme == GlowTheme.Cobalt) 1f else 0f,
-        animationSpec = tween(durationMillis = 1050, easing = GlowThemeEasing),
-        label = "glowThemeFraction",
-    )
+    val targetPalette = paletteFor(state, theme)
+    val paletteSpec = tween<Color>(durationMillis = 900, easing = GlowThemeEasing)
+    val animBase = Array(BaseOffsets.size) { i ->
+        androidx.compose.animation.animateColorAsState(
+            targetValue = targetPalette.base[i],
+            animationSpec = paletteSpec,
+            label = "horizonBase$i",
+        ).value
+    }
+    val animSheen = Array(SheenOffsets.size) { i ->
+        androidx.compose.animation.animateColorAsState(
+            targetValue = targetPalette.sheen[i],
+            animationSpec = paletteSpec,
+            label = "horizonSheen$i",
+        ).value
+    }
 
     Spacer(
         modifier
@@ -279,7 +344,8 @@ fun ZunoAgentGlow(
                 onDrawBehind {
                     drawHorizon(
                         brightness = brightness.value,
-                        themeFraction = themeFraction.value,
+                        baseColors = animBase,
+                        sheenColors = animSheen,
                         paint = ditherPaint,
                         sheenMatrix = sheenMatrix,
                         basePositions = basePositions,
@@ -324,7 +390,8 @@ private fun sampleStraightRamp(
 
 private fun DrawScope.drawHorizon(
     brightness: Float,
-    themeFraction: Float,
+    baseColors: Array<Color>,
+    sheenColors: Array<Color>,
     paint: NativePaint,
     sheenMatrix: NativeMatrix,
     basePositions: FloatArray,
@@ -339,7 +406,7 @@ private fun DrawScope.drawHorizon(
 
     // 1. Base gradient: exact 7 Figma stops resampled in straight sRGB + hardware dithering.
     val baseKeyColors = Array(BaseOffsets.size) { i ->
-        val c = lerpStraight(MonoBaseColors[i], CobaltBaseColors[i], themeFraction)
+        val c = baseColors[i]
         c.copy(alpha = c.alpha * b)
     }
     for (s in 0 until BASE_SAMPLE_COUNT) {
@@ -360,12 +427,12 @@ private fun DrawScope.drawHorizon(
         canvas.nativeCanvas.drawRect(0f, 0f, w, h, paint)
     }
 
-    // 2. Elliptical radial Sheen anchored at bottom-center (Figma transform: translate(193,600) scale(239.32,288)).
-    val rx = w * (239.32f / 386f)
-    val ry = h * (288f / 600f)
+    // 2. Elliptical radial Sheen anchored at bottom-center (V3 · Wide Horizon: rx = 0.78*w, ry = 0.54*h).
+    val rx = w * 0.78f
+    val ry = h * 0.54f
     if (rx > 0f && ry > 0f) {
         val sheenKeyColors = Array(SheenOffsets.size) { i ->
-            val c = lerpStraight(MonoSheenColors[i], CobaltSheenColors[i], themeFraction)
+            val c = sheenColors[i]
             c.copy(alpha = c.alpha * b)
         }
         for (s in 0 until SHEEN_SAMPLE_COUNT) {
@@ -393,14 +460,15 @@ private fun DrawScope.drawHorizon(
     paint.shader = null
 }
 
-// Tutor palette for the live indicator: green → teal → blue.
-private val TutorGreen = Color(0xFF1EFFA0)
+// Tutor palette for the live indicator: emerald → teal → blue.
+private val TutorGreen = Color(0xFF4ADE80)
 private val TutorTeal = Color(0xFF14C8B4)
-private val TutorBlue = Color(0xFF3A7BFF)
+private val TutorBlue = Color(0xFF60A5FA)
 
 private fun liveLabel(state: AgentGlowState): String = when (state) {
     AgentGlowState.Speaking -> "Zuno is speaking"
     AgentGlowState.Listening -> "Listening"
+    AgentGlowState.Connecting -> "Connecting"
     AgentGlowState.Thinking -> "Thinking"
     AgentGlowState.Idle, AgentGlowState.Cancelling, AgentGlowState.Disabled -> "Microphone off"
 }

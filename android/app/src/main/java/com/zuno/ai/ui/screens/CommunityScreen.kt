@@ -49,6 +49,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 
 /**
@@ -91,7 +92,7 @@ fun CommunityScreen(
             addDescription = "Invite partner",
         )
 
-        Box(Modifier.padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s6)) {
+        Box(Modifier.padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s6)) {
             ZunoSegmentedTabs(
                 labels = listOf("Partners", "League"),
                 selectedIndex = selectedTab,
@@ -139,7 +140,7 @@ private fun PartnersTabBody(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
+        contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
     ) {
         item(key = "open-toggle") {
@@ -374,7 +375,7 @@ private fun LeagueTabBody(
 
     if (data.standings.isEmpty()) {
         Box(
-            modifier = modifier.fillMaxWidth().padding(horizontal = ZunoSpace.s24),
+            modifier = modifier.fillMaxWidth().padding(horizontal = zunoLayout.screenPaddingH),
             contentAlignment = Alignment.Center,
         ) {
             ZunoEmptyState(
@@ -392,7 +393,7 @@ private fun LeagueTabBody(
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
+        contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s12, bottom = ZunoSpace.s32),
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
     ) {
         item(key = "podium") {

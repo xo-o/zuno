@@ -70,6 +70,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.DraftAttachment
 import com.zuno.ai.viewmodel.DraftUploadState
 
@@ -137,7 +138,7 @@ fun ChatScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
+                    contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s8),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
                 ) {
                     item(key = "start") { ZunoSessionStart(sessionLabel) }

@@ -57,6 +57,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 
 internal val LessonSentenceStyle: TextStyle
     get() = ZunoType.TitleMedium
@@ -466,8 +467,8 @@ fun ZunoLessonRescueBar(
     )
 
     Row(
-        modifier = modifier.fillMaxWidth().padding(horizontal = ZunoSpace.s24),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8, Alignment.CenterHorizontally),
+        modifier = modifier.fillMaxWidth().padding(horizontal = zunoLayout.screenPaddingH),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.chipGap, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         chips.forEach { chip ->

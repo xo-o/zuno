@@ -76,6 +76,7 @@ import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassOverlay
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import kotlinx.coroutines.delay
 import java.util.Date
 
@@ -193,7 +194,7 @@ fun PeerChatScreen(
                     state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(
-                        horizontal = ZunoSpace.s24,
+                        horizontal = zunoLayout.screenPaddingH,
                         vertical = ZunoSpace.s16,
                     ),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),

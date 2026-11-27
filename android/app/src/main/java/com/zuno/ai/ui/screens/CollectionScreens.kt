@@ -95,6 +95,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 import kotlinx.coroutines.delay
 
@@ -171,8 +172,8 @@ internal fun ExploreSearchField(
                 fillColor = ZunoColors.SurfaceControlTrack,
                 borderBrush = SolidColor(if (focused) ZunoColors.BorderFocus else ZunoColors.BorderDefault),
             )
-            .padding(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = zunoLayout.cardPaddingH),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIcon(R.drawable.zuno_ic_t_search, 16.dp, tint = ZunoColors.IconSecondary)
@@ -231,13 +232,14 @@ internal fun ExplorePreviewCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(role = Role.Button, onClick = onClick)
-                .padding(start = ZunoSpace.s16, end = 14.dp, top = ZunoSpace.s14, bottom = ZunoSpace.s14),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s14),
+            horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val iconBoxSize = if (zunoLayout.isCompact) 36.dp else 40.dp
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(iconBoxSize)
                     .then(
                         if (inverseBadge) {
                             Modifier
@@ -255,7 +257,7 @@ internal fun ExplorePreviewCard(
             ) {
                 ZunoIcon(
                     icon = icon,
-                    size = 19.dp,
+                    size = if (zunoLayout.isCompact) 18.dp else 19.dp,
                     tint = if (inverseBadge) ZunoColors.IconOnInverse else ZunoColors.IconPrimary,
                 )
             }
@@ -384,7 +386,7 @@ private fun EmptyStateViewport(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = bottomPadding),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s12, bottom = bottomPadding),
         ) {
             Layout(
                 content = {
@@ -510,7 +512,7 @@ fun TopicsScreen(
                 else -> {
                     LazyColumn(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = 120.dp),
+                        contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = 120.dp),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                     ) {
                         if (searching) {
@@ -727,7 +729,7 @@ fun RoleplaysScreen(
                 else -> {
                     LazyColumn(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = 120.dp),
+                        contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = 120.dp),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                     ) {
                         if (searching) {
@@ -849,8 +851,8 @@ fun ExploreTopicsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = ZunoSpace.s24),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = zunoLayout.screenPaddingH),
+                horizontalArrangement = Arrangement.spacedBy(zunoLayout.chipGap),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ExploreSearchField(
@@ -905,8 +907,8 @@ fun ExploreTopicsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(start = ZunoSpace.s24, end = 36.dp),
-                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                        .padding(start = zunoLayout.screenPaddingH, end = 36.dp),
+                    horizontalArrangement = Arrangement.spacedBy(zunoLayout.chipGap),
                 ) {
                     TopicExploreCategories.forEach { cat ->
                         val label = when (cat) {
@@ -923,7 +925,7 @@ fun ExploreTopicsScreen(
                                     borderBrush = SolidColor(if (selected) ZunoColors.BorderControlActive else ZunoColors.BorderSubtle),
                                 )
                                 .clickable(role = Role.Button, onClick = { selectedCategory = cat })
-                                .padding(horizontal = 14.dp),
+                                .padding(horizontal = zunoLayout.chipPaddingH),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -977,7 +979,7 @@ fun ExploreTopicsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s32),
+                        .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s32),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16, Alignment.CenterVertically),
                 ) {
@@ -998,7 +1000,7 @@ fun ExploreTopicsScreen(
             else -> {
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = 18.dp, bottom = ZunoSpace.s32),
+                    contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = 18.dp, bottom = ZunoSpace.s32),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
                     if (officialFiltered.isNotEmpty()) {
@@ -1163,8 +1165,8 @@ fun ExploreRoleplaysScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = ZunoSpace.s24),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = zunoLayout.screenPaddingH),
+                horizontalArrangement = Arrangement.spacedBy(zunoLayout.chipGap),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ExploreSearchField(
@@ -1219,8 +1221,8 @@ fun ExploreRoleplaysScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(start = ZunoSpace.s24, end = 36.dp),
-                    horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
+                        .padding(start = zunoLayout.screenPaddingH, end = 36.dp),
+                    horizontalArrangement = Arrangement.spacedBy(zunoLayout.chipGap),
                 ) {
                     RoleplayExploreCategories.forEach { cat ->
                         val label = when (cat) {
@@ -1237,7 +1239,7 @@ fun ExploreRoleplaysScreen(
                                     borderBrush = SolidColor(if (selected) ZunoColors.BorderControlActive else ZunoColors.BorderSubtle),
                                 )
                                 .clickable(role = Role.Button, onClick = { selectedCategory = cat })
-                                .padding(horizontal = 14.dp),
+                                .padding(horizontal = zunoLayout.chipPaddingH),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -1291,7 +1293,7 @@ fun ExploreRoleplaysScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s32),
+                        .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s32),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16, Alignment.CenterVertically),
                 ) {
@@ -1312,7 +1314,7 @@ fun ExploreRoleplaysScreen(
             else -> {
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = 18.dp, bottom = ZunoSpace.s32),
+                    contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = 18.dp, bottom = ZunoSpace.s32),
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
                     if (officialFiltered.isNotEmpty()) {

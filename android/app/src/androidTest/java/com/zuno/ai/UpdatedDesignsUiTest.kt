@@ -582,7 +582,8 @@ class UpdatedDesignsUiTest {
 
             // 16. Peer Call No Captions (2 stacked full-height tiles)
             stage = "16_peer_call"
-            waitForText("Lucía M. · Speaking")
+            waitForText("Lucía M.")
+            waitForText("Lucía speaking")
             tapText("Hide captions")
             waitForText("Show captions")
             saveScreenshot("16_peer_call_no_captions")

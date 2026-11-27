@@ -167,9 +167,9 @@ fun ZunoTurnPillRow(
 
 /**
  * Live Waveform Pill (`7406:13028` · V5B · All 6 States):
- * - **Speaking**: 5-bar green (`#6EE3A6`) animated waveform + `"{Name} speaking · Speak to interrupt"`
- * - **Listening**: 5-bar blue (`#85BDFF`) subtle breathing waveform + `"Listening · Speak anytime"`
- * - **Talking**: 5-bar blue (`#85BDFF`) high-energy waveform + `border/strong` + `"Hearing you…"`
+ * - **Speaking**: 5-bar green (`#4ADE80`) animated waveform + `"{Name} speaking · Speak to interrupt"`
+ * - **Listening**: 5-bar blue (`#60A5FA`) subtle breathing waveform + `"Listening · Speak anytime"`
+ * - **Talking**: 5-bar blue (`#60A5FA`) high-energy waveform + `border/strong` + `"Hearing you…"`
  * - **Thinking**: 3-dot animated thinking wave + `"Thinking…"`
  * - **Loading**: rotating sweep-gradient spinner + `"Loading voice…"`
  * - **Error**: red tinted surface/border + alert icon + `"Connection lost"`

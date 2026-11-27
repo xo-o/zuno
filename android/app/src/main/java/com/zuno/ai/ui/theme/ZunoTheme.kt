@@ -8,7 +8,11 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -16,27 +20,43 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zuno.ai.R
 
-/** Zuno foundations — tokens from the Figma "Foundations" page (`5:2`). */
+/** Zuno foundations — Smoked Carbon tokens from Figma "Foundations" (`5:2`). */
 object ZunoColors {
-    // Primitives — Gray
-    val Gray1 = Color(0xFF050505)
-    val Gray2 = Color(0xFF121212)
+    // Primitives — Gray (Smoked Carbon cool-zinc)
+    val Gray1 = Color(0xFF050506)
+    val Gray2 = Color(0xFF08080A)
     // Matches Figma gray/3 (`bg/canvas`) & gray/3-5 (`bg/elevated`). Keep res/values/colors.xml `background` and the inverse zuno_ic_* drawables in sync.
-    val Gray3 = Color(0xFF171717)
-    val Gray3_5 = Color(0xFF1E1E1E)
-    val Gray4 = Color(0xFF242424)
-    val Gray5 = Color(0xFF333333)
-    val Gray6 = Color(0xFF454545)
-    val Gray7 = Color(0xFF595959)
-    val Gray8 = Color(0xFF707070)
-    val Gray9 = Color(0xFF8A8A8A)
-    val Gray10 = Color(0xFFA8A8A8)
-    val Gray11 = Color(0xFFCCCCCC)
-    val Gray12 = Color(0xFFE6E6E6)
+    val Gray3 = Color(0xFF0B0B0D)
+    val Gray3_5 = Color(0xFF16161B)
+    val Gray4 = Color(0xFF1A1A20)
+    val Gray5 = Color(0xFF24242C)
+    val Gray6 = Color(0xFF2E2E37)
+    val Gray7 = Color(0xFF3B3B46)
+    val Gray8 = Color(0xFF52525B)
+    val Gray9 = Color(0xFF6E6E78)
+    val Gray10 = Color(0xFFA1A1AA)
+    val Gray11 = Color(0xFFE4E4E7)
+    val Gray12 = Color(0xFFF4F4F5)
+
+    // Primitives — Carbon Alpha (#DDDDFB)
+    val CarbonAlpha2_5 = Color(0x06DDDDFB) // ~2.5%
+    val CarbonAlpha4_5 = Color(0x0BDDDDFB) // ~4.5%
+    val CarbonAlpha8 = Color(0x14DDDDFB)   // 8%
+    val CarbonAlpha9 = Color(0x17DDDDFB)   // 9%
+    val CarbonAlpha14 = Color(0x24DDDDFB)  // 14%
+    val CarbonAlpha20 = Color(0x33DDDDFB)  // 20%
+    val CarbonAlpha44 = Color(0x70DDDDFB)  // 44%
+    val CarbonAlpha56 = Color(0x8FDDDDFB)  // 56%
+
+    // Primitives — Emerald
+    val Emerald400 = Color(0xFF4ADE80)
+    val EmeraldAlpha14 = Color(0x244ADE80) // 14%
+    val EmeraldAlpha34 = Color(0x574ADE80) // 34%
 
     // Primitives — Red
     val Red300 = Color(0xFFFF8B8B)
@@ -49,45 +69,51 @@ object ZunoColors {
     val BgScrim = Color(0xB8000000) // black-alpha/72
 
     // Surface
-    val SurfaceSubtle = Color(0x0AFFFFFF) // white-alpha/4
-    val SurfaceDefault = Color(0x0FFFFFFF) // white-alpha/6
-    val SurfaceStrong = Color(0x1AFFFFFF) // white-alpha/10
-    val SurfaceStronger = Color(0x24FFFFFF) // white-alpha/14
-    val SurfaceInverse = Color(0xEBFFFFFF) // white-alpha/92
-    val SurfaceInverseMuted = Color(0x70FFFFFF) // white-alpha/44
+    val SurfaceSubtle = CarbonAlpha2_5
+    val SurfaceDefault = CarbonAlpha4_5
+    val SurfaceStrong = CarbonAlpha9
+    val SurfaceStronger = CarbonAlpha14
+    val SurfaceInverse = Gray11
+    val SurfaceInverseMuted = CarbonAlpha44
+    val SurfaceOverlayPill = Color(0xE018181E) // #18181E @88%
     val SurfaceControlTrack = SurfaceSubtle
-    val SurfaceControlActive = SurfaceStrong
+    val SurfaceControlActive = CarbonAlpha8
+    val SurfaceSuccessSubtle = EmeraldAlpha14
 
     // Text
-    val TextPrimary = Color(0xEBFFFFFF) // white-alpha/92
-    val TextSecondary = Color(0xA3FFFFFF) // white-alpha/64
-    val TextTertiary = Color(0x70FFFFFF) // white-alpha/44
-    val TextPlaceholder = Color(0x52FFFFFF) // white-alpha/32
+    val TextPrimary = Gray12
+    val TextSecondary = Gray10
+    val TextTertiary = Gray9
+    val TextPlaceholder = Gray8
     val TextOnInverse = Gray3
-    val TextOnInverseSecondary = Gray7
+    val TextOnInverseSecondary = Gray8
+    val TextSuccess = Emerald400
 
     // Border
-    val BorderSubtle = Color(0x0FFFFFFF) // white-alpha/6
-    val BorderDefault = Color(0x14FFFFFF) // white-alpha/8
-    val BorderStrong = Color(0x24FFFFFF) // white-alpha/14
-    val BorderFocus = Color(0x70FFFFFF) // white-alpha/44
+    val BorderSubtle = CarbonAlpha8
+    val BorderDefault = CarbonAlpha14
+    val BorderStrong = CarbonAlpha20
+    val BorderFocus = CarbonAlpha44
     val BorderInverse = Gray3
     val BorderControlActive = BorderStrong
+    val BorderSuccessSubtle = EmeraldAlpha34
 
     // Icon
-    val IconPrimary = Color(0xEBFFFFFF) // white-alpha/92
-    val IconSecondary = Color(0x8FFFFFFF) // white-alpha/56
-    val IconTertiary = Color(0x52FFFFFF) // white-alpha/32
+    val IconPrimary = Gray12
+    val IconSecondary = CarbonAlpha56
+    val IconTertiary = Gray8
     val IconOnInverse = Gray3
-    val IconBrand = Color(0xFFFFFFFF)
+    val IconBrand = Gray12
     val IconDanger = Red300
+    val IconSuccess = Emerald400
 
     // Status
-    val StatusListening = Color(0xFF85BDFF)
-    val StatusSpeaking = Color(0xFF6EE3A6)
+    val StatusListening = Color(0xFF60A5FA)
+    val StatusSpeaking = Emerald400
+    val StatusConnecting = Color(0xFFFBBF24)
 
-    val Divider = Color(0x24FFFFFF) // white-alpha/14
-    val DividerSubtle = Color(0x14FFFFFF) // white-alpha/8
+    val Divider = CarbonAlpha9
+    val DividerSubtle = CarbonAlpha8
 
     // Danger (destructive confirm, "Delete" menu item, Error status pill)
     val SurfaceDanger = Red500
@@ -101,7 +127,7 @@ object ZunoColors {
     val GlowAccent = Gray9
     val GlowHighlight = Gray11
     val GlowOrbTop = Color(0xFFFFFFFF)
-    val GlowOrbBottom = Color(0xFFB8B8BD)
+    val GlowOrbBottom = Color(0xFFB4B4BE)
     val GlowOrbRim = Color(0x8FFFFFFF)
 }
 
@@ -121,6 +147,75 @@ object ZunoSpace {
     val s40 = 40.dp
     val s48 = 48.dp
 }
+
+/**
+ * Responsive horizontal spacing tokens keyed off [android.content.res.Configuration.screenWidthDp].
+ * Standard phones (< 420dp, e.g. Xiaomi 14T at 360-406dp) use 16dp outer gutters and tighter
+ * internal row padding so labels, tabs, and pills retain breathing room; wider phones/tablets step up.
+ */
+@Immutable
+data class ZunoLayout(
+    val screenPaddingH: Dp,
+    val topBarPaddingH: Dp,
+    val topBarPillEndPadding: Dp,
+    val cardPaddingH: Dp,
+    val cardTrailingMenuEndPadding: Dp,
+    val rowGap: Dp,
+    val chipPaddingH: Dp,
+    val chipGap: Dp,
+    val tabTrackPadding: Dp,
+    val modalPaddingH: Dp,
+    val isCompact: Boolean,
+)
+
+fun zunoLayoutForWidth(screenWidthDp: Int): ZunoLayout = when {
+    screenWidthDp < 420 -> ZunoLayout(
+        screenPaddingH = 16.dp,
+        topBarPaddingH = 6.dp, // 6dp bar padding + 10dp icon inset inside 44dp ZunoIconButton = 16dp edge
+        topBarPillEndPadding = 16.dp,
+        cardPaddingH = 12.dp,
+        cardTrailingMenuEndPadding = 6.dp,
+        rowGap = 10.dp,
+        chipPaddingH = 12.dp,
+        chipGap = 6.dp,
+        tabTrackPadding = 3.dp,
+        modalPaddingH = 16.dp,
+        isCompact = true,
+    )
+    screenWidthDp < 600 -> ZunoLayout(
+        screenPaddingH = 20.dp,
+        topBarPaddingH = 10.dp,
+        topBarPillEndPadding = 20.dp,
+        cardPaddingH = 14.dp,
+        cardTrailingMenuEndPadding = 8.dp,
+        rowGap = 12.dp,
+        chipPaddingH = 14.dp,
+        chipGap = 8.dp,
+        tabTrackPadding = 4.dp,
+        modalPaddingH = 20.dp,
+        isCompact = false,
+    )
+    else -> ZunoLayout(
+        screenPaddingH = 24.dp,
+        topBarPaddingH = 12.dp,
+        topBarPillEndPadding = 20.dp,
+        cardPaddingH = 16.dp,
+        cardTrailingMenuEndPadding = 8.dp,
+        rowGap = 12.dp,
+        chipPaddingH = 14.dp,
+        chipGap = 8.dp,
+        tabTrackPadding = 4.dp,
+        modalPaddingH = 24.dp,
+        isCompact = false,
+    )
+}
+
+val LocalZunoLayout = staticCompositionLocalOf { zunoLayoutForWidth(360) }
+
+val zunoLayout: ZunoLayout
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalZunoLayout.current
 
 object ZunoRadius {
     val xs = 6.dp
@@ -213,9 +308,11 @@ private val ZunoColorScheme = darkColorScheme(
 
 @Composable
 fun ZunoTheme(content: @Composable () -> Unit) {
+    val layout = zunoLayoutForWidth(LocalConfiguration.current.screenWidthDp)
     MaterialTheme(colorScheme = ZunoColorScheme) {
         CompositionLocalProvider(
             LocalContentColor provides ZunoColors.TextPrimary,
+            LocalZunoLayout provides layout,
             LocalTextSelectionColors provides TextSelectionColors(
                 handleColor = ZunoColors.TextPrimary,
                 backgroundColor = ZunoColors.SurfaceStronger,

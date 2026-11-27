@@ -777,6 +777,21 @@ class ZunoApi(
         send("POST", "/live-rooms/$id/end", JSONObject().put("durationSec", durationSec.coerceAtLeast(0)))
     }
 
+    // App version & updates
+
+    suspend fun appUpdateStatus(
+        currentVersionCode: Int = BuildConfig.VERSION_CODE,
+        currentVersionName: String = BuildConfig.VERSION_NAME,
+    ): AppUpdateInfo? = try {
+        val req = Request.Builder()
+            .url("$apiUrl/app/version?platform=android&versionCode=$currentVersionCode&versionName=$currentVersionName")
+            .get()
+            .build()
+        execute(req).toAppUpdateInfoOrNull(currentVersionCode, currentVersionName)
+    } catch (_: ApiException) {
+        null
+    }
+
     // Transport
 
     private suspend fun get(path: String): JSONObject = execute(request(path).get().build())

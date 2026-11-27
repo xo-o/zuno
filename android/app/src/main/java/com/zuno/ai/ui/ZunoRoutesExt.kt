@@ -1,23 +1,32 @@
 package com.zuno.ai.ui
 
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.zuno.ai.BuildConfig
 import com.zuno.ai.R
 import com.zuno.ai.avatar.model.TutorAvatarProfile
 import com.zuno.ai.data.AppLanguage
+import com.zuno.ai.data.AppUpdateInfo
 import com.zuno.ai.data.CartesiaAudioPlayer
+import com.zuno.ai.data.ChatsFilter
 import com.zuno.ai.data.LearningLanguage
 import com.zuno.ai.data.LearningLanguages
 import com.zuno.ai.data.Profile
+import com.zuno.ai.data.SystemNotificationItem
+import com.zuno.ai.data.SystemNotificationKind
 import com.zuno.ai.model.AgentState
 import com.zuno.ai.model.ChatMessage
 import com.zuno.ai.model.Speaker
@@ -28,12 +37,26 @@ import com.zuno.ai.ui.screens.ActiveLiveRoomScreen
 import com.zuno.ai.ui.screens.CreateLiveRoomScreen
 import com.zuno.ai.ui.screens.LiveRoomLobbyScreen
 import com.zuno.ai.ui.screens.LiveRoomsScreen
+import com.zuno.ai.ui.screens.NotificationsScreen
+import com.zuno.ai.ui.screens.PaywallScreen
+import com.zuno.ai.ui.screens.SettingsAboutScreen
+import com.zuno.ai.ui.screens.SettingsAccountScreen
+import com.zuno.ai.ui.screens.SettingsAppLanguageScreen
+import com.zuno.ai.ui.screens.SettingsLearningLanguageScreen
+import com.zuno.ai.ui.screens.SettingsLearningScreen
+import com.zuno.ai.ui.screens.SettingsNotificationsScreen
+import com.zuno.ai.ui.screens.SettingsOverviewScreen
+import com.zuno.ai.ui.screens.SettingsPreferencesScreen
+import com.zuno.ai.ui.screens.SettingsPrivacyScreen
+import com.zuno.ai.ui.screens.SettingsTutorScreen
+import com.zuno.ai.ui.screens.SettingsWhatsNewScreen
 import com.zuno.ai.ui.screens.SprintEvaluationScreen
 import com.zuno.ai.ui.screens.SprintReviewResult
 import com.zuno.ai.ui.screens.SystemRoomDetailScreen
 import com.zuno.ai.ui.screens.VocabularyScreen
 import com.zuno.ai.ui.screens.VocabularySprintScreen
 import com.zuno.ai.ui.screens.VoiceCallStatus
+import com.zuno.ai.ui.screens.WelcomeToProScreen
 import com.zuno.ai.ui.screens.displayName
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.viewmodel.ToastEvent
@@ -470,6 +493,323 @@ internal fun LiveRoomsRouteHost(
                 }
             }
         }
+
+        else -> Unit
+    }
+}
+
+@Composable
+internal fun SettingsAndNotificationsRouteHost(
+    screen: ZunoRoute,
+    context: Context,
+    localizedContext: Context,
+    zunoViewModel: ZunoViewModel,
+    profile: Profile?,
+    languages: List<LearningLanguage>,
+    language: LearningLanguage,
+    appLanguage: AppLanguage,
+    activeTutor: TutorAvatarProfile,
+    tts: CartesiaAudioPlayer,
+    toasts: ToastController,
+    busy: Boolean,
+    uploadingPhoto: Boolean,
+    systemNotifications: List<SystemNotificationItem>,
+    appUpdateInfo: AppUpdateInfo?,
+    hasLoadedSchedules: Boolean,
+    hasActiveVoice: Boolean,
+    canReturnBackAfterLangSwitch: Boolean,
+    endVoice: () -> Unit,
+    selectAppLanguage: (AppLanguage) -> Unit,
+    startLevelCheck: () -> Unit,
+    onPickPhoto: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onContactSupport: () -> Unit,
+    onSignOut: () -> Unit,
+    onDeleteAccount: () -> Unit,
+    withNotificationPermission: (() -> Unit) -> Unit,
+    openPlayStoreForUpdate: (String) -> Unit,
+    openTerms: () -> Unit,
+    openPrivacy: () -> Unit,
+    str: (Int, Array<Any>) -> String,
+    navigate: (ZunoRoute) -> Unit,
+    navigateHomeClear: () -> Unit,
+    replace: (ZunoRoute) -> Unit,
+    openSection: (ZunoRoute) -> Unit,
+    pop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val ttsSpeaking by tts.isSpeaking.collectAsStateWithLifecycle()
+    val chatsOverview by zunoViewModel.chatsOverview.collectAsStateWithLifecycle()
+    val privacySettings by zunoViewModel.privacySettings.collectAsStateWithLifecycle()
+    val notificationPrefs by zunoViewModel.notificationPrefs.collectAsStateWithLifecycle()
+    val preferences = profile?.preferences
+
+    when (screen) {
+        ZunoRoute.Notifications -> {
+            LaunchedEffect(Unit) {
+                zunoViewModel.loadChatsOverview(silent = true)
+                zunoViewModel.loadLiveRooms(silent = true)
+                if (!hasLoadedSchedules) zunoViewModel.loadSchedules()
+            }
+            NotificationsScreen(
+                items = systemNotifications,
+                onBack = pop,
+                onOpenNotificationSettings = { navigate(ZunoRoute.SettingsNotifications) },
+                onItemClick = { item ->
+                    zunoViewModel.markNotificationRead(item.id)
+                    when (item.kind) {
+                        SystemNotificationKind.AppUpdate -> navigate(ZunoRoute.SettingsWhatsNew)
+                        SystemNotificationKind.UserMessage -> {
+                            val convId = item.peerConversationId
+                            val pId = item.partnerId
+                            if (!convId.isNullOrBlank() && !pId.isNullOrBlank()) {
+                                zunoViewModel.markPeerChatRead(convId)
+                                navigate(ZunoRoute.PeerChat(convId, pId))
+                            } else {
+                                openSection(ZunoRoute.Chats(ChatsFilter.People))
+                            }
+                        }
+                        SystemNotificationKind.LiveRoomInvite -> {
+                            val roomId = item.roomId
+                            if (!roomId.isNullOrBlank()) navigate(ZunoRoute.LiveRoomLobby(roomId))
+                            else openSection(ZunoRoute.LiveRooms)
+                        }
+                        SystemNotificationKind.Announcement -> navigate(ZunoRoute.SettingsTutor)
+                        SystemNotificationKind.StreakMilestone -> openSection(ZunoRoute.Progress)
+                        SystemNotificationKind.ScheduledSession -> openSection(ZunoRoute.Scheduled)
+                    }
+                },
+                modifier = modifier,
+            )
+        }
+
+        ZunoRoute.Settings -> SettingsOverviewScreen(
+            profile = profile,
+            appLanguage = appLanguage,
+            onBack = pop,
+            onUpgrade = { navigate(ZunoRoute.Paywall) },
+            onAccount = { navigate(ZunoRoute.SettingsAccount) },
+            onLearning = { navigate(ZunoRoute.SettingsLearning) },
+            onTutor = { navigate(ZunoRoute.SettingsTutor) },
+            onAppLanguage = { navigate(ZunoRoute.SettingsAppLanguage) },
+            onPreferences = { navigate(ZunoRoute.SettingsPreferences) },
+            onNotifications = { navigate(ZunoRoute.SettingsNotifications) },
+            onAbout = { navigate(ZunoRoute.SettingsAbout) },
+            onContactSupport = onContactSupport,
+            onSignOut = onSignOut,
+            onDeleteAccount = onDeleteAccount,
+            availableUpdateVersion = appUpdateInfo?.takeIf { it.hasUpdate }?.latestVersion,
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsPreferences -> SettingsPreferencesScreen(
+            preferences = preferences ?: com.zuno.ai.data.Preferences(),
+            targetLanguage = language,
+            appLanguage = appLanguage,
+            onChange = zunoViewModel::updatePreferences,
+            onOpenTutor = { navigate(ZunoRoute.SettingsTutor) },
+            onBack = pop,
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsTutor -> SettingsTutorScreen(
+            selectedTutorId = activeTutor.id,
+            targetLanguage = language,
+            appLanguage = appLanguage,
+            isSpeaking = ttsSpeaking,
+            onSelectTutor = { chosen ->
+                zunoViewModel.updatePreferences {
+                    it.copy(tutorId = chosen.id, tutorVoice = chosen.voicePreset)
+                }
+            },
+            onPreviewTutor = { chosen, sampleText ->
+                tts.speak(
+                    text = sampleText,
+                    language = language.code,
+                    nativeLanguage = appLanguage.code,
+                    defaultLanguage = appLanguage.code,
+                    voiceKey = chosen.id,
+                )
+            },
+            onStopPreview = { tts.stop() },
+            onBack = pop,
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsAppLanguage -> SettingsAppLanguageScreen(
+            selectedLanguage = appLanguage,
+            onSelectLanguage = selectAppLanguage,
+            onBack = pop,
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsLearning -> SettingsLearningScreen(
+            profile = profile,
+            appLanguage = appLanguage,
+            onOpenLanguages = { navigate(ZunoRoute.SettingsLearningLanguage) },
+            onAccentChange = { zunoViewModel.updateProfile(accent = it) },
+            onLevelChange = { zunoViewModel.updateProfile(level = it) },
+            onFindLevel = startLevelCheck,
+            onPreferencesChange = zunoViewModel::updatePreferences,
+            onBack = pop,
+            onUpdateInterests = { interests -> zunoViewModel.updateProfile(interests = interests) },
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsLearningLanguage -> SettingsLearningLanguageScreen(
+            languages = languages,
+            profile = profile,
+            appLanguage = appLanguage,
+            busy = busy,
+            onSwitch = { target ->
+                if (hasActiveVoice) endVoice()
+                zunoViewModel.switchLearningLanguage(target.code) { updated ->
+                    if (canReturnBackAfterLangSwitch) pop()
+                    toasts.show(
+                        ToastEvent(
+                            str(R.string.learning_language_switched, arrayOf(updated.language.displayName(localizedContext, appLanguage))),
+                            ToastIcon.Check,
+                        ),
+                    )
+                }
+            },
+            onBack = pop,
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsAccount -> SettingsAccountScreen(
+            profile = profile,
+            uploadingPhoto = uploadingPhoto,
+            onUpdateName = { zunoViewModel.updateProfile(name = it) },
+            onChangePhoto = onPickPhoto,
+            onTakePhoto = onTakePhoto,
+            onRemovePhoto = {
+                zunoViewModel.removeAvatar { ok ->
+                    if (ok) toasts.show(ToastEvent(str(R.string.account_photo_removed, emptyArray()), ToastIcon.Trash))
+                }
+            },
+            onPlanClick = { navigate(ZunoRoute.Paywall) },
+            onDownloadData = {
+                zunoViewModel.requestDataExport { email ->
+                    toasts.show(
+                        ToastEvent(
+                            str(R.string.account_export_sent_toast, arrayOf(email.ifBlank { profile?.email.orEmpty() })),
+                            ToastIcon.Check,
+                        ),
+                    )
+                }
+            },
+            onDeleteAccount = onDeleteAccount,
+            onBack = pop,
+            openToSpeak = chatsOverview.items?.openToSpeak ?: true,
+            onToggleOpenToSpeak = { enabled -> zunoViewModel.toggleOpenToSpeak(enabled) },
+            onOpenPrivacy = { navigate(ZunoRoute.SettingsPrivacy) },
+            modifier = modifier,
+        )
+
+        ZunoRoute.SettingsPrivacy -> {
+            LaunchedEffect(Unit) { zunoViewModel.loadPrivacySettings() }
+            SettingsPrivacyScreen(
+                privacy = privacySettings,
+                languageName = language.displayName(appLanguage),
+                level = profile?.level ?: "B1",
+                onUpdate = { openToSpeak, allowCallInvites, whoCanMessage ->
+                    zunoViewModel.updatePrivacySettings(openToSpeak, allowCallInvites, whoCanMessage)
+                },
+                onUnblock = { uid ->
+                    zunoViewModel.unblockLearner(uid) {
+                        toasts.show(ToastEvent(str(R.string.account_privacy_unblocked_toast, emptyArray()), ToastIcon.Check))
+                    }
+                },
+                onBack = pop,
+                modifier = modifier,
+            )
+        }
+
+        ZunoRoute.SettingsNotifications -> {
+            LaunchedEffect(Unit) { zunoViewModel.loadNotificationPrefs() }
+            SettingsNotificationsScreen(
+                prefs = notificationPrefs,
+                onChange = { transform ->
+                    val before = notificationPrefs
+                    zunoViewModel.updateNotificationPrefs(transform)
+                    val after = before?.let(transform)
+                    val turnedOnPush = before != null && after != null &&
+                        ((!before.dailyReminder && after.dailyReminder) || (!before.scheduledSessions && after.scheduledSessions) ||
+                            (!before.progressMilestones && after.progressMilestones))
+                    if (turnedOnPush) withNotificationPermission {}
+                },
+                onOpenSystemSettings = {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { context.startActivity(intent) }
+                },
+                onBack = pop,
+                modifier = modifier,
+            )
+        }
+
+        ZunoRoute.SettingsAbout -> {
+            var checkingUpdates by remember { mutableStateOf(false) }
+            SettingsAboutScreen(
+                availableUpdate = appUpdateInfo,
+                onWhatsNew = { navigate(ZunoRoute.SettingsWhatsNew) },
+                onUpdateNow = { openPlayStoreForUpdate(appUpdateInfo?.storeUrl ?: AppUpdateInfo.PLAY_STORE_HTTPS_URL) },
+                onRateApp = { openPlayStoreForUpdate(AppUpdateInfo.PLAY_STORE_HTTPS_URL) },
+                onTerms = openTerms,
+                onPrivacy = openPrivacy,
+                onCheckForUpdates = {
+                    if (!checkingUpdates) {
+                        checkingUpdates = true
+                        zunoViewModel.checkForAppUpdate { info ->
+                            checkingUpdates = false
+                            if (info?.hasUpdate != true) {
+                                toasts.show(
+                                    ToastEvent(
+                                        context.getString(R.string.about_up_to_date_toast, BuildConfig.VERSION_NAME),
+                                        ToastIcon.Check,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                },
+                isCheckingUpdates = checkingUpdates,
+                onBack = pop,
+                modifier = modifier,
+            )
+        }
+
+        ZunoRoute.SettingsWhatsNew -> SettingsWhatsNewScreen(
+            availableUpdate = appUpdateInfo,
+            onUpdateNow = { openPlayStoreForUpdate(appUpdateInfo?.storeUrl ?: AppUpdateInfo.PLAY_STORE_HTTPS_URL) },
+            onBack = pop,
+            modifier = modifier,
+        )
+
+        ZunoRoute.Paywall -> PaywallScreen(
+            onClose = pop,
+            onStartTrial = { yearly ->
+                toasts.show(
+                    ToastEvent(
+                        if (yearly) "7-day Zuno Pro trial selected" else "Monthly Zuno Pro plan selected",
+                        ToastIcon.Check,
+                    ),
+                )
+                replace(ZunoRoute.WelcomeToPro)
+            },
+            onOpenTerms = openTerms,
+            onOpenPrivacy = openPrivacy,
+            onRestorePurchases = { toasts.show(ToastEvent("No previous purchases found", ToastIcon.Alert)) },
+            modifier = modifier,
+        )
+
+        ZunoRoute.WelcomeToPro -> WelcomeToProScreen(
+            onStartPractising = navigateHomeClear,
+            onManageSubscription = { replace(ZunoRoute.SettingsAccount) },
+            modifier = modifier,
+        )
 
         else -> Unit
     }

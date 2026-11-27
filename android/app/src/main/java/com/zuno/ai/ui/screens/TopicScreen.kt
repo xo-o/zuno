@@ -57,6 +57,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 
 /**
@@ -113,7 +114,7 @@ fun TopicScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
         ) {
             TopicHero(topic = topic)
@@ -315,7 +316,7 @@ fun CommunityTopicPreviewScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
         ) {
             Column(
@@ -467,7 +468,7 @@ fun CommunityRoleplayPreviewScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s12, bottom = ZunoSpace.s24),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s12, bottom = ZunoSpace.s24),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {

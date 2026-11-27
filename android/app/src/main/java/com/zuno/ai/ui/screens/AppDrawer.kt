@@ -2,6 +2,7 @@ package com.zuno.ai.ui.screens
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -88,6 +90,7 @@ fun AppDrawer(
     vocabDueCount: Int = 0,
     scheduledTimeLabel: String? = null,
     unreadChatsCount: Int = 0,
+    unreadNotificationsCount: Int = 0,
     activeLiveRoomsCount: Int = 0,
     partnersOnlineCount: Int = 0,
     leagueRank: Int? = null,
@@ -125,14 +128,30 @@ fun AppDrawer(
                     modifier = Modifier.weight(1f),
                 )
                 Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .zunoGlassSubtle(CircleShape, borderBrush = null)
-                        .clickable(role = Role.Button, onClick = onNotifications)
-                        .semantics { contentDescription = "Notifications" },
+                    modifier = Modifier.size(38.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    ZunoIcon(R.drawable.zuno_ic_bell, 18.dp, tint = ZunoColors.IconPrimary)
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .zunoGlassSubtle(CircleShape, borderBrush = null)
+                            .clickable(role = Role.Button, onClick = onNotifications)
+                            .semantics { contentDescription = "Notifications" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ZunoIcon(R.drawable.zuno_ic_bell, 18.dp, tint = ZunoColors.IconPrimary)
+                    }
+                    if (unreadNotificationsCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 1.dp, y = (-1).dp)
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(ZunoColors.StatusSpeaking)
+                                .border(2.dp, ZunoColors.BgElevated, CircleShape),
+                        )
+                    }
                 }
             }
 

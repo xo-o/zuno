@@ -44,6 +44,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.ui.theme.zunoRecessedTrack
 
 private val TopBarHeight = 56.dp
@@ -55,7 +56,7 @@ fun ZunoBackTopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIconButton(
@@ -79,7 +80,7 @@ fun ZunoOnboardingTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -119,7 +120,7 @@ fun ZunoCompactTitleTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -159,7 +160,7 @@ fun ZunoCallTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -202,27 +203,36 @@ fun ZunoCallTopBar(
                             }
                         }
                     }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    if (elapsed.isNotBlank()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = sessionLabel,
+                                style = ZunoType.LabelMedium,
+                                color = ZunoColors.TextPrimary,
+                                maxLines = 1,
+                            )
+                            Text(
+                                text = "· $elapsed",
+                                style = ZunoType.LabelSmall,
+                                color = ZunoColors.TextSecondary,
+                                maxLines = 1,
+                            )
+                        }
+                    } else {
                         Text(
                             text = sessionLabel,
                             style = ZunoType.LabelMedium,
                             color = ZunoColors.TextPrimary,
                             maxLines = 1,
                         )
-                        Text(
-                            text = "· $elapsed",
-                            style = ZunoType.LabelSmall,
-                            color = ZunoColors.TextSecondary,
-                            maxLines = 1,
-                        )
                     }
                 }
             } else {
                 EllipsizedText(
-                    text = "$sessionLabel · $elapsed",
+                    text = if (elapsed.isNotBlank()) "$sessionLabel · $elapsed" else sessionLabel,
                     style = ZunoType.Headline.copy(textAlign = TextAlign.Center),
                     color = ZunoColors.TextPrimary,
                 )
@@ -245,7 +255,7 @@ fun ZunoActionTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -275,7 +285,7 @@ fun ZunoSectionTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -336,7 +346,7 @@ fun ZunoSegmentedTabs(
             .fillMaxWidth()
             .height(40.dp)
             .zunoGlassSubtle(CircleShape, fillColor = ZunoColors.SurfaceControlTrack)
-            .padding(ZunoSpace.s4),
+            .padding(zunoLayout.tabTrackPadding),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -357,7 +367,8 @@ fun ZunoSegmentedTabs(
                             Modifier.clip(CircleShape)
                         },
                     )
-                    .clickable(role = Role.Tab) { onSelect(index) },
+                    .clickable(role = Role.Tab) { onSelect(index) }
+                    .padding(horizontal = ZunoSpace.s4),
                 contentAlignment = Alignment.Center,
             ) {
                 EllipsizedText(
@@ -382,7 +393,7 @@ fun ZunoSelectorTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(TopBarHeight)
-            .padding(start = ZunoSpace.s12, end = ZunoSpace.s20),
+            .padding(start = zunoLayout.topBarPaddingH, end = zunoLayout.topBarPillEndPadding),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -558,7 +569,7 @@ fun ZunoLessonRow(
                 ZunoIcon(
                     icon = R.drawable.zuno_ic_t_check,
                     size = 15.dp,
-                    tint = ZunoColors.IconSecondary,
+                    tint = ZunoColors.IconSuccess,
                 )
             } else {
                 Text(
@@ -581,7 +592,11 @@ fun ZunoLessonRow(
                 Text(
                     text = it,
                     style = ZunoType.FootnoteRegular,
-                    color = if (status == LessonStatus.Current) ZunoColors.TextSecondary else ZunoColors.TextTertiary,
+                    color = when (status) {
+                        LessonStatus.Done -> ZunoColors.TextSuccess
+                        LessonStatus.Current -> ZunoColors.TextSecondary
+                        LessonStatus.Upcoming -> ZunoColors.TextTertiary
+                    },
                 )
             }
         }
@@ -699,5 +714,194 @@ fun ZunoProgressBar(progress: Float, modifier: Modifier = Modifier, height: Dp =
                 .clip(CircleShape)
                 .background(ZunoColors.SurfaceInverse)
         )
+    }
+}
+
+enum class StatusPillTone { Success, Neutral, Danger }
+
+/**
+ * Compact status badge pill (`9068:13934` Status Pill):
+ * `Success` = emerald subtle surface/border/text, `Neutral` = strong surface, `Danger` = danger surface/border/text.
+ */
+@Composable
+fun ZunoStatusPill(
+    label: String,
+    modifier: Modifier = Modifier,
+    tone: StatusPillTone = StatusPillTone.Neutral,
+    @DrawableRes leadingIcon: Int? = null,
+) {
+    val bgColor = when (tone) {
+        StatusPillTone.Success -> ZunoColors.SurfaceSuccessSubtle
+        StatusPillTone.Neutral -> ZunoColors.SurfaceStrong
+        StatusPillTone.Danger -> ZunoColors.DangerSurface
+    }
+    val borderColor = when (tone) {
+        StatusPillTone.Success -> ZunoColors.BorderSuccessSubtle
+        StatusPillTone.Neutral -> ZunoColors.BorderSubtle
+        StatusPillTone.Danger -> ZunoColors.DangerBorder
+    }
+    val contentColor = when (tone) {
+        StatusPillTone.Success -> ZunoColors.TextSuccess
+        StatusPillTone.Neutral -> ZunoColors.TextSecondary
+        StatusPillTone.Danger -> ZunoColors.TextDanger
+    }
+    Row(
+        modifier = modifier
+            .height(26.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .border(1.dp, borderColor, CircleShape)
+            .padding(horizontal = ZunoSpace.s10),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leadingIcon?.let {
+            ZunoIcon(it, 11.dp, tint = contentColor)
+        }
+        Text(
+            text = label,
+            style = ZunoType.FootnoteStrong,
+            color = contentColor,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * CEFR Stepper (`9068:13889`): 6-stage `A1..C2` pill ladder with emerald completed steps/connectors,
+ * inverse current step, and muted upcoming steps.
+ */
+@Composable
+fun ZunoCefrStepper(
+    levels: List<String>,
+    currentIndex: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        levels.forEachIndexed { idx, code ->
+            val isCompleted = idx < currentIndex
+            val isCurrent = idx == currentIndex
+            val pillShape = RoundedCornerShape(ZunoRadius.sm)
+            val pillModifier = when {
+                isCompleted -> Modifier
+                    .height(26.dp)
+                    .width(36.dp)
+                    .clip(pillShape)
+                    .background(ZunoColors.SurfaceSuccessSubtle)
+                    .border(1.dp, ZunoColors.BorderSuccessSubtle, pillShape)
+                isCurrent -> Modifier
+                    .height(24.dp)
+                    .width(34.dp)
+                    .clip(pillShape)
+                    .background(ZunoColors.SurfaceInverse)
+                else -> Modifier
+                    .height(26.dp)
+                    .width(36.dp)
+                    .clip(pillShape)
+                    .background(ZunoColors.SurfaceStrong)
+                    .border(1.dp, ZunoColors.BorderSubtle, pillShape)
+            }
+            val textColor = when {
+                isCompleted -> ZunoColors.TextSuccess
+                isCurrent -> ZunoColors.TextOnInverse
+                else -> ZunoColors.TextTertiary
+            }
+            Box(
+                modifier = pillModifier,
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = code,
+                    style = ZunoType.Micro,
+                    color = textColor,
+                    maxLines = 1,
+                )
+            }
+            if (idx < levels.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(2.dp)
+                        .background(if (idx < currentIndex) ZunoColors.IconSuccess else ZunoColors.BorderDefault),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Daily Goal Row (`9068:13924`):
+ * - **Done**: `text/secondary` title, `text/success` counter, and emerald `✓ {target}{unit}` pill.
+ * - **Active**: `text/primary` title, `text/tertiary` counter, and `+ Log` action pill.
+ */
+@Composable
+fun ZunoDailyGoalRow(
+    title: String,
+    valueLabel: String,
+    completed: Boolean,
+    completedPillLabel: String,
+    onLogClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2),
+        ) {
+            Text(
+                text = title,
+                style = ZunoType.BodyMedium,
+                color = if (completed) ZunoColors.TextSecondary else ZunoColors.TextPrimary,
+                maxLines = 1,
+            )
+            Text(
+                text = valueLabel,
+                style = ZunoType.FootnoteRegular,
+                color = if (completed) ZunoColors.TextSuccess else ZunoColors.TextTertiary,
+                maxLines = 1,
+            )
+        }
+        if (completed) {
+            ZunoStatusPill(
+                label = completedPillLabel,
+                tone = StatusPillTone.Success,
+                leadingIcon = R.drawable.zuno_ic_t_check,
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .height(28.dp)
+                    .clip(CircleShape)
+                    .background(ZunoColors.SurfaceStrong)
+                    .border(1.dp, ZunoColors.BorderDefault, CircleShape)
+                    .then(
+                        if (onLogClick != null) {
+                            Modifier.clickable(role = Role.Button, onClick = onLogClick)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(horizontal = ZunoSpace.s10),
+                horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s4),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ZunoIcon(R.drawable.zuno_ic_plus, 11.dp, tint = ZunoColors.IconPrimary)
+                Text(
+                    text = "Log",
+                    style = ZunoType.FootnoteStrong,
+                    color = ZunoColors.TextPrimary,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }

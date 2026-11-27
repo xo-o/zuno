@@ -84,6 +84,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 
 @Composable
@@ -191,7 +192,7 @@ fun ChatsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s6, bottom = ZunoSpace.s32),
+                    contentPadding = PaddingValues(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s6, bottom = ZunoSpace.s32),
                     verticalArrangement = Arrangement.spacedBy(if (isAllEmpty) ZunoSpace.s20 else ZunoSpace.s14),
                 ) {
                     if (!isAllEmpty) {
@@ -504,8 +505,8 @@ private fun OpenToSpeakToggleCard(
             .fillMaxWidth()
             .zunoGlassSubtle(shape)
             .clickable(role = Role.Switch, onClick = { onToggle(!openToSpeak) })
-            .padding(start = ZunoSpace.s12, end = ZunoSpace.s14, top = ZunoSpace.s10, bottom = ZunoSpace.s10),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s10),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoAvatar(
@@ -564,8 +565,8 @@ fun ChatsSearchField(
                 shape = shape,
                 borderBrush = if (query.isNotEmpty()) SolidColor(ZunoColors.BorderFocus) else ZunoGlassBorderSubtleBrush,
             )
-            .padding(horizontal = ZunoSpace.s14),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
+            .padding(horizontal = zunoLayout.cardPaddingH),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoIcon(R.drawable.zuno_ic_t_search, 16.dp, tint = ZunoColors.IconSecondary)
@@ -632,8 +633,8 @@ private fun StartAiChatCard(onChat: () -> Unit) {
             .fillMaxWidth()
             .zunoGlassSubtle(shape)
             .clickable(role = Role.Button, onClick = onChat)
-            .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoAiTutorAvatar(size = 40.dp)
@@ -703,17 +704,18 @@ private fun UnifiedConversationRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s12),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s12),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val avatarSize = if (zunoLayout.isCompact) 40.dp else 44.dp
         if (item.kind == UnifiedChatKind.Ai) {
-            ZunoAiTutorAvatar(size = 44.dp)
+            ZunoAiTutorAvatar(size = avatarSize)
         } else {
             ZunoOpenToSpeakAvatar(
                 initial = item.avatarInitial,
                 imageUrl = item.avatarUrl,
-                size = 44.dp,
+                size = avatarSize,
                 openToSpeak = false,
             )
         }
@@ -899,8 +901,8 @@ private fun LearnerActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(role = Role.Button, onClick = onRowClick)
-            .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s10),
-        horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s10),
+        horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ZunoOpenToSpeakAvatar(

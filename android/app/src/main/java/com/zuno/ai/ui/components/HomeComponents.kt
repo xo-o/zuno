@@ -48,6 +48,7 @@ import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.ui.theme.zunoRecessedTrack
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -74,7 +75,7 @@ fun ZunoHomeTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+            .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -132,7 +133,7 @@ fun ZunoExploreTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .padding(horizontal = ZunoSpace.s24),
+            .padding(horizontal = zunoLayout.screenPaddingH),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -170,7 +171,7 @@ fun ZunoSidebarHomeTopBar(
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
-            .padding(start = ZunoSpace.s12, end = ZunoSpace.s20),
+            .padding(start = zunoLayout.topBarPaddingH, end = zunoLayout.topBarPillEndPadding),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -337,8 +338,8 @@ fun ZunoPickUpSection(
                 .fillMaxWidth()
                 .zunoGlassSubtle(cardShape, fillColor = ZunoColors.SurfaceDefault)
                 .clickable(role = Role.Button, onClick = action)
-                .padding(ZunoSpace.s16),
-            horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
+                .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s14),
+            horizontalArrangement = Arrangement.spacedBy(zunoLayout.rowGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -408,7 +409,7 @@ fun ZunoNextTasksSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .zunoGlassSubtle(cardShape)
-                .padding(horizontal = ZunoSpace.s14, vertical = ZunoSpace.s4),
+                .padding(horizontal = zunoLayout.cardPaddingH, vertical = ZunoSpace.s4),
         ) {
             NextTaskRow(
                 icon = R.drawable.zuno_ic_t_book_open,
@@ -606,7 +607,7 @@ fun ZunoFloatingBottomNav(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = ZunoSpace.s24)
+            .padding(horizontal = zunoLayout.screenPaddingH)
             .height(64.dp)
             .shadow(16.dp, dockShape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(dockShape)

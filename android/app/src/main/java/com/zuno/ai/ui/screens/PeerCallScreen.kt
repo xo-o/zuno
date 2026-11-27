@@ -72,6 +72,7 @@ import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassMediaPill
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.delay
@@ -165,7 +166,7 @@ fun PeerCallScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s6),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s6),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
         ) {
             if (!partnerJoined) {

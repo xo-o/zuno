@@ -56,6 +56,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
+import com.zuno.ai.ui.theme.zunoLayout
 
 enum class AuthMode(
     val title: String,
@@ -128,7 +129,7 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s32),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8)) {
@@ -159,7 +160,7 @@ fun AuthScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, bottom = ZunoSpace.s16),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {
@@ -275,7 +276,7 @@ private fun MagicLinkSent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, bottom = ZunoSpace.s16),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
         ) {

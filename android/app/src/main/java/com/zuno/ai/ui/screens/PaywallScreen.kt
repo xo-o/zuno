@@ -49,6 +49,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 
 /**
  * `11 · Paywall` (`2365:8836` Paywall · 1 · Plans).
@@ -75,7 +76,7 @@ fun PaywallScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = ZunoSpace.s12),
+                .padding(horizontal = zunoLayout.topBarPaddingH),
             contentAlignment = Alignment.CenterStart,
         ) {
             ZunoIconButton(
@@ -92,7 +93,7 @@ fun PaywallScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ZunoSpace.s24),
+                .padding(horizontal = zunoLayout.screenPaddingH),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10)) {
@@ -181,7 +182,7 @@ fun PaywallScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s10, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s10, bottom = ZunoSpace.s16),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
         ) {
@@ -306,7 +307,7 @@ fun WelcomeToProScreen(
             .zunoCanvasBackground()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = ZunoSpace.s24),
+            .padding(horizontal = zunoLayout.screenPaddingH),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.weight(1f))
@@ -399,7 +400,7 @@ private fun WelcomePerkRow(title: String, subtitle: String) {
             modifier = Modifier.size(32.dp).zunoGlassSubtle(CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            ZunoIcon(R.drawable.zuno_ic_t_check, 15.dp, tint = ZunoColors.IconPrimary)
+            ZunoIcon(R.drawable.zuno_ic_t_check, 15.dp, tint = ZunoColors.IconSuccess)
         }
         Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
             Text(title, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)

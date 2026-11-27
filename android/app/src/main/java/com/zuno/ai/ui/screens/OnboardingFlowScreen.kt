@@ -97,6 +97,7 @@ import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.OnboardingChatItem
 import com.zuno.ai.viewmodel.OnboardingChatRole
 import com.zuno.ai.viewmodel.OnboardingStep
@@ -337,7 +338,7 @@ private fun UserLanguageStep(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         ) {
             Text(
@@ -357,7 +358,7 @@ private fun UserLanguageStep(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24),
+                .padding(horizontal = zunoLayout.screenPaddingH),
         ) {
             Box(
                 modifier = Modifier
@@ -443,7 +444,7 @@ private fun UserLanguageStep(
             onClick = onContinue,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, bottom = ZunoSpace.s16),
         )
     }
 }
@@ -495,7 +496,7 @@ private fun TargetLanguageStep(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         ) {
             Text(
@@ -515,7 +516,7 @@ private fun TargetLanguageStep(
             query = query,
             onQueryChange = { query = it },
             placeholder = stringResource(R.string.onboarding_search_languages, languages.size),
-            modifier = Modifier.padding(horizontal = ZunoSpace.s24),
+            modifier = Modifier.padding(horizontal = zunoLayout.screenPaddingH),
         )
 
         Spacer(Modifier.height(ZunoSpace.s16))
@@ -525,7 +526,7 @@ private fun TargetLanguageStep(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24)
+                .padding(horizontal = zunoLayout.screenPaddingH)
                 .zunoGlassSubtle(listShape),
         ) {
             if (filtered.isEmpty()) {
@@ -621,7 +622,7 @@ private fun TargetLanguageStep(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = ZunoSpace.s16, start = ZunoSpace.s24, end = ZunoSpace.s24)
+                    .padding(top = ZunoSpace.s16, start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s8, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
@@ -647,7 +648,7 @@ private fun TargetLanguageStep(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, bottom = ZunoSpace.s16),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, bottom = ZunoSpace.s16),
         )
     }
 }
@@ -815,8 +816,8 @@ private fun ChatStepBody(
                 .fillMaxWidth()
                 .onSizeChanged { listHeightPx = it.height },
             contentPadding = PaddingValues(
-                start = ZunoSpace.s24,
-                end = ZunoSpace.s24,
+                start = zunoLayout.screenPaddingH,
+                end = zunoLayout.screenPaddingH,
                 top = ZunoSpace.s12,
                 bottom = ZunoSpace.s8,
             ),
@@ -1109,7 +1110,7 @@ private fun StartingPathReadyStep(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s12),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s12),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
             Column(
@@ -1202,7 +1203,7 @@ private fun StartingPathReadyStep(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s8),
+                .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
         ) {

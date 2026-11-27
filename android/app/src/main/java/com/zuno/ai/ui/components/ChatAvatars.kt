@@ -56,6 +56,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
@@ -294,7 +295,7 @@ fun ZunoCallControlsBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s12),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

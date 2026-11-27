@@ -47,6 +47,7 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoTheme
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.ToastEvent
 import com.zuno.ai.viewmodel.ToastIcon
 import kotlinx.coroutines.delay
@@ -156,7 +157,7 @@ fun ZunoToastHost(controller: ToastController, modifier: Modifier = Modifier) {
                 if (atTop) Modifier.padding(top = statusBar + ZunoSpace.s12)
                 else Modifier.navigationBarsPadding().imePadding().padding(bottom = 80.dp)
             )
-            .padding(horizontal = ZunoSpace.s24),
+            .padding(horizontal = zunoLayout.screenPaddingH),
         contentAlignment = if (atTop) Alignment.TopCenter else Alignment.BottomCenter,
     ) {
         AnimatedVisibility(
@@ -179,7 +180,7 @@ fun ZunoToastHost(controller: ToastController, modifier: Modifier = Modifier) {
     }
 }
 
-@Preview(backgroundColor = 0xFF171717, showBackground = true)
+@Preview(backgroundColor = 0xFF0B0B0D, showBackground = true)
 @Composable
 private fun ZunoToastPreview() {
     ZunoTheme {

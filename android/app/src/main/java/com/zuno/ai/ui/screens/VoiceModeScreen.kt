@@ -125,6 +125,7 @@ import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassMediaPill
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.delay
@@ -218,7 +219,8 @@ fun VoiceModeScreen(
         }
     }
 
-    val elapsed = rememberElapsed(startedAtMillis)
+    val elapsedRaw = rememberElapsed(startedAtMillis)
+    val elapsed = if (status == VoiceCallStatus.Connecting && startedAtMillis == null) "" else elapsedRaw
     val topBarLabel = when {
         isCameraOn -> stringResource(R.string.call_video_label)
         isLessonMode -> stringResource(R.string.call_voice_label)
@@ -446,7 +448,7 @@ private fun PortraitVoiceCallBody(
                         onInterrupt = onInterrupt,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s8),
+                            .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
                     )
                 }
 
@@ -455,7 +457,7 @@ private fun PortraitVoiceCallBody(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = ZunoSpace.s20),
+                            .padding(horizontal = zunoLayout.screenPaddingH),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                     ) {
                         LazyColumn(
@@ -533,22 +535,19 @@ private fun PortraitVoiceCallBody(
                     }
                 }
 
-                // `Home · 6 · Speaking — No captions` (`7383:13309`) — transitions from Mono to Cobalt on start
+                // `Home · 6 / 6a / 6b` (`7383:13309`, `11015:14525`, `11015:14576`) — V3 Wide Horizon states
                 else -> {
                     val glowState = when (status) {
                         VoiceCallStatus.Speaking -> AgentGlowState.Speaking
                         VoiceCallStatus.Listening -> AgentGlowState.Listening
-                        VoiceCallStatus.Thinking, VoiceCallStatus.Connecting -> AgentGlowState.Thinking
+                        VoiceCallStatus.Connecting -> AgentGlowState.Connecting
+                        VoiceCallStatus.Thinking -> AgentGlowState.Thinking
                         VoiceCallStatus.Muted -> AgentGlowState.Disabled
                     }
-                    var enteredCall by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) {
-                        enteredCall = true
-                    }
-                    val glowTheme = if (enteredCall && status != VoiceCallStatus.Muted) {
-                        GlowTheme.Cobalt
-                    } else {
+                    val glowTheme = if (status == VoiceCallStatus.Muted) {
                         GlowTheme.Mono
+                    } else {
+                        GlowTheme.Cobalt
                     }
                     Box(
                         modifier = Modifier
@@ -572,7 +571,7 @@ private fun PortraitVoiceCallBody(
                         )
                         Column(
                             modifier = Modifier
-                                .padding(horizontal = ZunoSpace.s24)
+                                .padding(horizontal = zunoLayout.screenPaddingH)
                                 .padding(bottom = 72.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
@@ -1270,7 +1269,7 @@ private fun LessonAvatarVoiceBody(
                         onInterrupt = onInterrupt,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = ZunoSpace.s20, vertical = ZunoSpace.s8),
+                            .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
                     )
                 }
 
@@ -1294,7 +1293,7 @@ private fun LessonAvatarVoiceBody(
                         onLessonAction = onLessonAction,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = ZunoSpace.s20),
+                            .padding(horizontal = zunoLayout.screenPaddingH),
                     )
                 }
 
@@ -1559,7 +1558,7 @@ private fun CallControls(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = ZunoSpace.s24, vertical = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s12),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CallButton(
@@ -1615,7 +1614,7 @@ private fun CallButton(
     }
 }
 
-@Preview(backgroundColor = 0xFF171717, showBackground = true, widthDp = 402, heightDp = 874)
+@Preview(backgroundColor = 0xFF0B0B0D, showBackground = true, widthDp = 402, heightDp = 874)
 @Composable
 private fun VoiceModeScreenNoCaptionsPreview() {
     ZunoTheme {
@@ -1634,7 +1633,7 @@ private fun VoiceModeScreenNoCaptionsPreview() {
     }
 }
 
-@Preview(backgroundColor = 0xFF171717, showBackground = true, widthDp = 402, heightDp = 874)
+@Preview(backgroundColor = 0xFF0B0B0D, showBackground = true, widthDp = 402, heightDp = 874)
 @Composable
 private fun VoiceModeScreenCaptionsPreview() {
     ZunoTheme {

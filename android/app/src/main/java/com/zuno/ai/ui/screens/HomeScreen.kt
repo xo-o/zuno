@@ -70,6 +70,7 @@ import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoTheme
 import com.zuno.ai.ui.theme.ZunoType
+import com.zuno.ai.ui.theme.zunoLayout
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
@@ -111,6 +112,7 @@ fun HomeScreen(
     vocabDueCount: Int = 0,
     nextRoleplayTitle: String? = null,
     unreadChatsCount: Int = 0,
+    unreadNotificationsCount: Int = 0,
     activeLiveRoomsCount: Int = 0,
     partnersOnlineCount: Int = 0,
     scheduledTimeLabel: String? = null,
@@ -273,6 +275,7 @@ fun HomeScreen(
                 vocabDueCount = vocabDueCount,
                 scheduledTimeLabel = scheduledTimeLabel,
                 unreadChatsCount = unreadChatsCount,
+                unreadNotificationsCount = unreadNotificationsCount,
                 activeLiveRoomsCount = activeLiveRoomsCount,
                 partnersOnlineCount = partnersOnlineCount,
                 leagueRank = leagueRank,
@@ -305,7 +308,7 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ZunoColors.Gray2)
+                .background(ZunoColors.BgCanvas)
                 .statusBarsPadding()
                 .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -387,7 +390,7 @@ fun HomeScreen(
                     state = holdState,
                     audioLevel = { voiceLevel },
                     theme = GlowTheme.Mono,
-                    canvasColor = ZunoColors.Gray2,
+                    canvasColor = ZunoColors.BgCanvas,
                     shape = RoundedCornerShape(40.dp),
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -409,7 +412,7 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = ZunoSpace.s24)
+                        .padding(horizontal = zunoLayout.screenPaddingH)
                         .padding(bottom = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -457,7 +460,7 @@ fun HomeScreen(
     }
 }
 
-@Preview(backgroundColor = 0xFF121212, showBackground = true, widthDp = 402, heightDp = 874)
+@Preview(backgroundColor = 0xFF0B0B0D, showBackground = true, widthDp = 402, heightDp = 874)
 @Composable
 private fun HomeScreenActivePreview() {
     ZunoTheme {

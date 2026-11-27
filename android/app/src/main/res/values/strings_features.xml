@@ -882,4 +882,68 @@
     <string name="vocab_sprint_next_phrase">Next phrase</string>
     <string name="vocab_sprint_mastered_feedback">Mastered · Next SRS review in %1$s</string>
     <string name="vocab_sprint_retry_feedback">%1$s · Reset to due tomorrow</string>
+
+    <!-- App Version, Updates & About (`09 · Settings`) -->
+    <string name="settings_about_and_updates">About &amp; updates</string>
+    <string name="settings_version_short">v%1$s</string>
+    <string name="settings_update_available_short">v%1$s available</string>
+    <string name="settings_app_version_footer">ZunoAI v%1$s (%2$d)</string>
+    <string name="about_brand_name">ZunoAI</string>
+    <string name="about_version_build">Version %1$s · Build %2$d</string>
+    <string name="about_update_available">Update available</string>
+    <string name="about_up_to_date">You’re up to date</string>
+    <string name="about_up_to_date_body">You’re running the latest version of ZunoAI.</string>
+    <string name="about_update_now">Update now</string>
+    <string name="about_update_short">Update</string>
+    <string name="about_check_updates">Check for updates</string>
+    <string name="about_up_to_date_toast">You’re up to date · v%1$s</string>
+    <string name="about_release_notes">Release notes</string>
+    <string name="about_whats_new">What’s new</string>
+    <string name="about_rate_app">Rate ZunoAI</string>
+    <string name="about_licenses">Open-source licenses</string>
+    <string name="about_licenses_body">ZunoAI uses Jetpack Compose, LiveKit Android SDK, OkHttp, Coil, and Firebase Messaging under Apache 2.0 and MIT licenses.</string>
+    <string name="about_copyright">© 2026 ZunoAI · Made for spoken fluency</string>
+
+    <!-- What’s New / Release Notes (`10a · What's New`) -->
+    <string name="whats_new_title">What’s new</string>
+    <string name="whats_new_version_heading">Version %1$s</string>
+    <string name="whats_new_badge_available">Available</string>
+    <string name="whats_new_badge_latest">Latest</string>
+    <string name="whats_new_badge_installed">Installed</string>
+    <string name="whats_new_update_cta">Update to v%1$s</string>
+    <string name="whats_new_tag_new">New</string>
+    <string name="whats_new_tag_improved">Improved</string>
+    <string name="whats_new_tag_fixed">Fixed</string>
+
+    <!-- Update Sheet & Forced Update Dialog (`10b`, `10c`) -->
+    <string name="update_sheet_eyebrow">NEW VERSION · %1$s</string>
+    <string name="update_sheet_title">ZunoAI %1$s is ready</string>
+    <string name="update_sheet_subtitle">Update in seconds for faster voice replies and new roleplays.</string>
+    <string name="update_required_title">Update required</string>
+    <string name="update_required_body">Your app version (%1$s) is no longer supported. Update to ZunoAI %2$s to continue practicing.</string>
+
+    <!-- System Notifications (`5a`, `5b`) -->
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_settings_desc">Notification settings</string>
+    <string name="notifications_filter_all">All</string>
+    <string name="notifications_filter_messages">Messages</string>
+    <string name="notifications_filter_updates">Updates</string>
+    <string name="notifications_filter_announcements">Announcements</string>
+    <string name="notifications_today">Today</string>
+    <string name="notifications_earlier">Earlier</string>
+    <string name="notifications_empty_title">You’re all caught up</string>
+    <string name="notifications_empty_body">User messages, live room invites, and app updates will appear here.</string>
+    <string name="notifications_empty_filter_body">Nothing new in %1$s right now.</string>
+    <string name="notifications_settings_cta">Notification settings</string>
+    <string name="notifications_whats_new_pill">What’s new in v%1$s</string>
+    <string name="notifications_update_cta">Update</string>
+    <string name="notifications_msg_title">%1$s sent you a message</string>
+    <string name="notifications_msg_meta">Message · %1$s</string>
+    <string name="notifications_room_title">%1$s invited you to a room</string>
+    <string name="notifications_room_meta">Live room · %1$s</string>
+    <string name="notifications_streak_title">%1$d-day streak milestone</string>
+    <string name="notifications_streak_body">Keep your %1$s %2$s streak going tonight.</string>
+    <string name="notifications_streak_meta">Progress · %1$s</string>
+    <string name="notifications_schedule_title">Scheduled · %1$s</string>
+    <string name="notifications_schedule_meta">Scheduled · %1$s</string>
 </resources>

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -29,12 +30,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.zuno.ai.R
 import com.zuno.ai.data.HeatmapDay
+import com.zuno.ai.data.ProgressDailyGoal
 import com.zuno.ai.data.ProgressOverview
 import com.zuno.ai.ui.components.ZunoButton
 import com.zuno.ai.ui.components.ZunoButtonSize
+import com.zuno.ai.ui.components.ZunoCefrStepper
+import com.zuno.ai.ui.components.ZunoDailyGoalRow
 import com.zuno.ai.ui.components.ZunoIcon
 import com.zuno.ai.ui.components.ZunoLoadState
-import com.zuno.ai.ui.components.ZunoProgressBar
 import com.zuno.ai.ui.components.ZunoSectionTopBar
 import com.zuno.ai.ui.theme.ZunoColors
 import com.zuno.ai.ui.theme.ZunoGlassHairline
@@ -44,6 +47,7 @@ import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
 import com.zuno.ai.ui.theme.zunoGlassSubtle
+import com.zuno.ai.ui.theme.zunoLayout
 import com.zuno.ai.viewmodel.Loadable
 import kotlin.math.PI
 import kotlin.math.cos
@@ -63,6 +67,7 @@ fun ProgressScreen(
     onRetry: () -> Unit = {},
     onBack: () -> Unit,
     onStartDrill: () -> Unit,
+    onLogGoal: ((ProgressDailyGoal) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val data = progress.items
@@ -97,14 +102,14 @@ fun ProgressScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = ZunoSpace.s24, end = ZunoSpace.s24, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
+                .padding(start = zunoLayout.screenPaddingH, end = zunoLayout.screenPaddingH, top = ZunoSpace.s8, bottom = ZunoSpace.s32),
             verticalArrangement = Arrangement.spacedBy(ZunoSpace.s20),
         ) {
-            // CEFR level + 3 summary metrics
+            // CEFR level + stepper + 3 summary metrics
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl), fillColor = ZunoColors.SurfaceDefault)
                     .padding(ZunoSpace.s16),
                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
             ) {
@@ -116,25 +121,15 @@ fun ProgressScreen(
                     Text("$languageName · $effectiveLevel", style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
                     Text(
                         text = if (nextLevel != null) "${data.cefrProgressPercent}% to $nextLevel" else "Top level",
-                        style = ZunoType.FootnoteRegular,
-                        color = ZunoColors.TextSecondary,
+                        style = ZunoType.FootnoteStrong,
+                        color = ZunoColors.TextSuccess,
                     )
                 }
 
-                ZunoProgressBar(progress = (data.cefrProgressPercent / 100f).coerceIn(0f, 1f), height = 5.dp)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    CefrOrder.forEachIndexed { idx, code ->
-                        Text(
-                            text = code,
-                            style = ZunoType.Micro,
-                            color = if (idx <= levelIndex) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
-                        )
-                    }
-                }
+                ZunoCefrStepper(
+                    levels = CefrOrder,
+                    currentIndex = levelIndex,
+                )
 
                 ZunoGlassHairline()
 
@@ -157,22 +152,25 @@ fun ProgressScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
-                            .padding(ZunoSpace.s16),
-                        verticalArrangement = Arrangement.spacedBy(ZunoSpace.s14),
+                            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl), fillColor = ZunoColors.SurfaceDefault)
+                            .padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s4),
                     ) {
-                        data.dailyGoals.forEach { goal ->
-                            DailyGoalTrack(
+                        data.dailyGoals.forEachIndexed { idx, goal ->
+                            if (idx > 0) ZunoGlassHairline()
+                            val completed = goal.current >= goal.target
+                            ZunoDailyGoalRow(
                                 title = goal.title,
-                                value = goal.valueLabel,
-                                progress = goal.progress,
+                                valueLabel = goal.valueLabel,
+                                completed = completed,
+                                completedPillLabel = "${goal.target}${goal.unit}",
+                                onLogClick = onLogGoal?.let { cb -> { cb(goal) } } ?: onStartDrill,
                             )
                         }
                     }
                 }
             }
 
-            // Skill balance + Hexagonal radar chart
+            // Skill balance + Hexagonal gradient radar chart
             Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s10)) {
                 ProgressSectionHeader("Skill balance", "Last 30 days")
                 if (data.skills.hasData) {
@@ -180,12 +178,12 @@ fun ProgressScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl), fillColor = ZunoColors.SurfaceDefault)
                             .padding(ZunoSpace.s16),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
                     ) {
-                        SkillLabel("Pronunciation", "${s.pronunciation}%", highlight = s.focusArea == "Pronunciation")
+                        SkillLabel("Pronunciation", highlight = s.focusArea == "Pronunciation")
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -195,8 +193,8 @@ fun ProgressScreen(
                                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
                                 horizontalAlignment = Alignment.Start,
                             ) {
-                                SkillLabel("Word stress", "${s.wordStress}%", highlight = s.focusArea == "Word stress")
-                                SkillLabel("Grammar", "${s.grammar}%", highlight = s.focusArea == "Grammar")
+                                SkillLabel("Word stress", highlight = s.focusArea == "Word stress")
+                                SkillLabel("Grammar", highlight = s.focusArea == "Grammar")
                             }
                             SkillRadarChart(
                                 values = listOf(
@@ -214,17 +212,17 @@ fun ProgressScreen(
                                 verticalArrangement = Arrangement.spacedBy(ZunoSpace.s24),
                                 horizontalAlignment = Alignment.End,
                             ) {
-                                SkillLabel("Listening", "${s.listening}%", highlight = s.focusArea == "Listening", alignEnd = true)
-                                SkillLabel("Vocabulary", "${s.vocabulary}%", highlight = s.focusArea == "Vocabulary", alignEnd = true)
+                                SkillLabel("Listening", highlight = s.focusArea == "Listening", alignEnd = true)
+                                SkillLabel("Vocabulary", highlight = s.focusArea == "Vocabulary", alignEnd = true)
                             }
                         }
-                        SkillLabel("Fluency", "${s.fluency}%", highlight = s.focusArea == "Fluency")
+                        SkillLabel("Fluency", highlight = s.focusArea == "Fluency")
                     }
                 } else {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                            .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl), fillColor = ZunoColors.SurfaceDefault)
                             .padding(ZunoSpace.s16),
                         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
                     ) {
@@ -239,21 +237,23 @@ fun ProgressScreen(
             }
 
             // Recommended Drill card
+            val drillTint = Color(0xFFF87171)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                    .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl), fillColor = ZunoColors.SurfaceDefault)
                     .padding(ZunoSpace.s14),
                 horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s12),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.md)),
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(ZunoRadius.md))
+                        .background(drillTint.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    ZunoIcon(R.drawable.zuno_ic_t_volume, 16.dp, tint = ZunoColors.IconPrimary)
+                    ZunoIcon(R.drawable.zuno_ic_t_volume, 16.dp, tint = drillTint)
                 }
                 Column(
                     modifier = Modifier.weight(1f),
@@ -272,11 +272,11 @@ fun ProgressScreen(
                         "Listening" -> "Conversational listening drill"
                         else -> "Start a quick speaking session"
                     }
-                    Text(focusLabel, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                    Text(focusLabel, style = ZunoType.FootnoteRegular, color = ZunoColors.TextSecondary)
                     Text(drillTitle, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
                 }
                 ZunoButton(
-                    label = "Practice",
+                    label = "Drill",
                     onClick = onStartDrill,
                     size = ZunoButtonSize.Small,
                 )
@@ -289,7 +289,7 @@ fun ProgressScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxl))
+                        .zunoGlassSubtle(RoundedCornerShape(ZunoRadius.xxxl), fillColor = ZunoColors.SurfaceDefault)
                         .padding(ZunoSpace.s16),
                     verticalArrangement = Arrangement.spacedBy(ZunoSpace.s16),
                 ) {
@@ -384,34 +384,13 @@ private fun ProgressMetricCell(value: String, label: String, modifier: Modifier 
 }
 
 @Composable
-private fun DailyGoalTrack(title: String, value: String, progress: Float) {
-    Column(verticalArrangement = Arrangement.spacedBy(ZunoSpace.s6)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(title, style = ZunoType.BodySmall, color = ZunoColors.TextPrimary)
-            Text(value, style = ZunoType.FootnoteRegular, color = ZunoColors.TextSecondary)
-        }
-        ZunoProgressBar(progress = progress, height = 4.dp)
-    }
-}
-
-@Composable
-private fun SkillLabel(title: String, value: String, highlight: Boolean, alignEnd: Boolean = false) {
-    Column(horizontalAlignment = if (alignEnd) Alignment.End else Alignment.CenterHorizontally) {
-        Text(
-            text = title,
-            style = if (highlight) ZunoType.FootnoteStrong else ZunoType.FootnoteRegular,
-            color = if (highlight) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
-            textAlign = if (alignEnd) TextAlign.End else TextAlign.Center,
-        )
-        Text(
-            text = value,
-            style = ZunoType.Micro,
-            color = if (highlight) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
-        )
-    }
+private fun SkillLabel(title: String, highlight: Boolean, alignEnd: Boolean = false) {
+    Text(
+        text = title,
+        style = if (highlight) ZunoType.FootnoteStrong else ZunoType.FootnoteRegular,
+        color = if (highlight) ZunoColors.TextPrimary else ZunoColors.TextSecondary,
+        textAlign = if (alignEnd) TextAlign.End else TextAlign.Center,
+    )
 }
 
 @Composable
@@ -430,19 +409,24 @@ private fun SkillRadarChart(values: List<Float>, modifier: Modifier = Modifier) 
             )
         }
 
-        listOf(0.33f, 0.66f, 1.0f).forEach { ring ->
+        val rings = listOf(0.33f, 0.66f, 1.0f)
+        rings.forEachIndexed { idx, ring ->
             val path = Path()
             for (i in 0 until sides) {
                 val p = pointAt(i, ring)
                 if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
             }
             path.close()
-            drawPath(path, color = Color.White.copy(alpha = 0.10f), style = Stroke(width = 1.dp.toPx()))
+            drawPath(
+                path = path,
+                color = if (idx == rings.lastIndex) ZunoColors.BorderDefault else ZunoColors.BorderSubtle,
+                style = Stroke(width = 1.dp.toPx()),
+            )
         }
 
         for (i in 0 until sides) {
             drawLine(
-                color = Color.White.copy(alpha = 0.08f),
+                color = ZunoColors.BorderSubtle,
                 start = Offset(cx, cy),
                 end = pointAt(i, 1f),
                 strokeWidth = 1.dp.toPx(),
@@ -455,13 +439,29 @@ private fun SkillRadarChart(values: List<Float>, modifier: Modifier = Modifier) 
             if (idx == 0) dataPath.moveTo(p.x, p.y) else dataPath.lineTo(p.x, p.y)
         }
         dataPath.close()
-        drawPath(dataPath, color = Color.White.copy(alpha = 0.14f))
-        drawPath(dataPath, color = Color.White.copy(alpha = 0.88f), style = Stroke(width = 1.75.dp.toPx()))
 
-        values.forEachIndexed { idx, v ->
-            val p = pointAt(idx, v.coerceIn(0.15f, 1f))
-            drawCircle(color = Color.White.copy(alpha = 0.92f), radius = 3.dp.toPx(), center = p)
-        }
+        val coral = Color(0xFFF87171)
+        val amber = Color(0xFFFBBF24)
+        val emerald = ZunoColors.Emerald400
+        val start = Offset(cx - maxR * 0.35f, cy - maxR * 0.85f)
+        val end = Offset(cx + maxR * 0.55f, cy + maxR * 0.85f)
+
+        val fillBrush = Brush.linearGradient(
+            0f to coral.copy(alpha = 0.18f),
+            0.44f to amber.copy(alpha = 0.13f),
+            0.85f to emerald.copy(alpha = 0.16f),
+            start = start,
+            end = end,
+        )
+        val strokeBrush = Brush.linearGradient(
+            0f to coral,
+            0.44f to amber,
+            0.85f to emerald,
+            start = start,
+            end = end,
+        )
+        drawPath(dataPath, brush = fillBrush)
+        drawPath(dataPath, brush = strokeBrush, style = Stroke(width = 1.75.dp.toPx()))
     }
 }
 

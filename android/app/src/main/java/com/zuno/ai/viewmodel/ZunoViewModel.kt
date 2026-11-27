@@ -1,12 +1,15 @@
 package com.zuno.ai.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zuno.ai.BuildConfig
 import com.zuno.ai.auth.SessionTokenStore
 import com.zuno.ai.data.ApiException
 import com.zuno.ai.data.AppLanguage
+import com.zuno.ai.data.AppUpdateInfo
 import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.AttachmentFiles
 import com.zuno.ai.data.AttachmentKind
@@ -35,6 +38,7 @@ import com.zuno.ai.data.RoleplaySessionTicket
 import com.zuno.ai.data.RoleplayShareResult
 import com.zuno.ai.data.SavedDraftAttachment
 import com.zuno.ai.data.StartPeerCallResult
+import com.zuno.ai.data.SystemNotificationItem
 import com.zuno.ai.data.VocabLibrary
 import com.zuno.ai.data.VocabPhrase
 import com.zuno.ai.data.VocabPreview
@@ -251,6 +255,24 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     private val _privacySettings = MutableStateFlow<PrivacySettings?>(null)
     val privacySettings: StateFlow<PrivacySettings?> = _privacySettings.asStateFlow()
 
+    private val notifPrefsStore = application.getSharedPreferences(NOTIF_INBOX_PREFS, Context.MODE_PRIVATE)
+
+    private val _appUpdateInfo = MutableStateFlow<AppUpdateInfo?>(null)
+    val appUpdateInfo: StateFlow<AppUpdateInfo?> = _appUpdateInfo.asStateFlow()
+
+    private val _readNotificationIds = MutableStateFlow<Set<String>>(
+        notifPrefsStore.getStringSet(KEY_READ_IDS, emptySet()).orEmpty().toSet(),
+    )
+    val readNotificationIds: StateFlow<Set<String>> = _readNotificationIds.asStateFlow()
+
+    private val _pushNotifications = MutableStateFlow<List<SystemNotificationItem>>(emptyList())
+    val pushNotifications: StateFlow<List<SystemNotificationItem>> = _pushNotifications.asStateFlow()
+
+    private val _updateSheetDismissedVersion = MutableStateFlow<Int?>(
+        notifPrefsStore.getInt(KEY_DISMISSED_UPDATE_CODE, -1).takeIf { it > 0 },
+    )
+    val updateSheetDismissedVersion: StateFlow<Int?> = _updateSheetDismissedVersion.asStateFlow()
+
     /** True while a create/open request that leads to navigation is running. */
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -463,6 +485,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         }
         refreshRecent()
         loadLanguages()
+        checkForAppUpdate()
     }
 
     suspend fun parseOnboardingTurn(
@@ -2224,6 +2247,46 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _chats.update { chats -> chats[id]?.let { chats + (id to transform(it)) } ?: chats }
     }
 
+    // ── App Version, Updates & System Notifications Inbox ───────────────────
+
+    fun checkForAppUpdate(onResult: ((AppUpdateInfo?) -> Unit)? = null) {
+        viewModelScope.launch {
+            val info = api.appUpdateStatus(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME)
+            if (info != null) {
+                _appUpdateInfo.value = info
+            }
+            onResult?.invoke(info)
+        }
+    }
+
+    fun dismissUpdateSheet(versionCode: Int) {
+        _updateSheetDismissedVersion.value = versionCode
+        notifPrefsStore.edit().putInt(KEY_DISMISSED_UPDATE_CODE, versionCode).apply()
+    }
+
+    fun markNotificationRead(id: String) {
+        _readNotificationIds.update { prev ->
+            if (id in prev) prev else (prev + id).also { next ->
+                notifPrefsStore.edit().putStringSet(KEY_READ_IDS, next).apply()
+            }
+        }
+    }
+
+    fun markAllNotificationsRead(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        _readNotificationIds.update { prev ->
+            (prev + ids).also { next ->
+                notifPrefsStore.edit().putStringSet(KEY_READ_IDS, next).apply()
+            }
+        }
+    }
+
+    fun recordPushNotification(item: SystemNotificationItem) {
+        _pushNotifications.update { prev ->
+            listOf(item) + prev.filterNot { it.id == item.id }.take(19)
+        }
+    }
+
     // ── Plumbing ────────────────────────────────────────────────────────────
 
     private fun handleAuth(e: ApiException) {
@@ -2260,6 +2323,9 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         const val HINT_DEBOUNCE_MS = 700L
         const val PROCESSING_POLL_MS = 1_000L
         const val PROCESSING_TIMEOUT_MS = 120_000L
+        const val NOTIF_INBOX_PREFS = "zuno_notif_inbox"
+        const val KEY_READ_IDS = "read_ids"
+        const val KEY_DISMISSED_UPDATE_CODE = "dismissed_update_code"
     }
 }
 
