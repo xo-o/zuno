@@ -245,7 +245,7 @@ fun PeerChatScreen(
             }
 
             Box(
-                modifier = Modifier.padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s8),
+                modifier = Modifier.padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
             ) {
                 ZunoComposer(
                     value = draft,
@@ -346,7 +346,7 @@ private fun MemberTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -424,6 +424,7 @@
     <string name="home_release_to_cancel">Relâchez pour annuler</string>
     <string name="call_video_label">Appel vidéo</string>
     <string name="call_voice_label">Appel vocal</string>
+    <string name="call_calling_partner">Appel de %1$s…</string>
     <string name="voice_speak_anytime_interrupt">Parlez à tout moment pour interrompre</string>
     <string name="voice_chip_listen">Écouter</string>
     <string name="voice_audio_only_home_hint">Audio seul à l’accueil · Vidéo dans Chats &amp; Leçons</string>

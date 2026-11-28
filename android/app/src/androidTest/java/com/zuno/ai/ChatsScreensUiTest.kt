@@ -45,6 +45,7 @@ import com.zuno.ai.ui.screens.ChatScreen
 import com.zuno.ai.ui.screens.ChatsScreen
 import com.zuno.ai.ui.screens.PeerCallScreen
 import com.zuno.ai.ui.screens.PeerChatScreen
+import com.zuno.ai.ui.screens.VoiceCallMode
 import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.VoiceModeScreen
 import com.zuno.ai.ui.theme.ZunoTheme
@@ -421,13 +422,17 @@ class ChatsScreensUiTest {
                                 level = { 0.5f },
                                 startedAtMillis = now - 134_000L,
                                 tutorLine = "¿Qué vas a pedir? ¿Con leche o solo?",
+                                turns = listOf(
+                                    ChatMessage("a1", Speaker.AGENT, "¿Qué vas a pedir? ¿Con leche o solo?", isFinal = true),
+                                ),
                                 isMuted = false,
                                 isCameraOn = aiCameraOn,
                                 menu = emptyList(),
                                 sessionKindLabel = "Free talk",
                                 languageLevelLabel = "Spanish B1",
                                 learnerLevel = "B1",
-                                initialCaptionsOn = true,
+                                initialCaptionsOn = false,
+                                callMode = VoiceCallMode.AiFriendCall,
                                 userName = "Noah",
                                 userInitial = "N",
                                 coachPrompts = samplePrompts,
@@ -623,24 +628,31 @@ class ChatsScreensUiTest {
             saveScreenshot(scenario, "16_chat_actions_delete")
             activeActionModal = null
 
-            // 9. AI Tutor Call (`Home · 7` Captions + `Chats · 11` video call + `Chats · 19` No Captions)
+            // 9. AI Friend Call (`Chats · 14b` User Camera Off -> `Chats · 14` Video 2-tile -> `Chats · 13` Captions)
             stage = "ai_call"
-            waitForText("Free talk")
-            waitForText("Sofía · Free talk")
-            waitForText("Answers")
-            waitForText("Switch topic")
-            waitForText("Questions")
-            saveScreenshot(scenario, "17_ai_tutor_call")
+            waitForText("Voice call", substring = true)
+            waitForText("AI Tutor")
+            waitForText("Sofía")
+            waitForText("Speaking · Free talk")
+            waitForText("Noah (You)")
+            waitForText("Listening · B1")
+            val visibleTextsOnStart = mutableListOf<String>()
+            collectTexts(instrumentation.uiAutomation.rootInActiveWindow, visibleTextsOnStart)
+            assertTrue("Chats AI Friend call must not show Home ZunoAI gradient", visibleTextsOnStart.none { it == "ZunoAI" })
+            saveScreenshot(scenario, "17_ai_friend_call_avatar")
 
             aiCameraOn = true
-            waitForText("Video Call")
-            waitForText("Follow-ups")
-            saveScreenshot(scenario, "18_ai_tutor_video_call")
-
-            tapText("Hide captions")
+            waitForText("Video Call", substring = true)
             waitForText("AI Tutor")
             waitForText("Noah (You)")
-            saveScreenshot(scenario, "19_ai_tutor_video_no_captions")
+            saveScreenshot(scenario, "18_ai_tutor_video_no_captions")
+
+            tapText("Show captions")
+            waitForText("Video Call", substring = true)
+            waitForText("Answers")
+            waitForText("Follow-ups")
+            waitForText("Questions")
+            saveScreenshot(scenario, "19_ai_tutor_video_call")
 
             // End call so VoiceModeScreen / TutorStageAvatar / ZunoVoiceWaveform dispose cleanly before ActivityScenario.close()
             tapText("End call")

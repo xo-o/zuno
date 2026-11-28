@@ -52,6 +52,7 @@ import com.zuno.ai.ui.components.LiveKitVideoFeed
 import com.zuno.ai.ui.components.TurnPillState
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoCallControlsBar
+import com.zuno.ai.ui.components.ZunoOpenToSpeakAvatar
 import com.zuno.ai.ui.components.ZunoCallTopBar
 import com.zuno.ai.ui.components.ZunoChip
 import com.zuno.ai.ui.components.ZunoCompactTitleTopBar
@@ -82,6 +83,7 @@ fun PeerCallScreen(
     partner: PeerLearner?,
     userName: String,
     userInitial: String,
+    userImageUrl: String? = null,
     languageName: String,
     userLevel: String,
     partnerJoined: Boolean,
@@ -130,13 +132,17 @@ fun PeerCallScreen(
     val partnerInitial = partner?.initial ?: "L"
     val partnerLevel = partner?.level ?: userLevel
 
-    val topSessionLabel = stringResource(
-        if (isCameraOn || remoteVideoTrack != null) R.string.call_video_label else R.string.call_voice_label,
-    )
-    val topAvatars = remember(partnerInitial, partner?.imageUrl, userInitial) {
+    val topSessionLabel = if (!partnerJoined) {
+        stringResource(R.string.call_calling_partner, partnerName)
+    } else {
+        stringResource(
+            if (isCameraOn || remoteVideoTrack != null) R.string.call_video_label else R.string.call_voice_label,
+        )
+    }
+    val topAvatars = remember(partnerInitial, partner?.imageUrl, userInitial, userImageUrl) {
         listOf(
             CallAvatarItem(initial = partnerInitial, imageUrl = partner?.imageUrl),
-            CallAvatarItem(initial = userInitial),
+            CallAvatarItem(initial = userInitial, imageUrl = userImageUrl),
         )
     }
 
@@ -149,8 +155,8 @@ fun PeerCallScreen(
     ) {
         ZunoCallTopBar(
             sessionLabel = topSessionLabel,
-            elapsed = elapsedText,
-            showAvatars = partnerJoined && captionsOn,
+            elapsed = if (partnerJoined) elapsedText else "",
+            showAvatars = !partnerJoined || captionsOn,
             avatars = topAvatars,
             onBack = handleEnd,
             trailing = {
@@ -178,6 +184,7 @@ fun PeerCallScreen(
                     ParticipantTile(
                         name = partnerName,
                         initial = partnerInitial,
+                        imageUrl = partner?.imageUrl,
                         subtitle = stringResource(R.string.call_waiting_to_join),
                         badgeText = null,
                         highlightColor = null,
@@ -192,6 +199,7 @@ fun PeerCallScreen(
                     ParticipantTile(
                         name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
                         initial = userInitial,
+                        imageUrl = userImageUrl,
                         subtitle = if (isCameraOn) stringResource(R.string.call_camera_on) else stringResource(R.string.call_camera_off_ready),
                         badgeText = stringResource(R.string.call_in_room),
                         highlightColor = ZunoColors.StatusListening,
@@ -242,6 +250,7 @@ fun PeerCallScreen(
                     ParticipantTile(
                         name = partnerName,
                         initial = partnerInitial,
+                        imageUrl = partner?.imageUrl,
                         subtitle = "Open to speak · $partnerLevel",
                         badgeText = if (partnerSpeaking) stringResource(R.string.voice_status_dot_speaking) else null,
                         highlightColor = if (partnerSpeaking) ZunoColors.StatusSpeaking else null,
@@ -255,6 +264,7 @@ fun PeerCallScreen(
                     ParticipantTile(
                         name = stringResource(R.string.call_you_name, userName.ifBlank { "You" }),
                         initial = userInitial,
+                        imageUrl = userImageUrl,
                         subtitle = "${if (isMuted) stringResource(R.string.voice_status_dot_muted) else stringResource(R.string.voice_status_dot_listening)} · $languageName $userLevel",
                         badgeText = null,
                         highlightColor = if (userSpeaking && !isMuted) ZunoColors.StatusListening else null,
@@ -384,6 +394,7 @@ private fun ParticipantTile(
     room: Room?,
     videoTrack: VideoTrack?,
     modifier: Modifier = Modifier,
+    imageUrl: String? = null,
     mirrorVideo: Boolean = false,
     dimmed: Boolean = false,
 ) {
@@ -490,20 +501,13 @@ private fun ParticipantTile(
                             )
                             .padding(4.dp),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(68.dp)
-                                .clip(CircleShape)
-                                .background(ZunoColors.SurfaceStrong)
-                                .border(1.dp, highlightColor ?: ZunoColors.BorderDefault, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = initial.take(1).uppercase(),
-                                style = ZunoType.TitleLarge,
-                                color = ZunoColors.TextPrimary,
-                            )
-                        }
+                        ZunoOpenToSpeakAvatar(
+                            initial = initial.take(1).uppercase(),
+                            imageUrl = imageUrl,
+                            size = 68.dp,
+                            openToSpeak = false,
+                            textStyle = ZunoType.TitleLarge,
+                        )
                     }
                 }
             }

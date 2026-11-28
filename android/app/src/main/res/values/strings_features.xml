@@ -721,6 +721,7 @@
     <string name="home_release_to_cancel">Release to cancel</string>
     <string name="call_video_label">Video Call</string>
     <string name="call_voice_label">Voice call</string>
+    <string name="call_calling_partner">Calling %1$s…</string>
     <string name="voice_speak_anytime_interrupt">Speak anytime to interrupt</string>
     <string name="voice_chip_listen">Listen</string>
     <string name="voice_audio_only_home_hint">Audio-only on Home · Video in Chats &amp; Lessons</string>

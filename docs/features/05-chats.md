@@ -43,7 +43,8 @@ Chats Hub
 | **11 · Member Profile Sheet** | `2842:16082` | Native language, target level, streak/sessions, interests (*Travel, Daily life, Tech*), Open-to-speak badge | Message, add partner, invite to call |
 | **12 · AI Friend — Active Chat** | `2842:15912` | Text thread with inline call summary card (*Video call · 03:42 · Ended · 2 coaching tips*) | Reply, listen, tap **Notes**, start voice or video call |
 | **13 · AI Friend — Video Call (Captions)** | `2847:15551` | Active AI Friend call with **AI Friend + learner avatars** in top bar, live transcript bubbles, turn status pill, and coach card | Speak, toggle camera/captions/mute/speaker, end call |
-| **14 · AI Friend — Video Call (No Captions)** | `7353:15475` | Full-screen stacked two-tile view: **AI Friend's animated avatar/video** on top (`AI Tutor · Sofía`) and **learner's live camera** (or avatar fallback) on bottom | Practice face-to-face without transcript overlay |
+| **14 · AI Friend — Video Call (No Captions)** | `7353:15475` | Full-screen stacked two-tile view: **AI Friend's animated avatar/video** on top (`AI Tutor · Sofía`) and **learner's live camera** on bottom | Practice face-to-face without transcript overlay |
+| **14b · AI Friend — Voice Call (User Camera Off)** | `11076:13324` | Full-screen stacked two-tile view: **AI Friend's animated avatar/video** on top (`AI Tutor · Sofía`) and **learner's avatar placeholder** (`Noah (You)`) on bottom | Voice practice with AI Friend talking avatar while user camera is off |
 | **15 · Member Chat + Invite Card** | `2842:15989` | 1:1 text chat with *"Lucía is open to speak now"* quick call-invite card | Send message, tap to start 1:1 voice practice |
 | **16 · Member Chat — Overflow & Partner Added** | `2876:16944` | Chat overflow menu (Add/Remove Partner, Mute, Block, Report) + confirmation toast | Manage partner relationship |
 | **17 · Call Invite — Notification & Missed** | `2876:16836` | System call invite notification with **Join** / **Decline**, and missed-invite card in chat | Join call, decline, or call back |
@@ -55,8 +56,8 @@ Chats Hub
 
 ## 4. How It Works
 
-- **Avatars vs. Video in AI Friend Calls (`13`, `14`):**
-  - **Voice-Only (Camera Off):** Displays the chosen **AI Friend's avatar** (*Sofía*, *Mateo*, *Valeria*, *Claire*, *Lucas*, or *Ethan*) in the call header when Captions are On, or the AI Friend's animated avatar / Horizon presence when Captions are Off.
+- **Avatars vs. Video in AI Friend Calls (`13`, `14`, `14b`):**
+  - **Voice-Only (Camera Off, `14b`):** Displays the chosen **AI Friend's live, lip-synced animated avatar** (*Sofía*, *Mateo*, *Valeria*, *Claire*, *Lucas*, or *Ethan*) on the top tile (`AI Tutor`) alongside the **learner's avatar placeholder** (`Noah (You)`) on the bottom tile when Captions are Off (distinct from Home's audio-only Horizon glow), or both the AI Friend + learner avatars in the call header when Captions are On (`13`).
   - **Video Enabled (Camera On):** Because AI Friends are AI characters rather than webcam callers, turning video on displays that **AI Friend's live, lip-synced animated avatar/video** alongside the **learner's live camera feed** (falling back to the learner's **avatar** if the learner's camera isn't active). With Captions Off (`14`), both appear in a full-screen stacked two-tile layout; with Captions On (`13`), both avatars appear in the top bar above the live transcript.
 - **Avatars vs. Video in 1:1 Peer Calls (`18`–`20`):**
   - **Waiting (`18`):** The invited partner appears as a dimmed **avatar** until they join, while the caller's tile shows their **avatar** (or live camera if toggled on).

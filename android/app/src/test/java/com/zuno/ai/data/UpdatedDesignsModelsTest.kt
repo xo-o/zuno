@@ -1,6 +1,9 @@
 package com.zuno.ai.data
 
+import com.zuno.ai.ui.ZunoRoute
 import com.zuno.ai.ui.components.parseSyllables
+import com.zuno.ai.ui.decodeRoute
+import com.zuno.ai.ui.encode
 import com.zuno.ai.ui.screens.HomeCopy
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -301,5 +304,24 @@ class UpdatedDesignsModelsTest {
         assertEquals("Weekend plans", item.conversationTitle)
         assertEquals("Mateo", item.title)
         assertEquals(listOf(ChatsFilter.Conversations, ChatsFilter.AiFriends, ChatsFilter.People), ChatsFilter.entries)
+    }
+
+    @Test
+    fun zunoVoiceRoute_preservesTutorIdAndAudioOnlyFlagAcrossSerialization() {
+        val chatsCall = ZunoRoute.Voice(
+            conversationId = "conv-mateo-9",
+            initialCaptionsOn = false,
+            isAudioOnly = false,
+            tutorId = "mateo",
+        )
+        assertEquals(chatsCall, decodeRoute(chatsCall.encode()))
+
+        val homeCall = ZunoRoute.Voice(
+            conversationId = "conv-home-1",
+            initialCaptionsOn = false,
+            isAudioOnly = true,
+            tutorId = null,
+        )
+        assertEquals(homeCall, decodeRoute(homeCall.encode()))
     }
 }

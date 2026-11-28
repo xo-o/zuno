@@ -76,6 +76,7 @@ import com.zuno.ai.auth.AuthState
 import com.zuno.ai.auth.AuthViewModel
 import com.zuno.ai.avatar.catalog.LocalActiveTutor
 import com.zuno.ai.avatar.catalog.TutorAvatarCatalog
+import com.zuno.ai.avatar.model.TutorAvatarProfile
 import com.zuno.ai.data.AppLanguage
 import com.zuno.ai.data.AppUpdateInfo
 import com.zuno.ai.data.Attachment
@@ -150,6 +151,7 @@ import com.zuno.ai.ui.screens.SprintReviewResult
 import com.zuno.ai.ui.screens.SystemRoomDetailScreen
 import com.zuno.ai.ui.screens.VocabularyScreen
 import com.zuno.ai.ui.screens.VocabularySprintScreen
+import com.zuno.ai.ui.screens.VoiceCallMode
 import com.zuno.ai.ui.screens.VoiceCallStatus
 import com.zuno.ai.ui.screens.VoiceModeScreen
 import com.zuno.ai.ui.screens.WelcomeToProScreen
@@ -237,6 +239,7 @@ sealed interface ZunoRoute {
         val conversationId: String,
         val initialCaptionsOn: Boolean = false,
         val isAudioOnly: Boolean = false,
+        val tutorId: String? = null,
     ) : ZunoRoute
     /** 03a–03f interactive 5-stage voice lesson. */
     data class VoiceLesson(
@@ -276,7 +279,7 @@ sealed interface ZunoRoute {
     val isSignedInShell: Boolean get() = this !is Splash && this !is Onboarding && this !is OnboardingSetup && this !is Auth
 }
 
-private fun ZunoRoute.encode(): String = when (this) {
+internal fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.Splash -> "splash"
     ZunoRoute.Onboarding -> "onboarding"
     ZunoRoute.OnboardingSetup -> "onboarding-setup"
@@ -300,7 +303,7 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.NewRoleplay -> "new-roleplay"
     is ZunoRoute.RoleplaySettings -> "roleplay-settings:$id"
     is ZunoRoute.Chat -> "chat:$conversationId"
-    is ZunoRoute.Voice -> "voice:$conversationId:$initialCaptionsOn:$isAudioOnly"
+    is ZunoRoute.Voice -> "voice:$conversationId:$initialCaptionsOn:$isAudioOnly:${tutorId.orEmpty()}"
     is ZunoRoute.VoiceLesson -> "voice-lesson:$topicId:$lessonId:$conversationId:$position:$totalLessons"
     is ZunoRoute.LessonEvaluation -> "lesson-eval:$topicId:$lessonId"
     ZunoRoute.Settings -> "settings"
@@ -328,7 +331,7 @@ private fun ZunoRoute.encode(): String = when (this) {
     is ZunoRoute.ActiveLiveRoom -> "active-live-room:$roomId"
 }
 
-private fun decodeRoute(value: String): ZunoRoute = when {
+internal fun decodeRoute(value: String): ZunoRoute = when {
     value == "onboarding" -> ZunoRoute.Onboarding
     value == "onboarding-setup" -> ZunoRoute.OnboardingSetup
     value.startsWith("auth:") -> ZunoRoute.Auth(AuthMode.valueOf(value.removePrefix("auth:")))
@@ -396,6 +399,7 @@ private fun decodeRoute(value: String): ZunoRoute = when {
             conversationId = parts[0],
             initialCaptionsOn = parts.getOrNull(1)?.toBooleanStrictOrNull() ?: false,
             isAudioOnly = parts.getOrNull(2)?.toBooleanStrictOrNull() ?: false,
+            tutorId = parts.getOrNull(3)?.takeIf { it.isNotBlank() },
         )
     }
     value == "settings" -> ZunoRoute.Settings
@@ -729,6 +733,12 @@ fun ZunoApp(
     fun cameraGranted() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
+    fun resolveVoiceTutor(conversationId: String?, routeTutorId: String? = null): TutorAvatarProfile {
+        val id = routeTutorId?.takeIf { it.isNotBlank() }
+            ?: conversationId?.let { chats[it]?.conversation?.tutorId }
+        return id?.let { TutorAvatarCatalog.resolve(it) } ?: activeTutor
+    }
+
     /**
      * Starts a live LiveKit voice/video call with the tutor for [conversationId] and opens voice mode.
      * The tutor gets the conversation so far, so a call from a chat picks up where it left off.
@@ -739,6 +749,7 @@ fun ZunoApp(
         enableCamera: Boolean = false,
         initialCaptionsOn: Boolean = false,
         isAudioOnly: Boolean = false,
+        tutorId: String? = null,
     ) {
         runWithVoicePermissions {
             tts.stop()
@@ -760,6 +771,7 @@ fun ZunoApp(
                     conversationId = conversationId,
                     initialCaptionsOn = initialCaptionsOn,
                     isAudioOnly = isAudioOnly,
+                    tutorId = tutorId ?: chats[conversationId]?.conversation?.tutorId,
                 ),
             )
             if (viewModel.agentState.value == AgentState.DISCONNECTED) {
@@ -800,8 +812,7 @@ fun ZunoApp(
                 }
                 if (spoken.isNotEmpty() && durationSec >= 10) {
                     val durLabel = "%02d:%02d".format(durationSec / 60, durationSec % 60)
-                    val callTutorName = chats[conversationId]?.conversation?.tutorId
-                        ?.let { TutorAvatarCatalog.resolve(it) }?.displayName ?: activeTutor.displayName
+                    val callTutorName = resolveVoiceTutor(conversationId).displayName
                     zunoViewModel.extractCallVocab(
                         turns = spoken,
                         tutorName = callTutorName,
@@ -915,10 +926,12 @@ fun ZunoApp(
             agentState == AgentState.LISTENING -> localizedContext.getString(R.string.ongoing_call_status_listening)
             else -> null
         }
+        val voiceTutor = resolveVoiceTutor(voiceConversationId, (route as? ZunoRoute.Voice)?.tutorId)
+        val activePeerPartner = (route as? ZunoRoute.PeerCall)?.let { peerChats[it.peerConversationId]?.partner }
         val baseTitle = when {
             activeLiveRoomId != null -> activeLiveRoom?.title ?: "Live Room"
-            activePeerCallId != null -> "1:1 practice call"
-            else -> "${activeTutor.displayName} · Zuno Tutor"
+            activePeerCallId != null -> activePeerPartner?.name ?: "1:1 practice call"
+            else -> "${voiceTutor.displayName} · Zuno Tutor"
         }
         val baseSubtitle = when {
             isMuted -> localizedContext.getString(R.string.ongoing_call_muted_sub)
@@ -1195,7 +1208,13 @@ fun ZunoApp(
             withMicrophone {
                 if (voiceConversationId != null) endVoice()
                 zunoViewModel.startFreeTalk(viaVoice = true, tutorId = tutorId) { conversation ->
-                    startVoice(conversation.id, enableCamera = cameraOn, initialCaptionsOn = false)
+                    startVoice(
+                        conversation.id,
+                        enableCamera = cameraOn,
+                        initialCaptionsOn = false,
+                        isAudioOnly = false,
+                        tutorId = tutorId,
+                    )
                 }
             }
         }
@@ -1270,6 +1289,7 @@ fun ZunoApp(
                     conversationId,
                     enableCamera = shouldRestoreVideo(cached.messages),
                     initialCaptionsOn = captionsDefault(cached.conversation.kind),
+                    tutorId = cached.conversation.tutorId,
                 )
             } else {
                 zunoViewModel.openConversationThread(conversationId) { thread ->
@@ -1277,6 +1297,7 @@ fun ZunoApp(
                         conversationId,
                         enableCamera = shouldRestoreVideo(thread.messages),
                         initialCaptionsOn = captionsDefault(thread.conversation.kind),
+                        tutorId = thread.conversation.tutorId,
                     )
                 }
             }
@@ -2384,6 +2405,7 @@ fun ZunoApp(
                         partner = thread?.partner,
                         userName = userName,
                         userInitial = userInitial,
+                        userImageUrl = profile?.imageUrl,
                         languageName = language.displayName(appLanguage),
                         userLevel = profile?.level ?: "B1",
                         partnerJoined = partnerJoined,
@@ -2816,6 +2838,8 @@ fun ZunoApp(
                                     startVoice(
                                         screen.conversationId,
                                         initialCaptionsOn = kind == ConversationKind.Lesson || kind == ConversationKind.Roleplay,
+                                        isAudioOnly = false,
+                                        tutorId = chatTutor.id,
                                     )
                                 }
                             } else toast(str(R.string.chat_still_replying))
@@ -2853,8 +2877,8 @@ fun ZunoApp(
                     val status = voiceCallStatus(agentState, isMuted)
                     val recentTurns = if (inVoice) voiceMessages.drop(voiceMessageStart) else emptyList()
                     val convKind = chats[screen.conversationId]?.conversation?.kind
-                    val callTutor = chats[screen.conversationId]?.conversation?.tutorId
-                        ?.let { TutorAvatarCatalog.resolve(it) } ?: activeTutor
+                    val callTutor = resolveVoiceTutor(screen.conversationId, screen.tutorId)
+                    val isHomeAudioCall = screen.isAudioOnly || voiceFromHome == screen.conversationId
                     val sessionKindLabel = stringResource(
                         when (convKind) {
                             ConversationKind.Roleplay -> R.string.session_kind_roleplay
@@ -2889,9 +2913,11 @@ fun ZunoApp(
                         languageLevelLabel = langLevelLabel,
                         learnerLevel = profile?.level ?: "B1",
                         initialCaptionsOn = screen.initialCaptionsOn,
-                        isAudioOnly = screen.isAudioOnly || voiceFromHome == screen.conversationId,
+                        isAudioOnly = isHomeAudioCall,
+                        callMode = if (isHomeAudioCall) VoiceCallMode.HomeAudioOnly else VoiceCallMode.AiFriendCall,
                         userName = userName,
                         userInitial = userInitial,
+                        userImageUrl = profile?.imageUrl,
                         isCameraOn = isCameraOn,
                         isSpeakerOn = isSpeakerOn,
                         room = viewModel.activeRoom,
@@ -3012,6 +3038,7 @@ fun ZunoApp(
                         isMuted = isMuted,
                         menu = emptyList(),
                         isLessonMode = true,
+                        callMode = VoiceCallMode.Lesson,
                         lessonPosition = screen.position,
                         learnerLevel = profile?.level ?: "B1",
                         lessonStage = lessonStage,
@@ -3020,6 +3047,7 @@ fun ZunoApp(
                         rescuePayload = rescuePayload,
                         userName = userName,
                         userInitial = userInitial,
+                        userImageUrl = profile?.imageUrl,
                         isCameraOn = isCameraOn,
                         isSpeakerOn = isSpeakerOn,
                         room = viewModel.activeRoom,

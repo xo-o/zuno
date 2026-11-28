@@ -424,6 +424,7 @@
     <string name="home_release_to_cancel">Laat los om te annuleren</string>
     <string name="call_video_label">Videogesprek</string>
     <string name="call_voice_label">Spraakoproep</string>
+    <string name="call_calling_partner">%1$s bellen…</string>
     <string name="voice_speak_anytime_interrupt">Spreek gerust om te onderbreken</string>
     <string name="voice_chip_listen">Luister</string>
     <string name="voice_audio_only_home_hint">Alleen audio op Start · Video in Chats &amp; Lessen</string>

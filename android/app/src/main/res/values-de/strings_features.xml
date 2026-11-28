@@ -424,6 +424,7 @@
     <string name="home_release_to_cancel">Zum Abbrechen loslassen</string>
     <string name="call_video_label">Videoanruf</string>
     <string name="call_voice_label">Sprachanruf</string>
+    <string name="call_calling_partner">%1$s wird angerufen…</string>
     <string name="voice_speak_anytime_interrupt">Sprich jederzeit zum Unterbrechen</string>
     <string name="voice_chip_listen">Anhören</string>
     <string name="voice_audio_only_home_hint">Nur Audio auf Start · Video in Chats &amp; Lektionen</string>

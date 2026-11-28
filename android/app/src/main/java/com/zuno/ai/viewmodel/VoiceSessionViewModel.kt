@@ -127,6 +127,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     private var eventJob: Job? = null
     private var connectJob: Job? = null
     private var levelJob: Job? = null
+    @Volatile
+    private var desiredCameraEnabled = false
 
     /**
      * Joins a LiveKit room for Free Talk or Roleplay using the user's Cartesia multilingual tutor voice.
@@ -146,6 +148,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         }
         resetLessonState()
         _errorMessage.value = null
+        desiredCameraEnabled = enableCamera
+        _isCameraEnabled.value = enableCamera
         _agentState.value = AgentState.CONNECTING
 
         connectJob = viewModelScope.launch {
@@ -156,7 +160,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
                     conversationId = conversationId,
                     speakLastReply = speakLastReply,
                 )
-                joinRoom(tokenResult.url, tokenResult.token, tokenResult.room, enableCamera = enableCamera)
+                joinRoom(tokenResult.url, tokenResult.token, tokenResult.room)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SessionExpiredException) {
@@ -194,6 +198,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         resetLessonState()
         _messages.value = emptyList()
         _errorMessage.value = null
+        desiredCameraEnabled = false
+        _isCameraEnabled.value = false
         _agentState.value = AgentState.CONNECTING
 
         connectJob = viewModelScope.launch {
@@ -247,6 +253,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         }
         resetLessonState()
         _errorMessage.value = null
+        desiredCameraEnabled = false
+        _isCameraEnabled.value = false
         _agentState.value = AgentState.CONNECTING
 
         connectJob = viewModelScope.launch {
@@ -287,6 +295,8 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
             roleplayGoals = ticket.goals,
         )
         _errorMessage.value = null
+        desiredCameraEnabled = false
+        _isCameraEnabled.value = false
         _agentState.value = AgentState.CONNECTING
 
         connectJob = viewModelScope.launch {
@@ -310,11 +320,13 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         _messages.value = emptyList()
         _partnerJoined.value = false
         _errorMessage.value = null
+        desiredCameraEnabled = enableCamera
+        _isCameraEnabled.value = enableCamera
         _agentState.value = AgentState.CONNECTING
 
         connectJob = viewModelScope.launch {
             try {
-                joinRoom(ticket.url, ticket.token, ticket.room, enableCamera = enableCamera, isPeerRoom = true)
+                joinRoom(ticket.url, ticket.token, ticket.room, isPeerRoom = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -329,7 +341,6 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         url: String,
         token: String,
         roomName: String,
-        enableCamera: Boolean = false,
         isPeerRoom: Boolean = false,
     ) {
         _roomName.value = roomName
@@ -344,10 +355,15 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
 
         room.connect(url, token)
         room.localParticipant.setMicrophoneEnabled(true)
-        if (enableCamera) {
+        if (desiredCameraEnabled) {
             runCatching { room.localParticipant.setCameraEnabled(true) }
                 .onSuccess {
-                    _isCameraEnabled.value = true
+                    _isCameraEnabled.value = desiredCameraEnabled
+                }
+                .onFailure { err ->
+                    Log.w(TAG, "Failed to enable camera on join", err)
+                    desiredCameraEnabled = false
+                    _isCameraEnabled.value = false
                 }
         } else {
             _isCameraEnabled.value = false
@@ -389,6 +405,7 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
         levelJob = null
         _userAudioLevel.value = 0f
         _agentAudioLevel.value = 0f
+        desiredCameraEnabled = false
         _isCameraEnabled.value = false
         _isSpeakerOn.value = true
         _localVideoTrack.value = null
@@ -427,15 +444,20 @@ class VoiceSessionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun toggleCamera(enable: Boolean? = null) {
+        val next = enable ?: !desiredCameraEnabled
+        desiredCameraEnabled = next
+        _isCameraEnabled.value = next
         val room = currentRoom ?: return
         viewModelScope.launch {
             try {
-                val next = enable ?: !_isCameraEnabled.value
                 room.localParticipant.setCameraEnabled(next)
-                _isCameraEnabled.value = next
                 refreshVideoTracks(room)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to toggle camera", e)
+                val pub = room.localParticipant.getTrackPublication(Track.Source.CAMERA)
+                val actual = pub?.track != null && !pub.muted
+                desiredCameraEnabled = actual
+                _isCameraEnabled.value = actual
             }
         }
     }

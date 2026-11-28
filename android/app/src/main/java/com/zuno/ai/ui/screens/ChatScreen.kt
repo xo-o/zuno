@@ -223,7 +223,7 @@ private fun AiTutorTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .padding(horizontal = ZunoSpace.s12),
+            .padding(horizontal = zunoLayout.topBarPaddingH),
         horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s6),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -356,7 +356,7 @@ private fun ComposerFooter(
     val attachmentsReady = drafts.all { it.state == DraftUploadState.Ready }
     val focusRequester = remember { FocusRequester() }
     Column(
-        modifier = Modifier.padding(horizontal = ZunoSpace.s16, vertical = ZunoSpace.s8),
+        modifier = Modifier.padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s8),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ZunoSpace.s8),
     ) {

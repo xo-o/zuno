@@ -424,6 +424,7 @@
     <string name="home_release_to_cancel">Suelta para cancelar</string>
     <string name="call_video_label">Videollamada</string>
     <string name="call_voice_label">Llamada de voz</string>
+    <string name="call_calling_partner">Llamando a %1$s…</string>
     <string name="voice_speak_anytime_interrupt">Habla cuando quieras para interrumpir</string>
     <string name="voice_chip_listen">Escuchar</string>
     <string name="voice_audio_only_home_hint">Solo audio en Inicio · Vídeo en Chats y Lecciones</string>
