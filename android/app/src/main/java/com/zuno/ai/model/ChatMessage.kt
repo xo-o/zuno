@@ -14,4 +14,5 @@ data class ChatMessage(
     val segmentId: String? = null,
     val senderId: String? = null,
     val senderName: String? = null,
+    val translation: String? = null,
 )

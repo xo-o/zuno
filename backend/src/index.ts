@@ -339,6 +339,8 @@ app.post("/api/livekit/token", async (c) => {
   }
 
   const thread = body.conversationId ? await findConversation(user.id, body.conversationId) : undefined;
+  const effectiveTutor = thread?.tutorId ? resolveTutor(thread.tutorId) : tutor;
+  const effectiveVoice = effectiveTutor.voiceId;
   const targetLanguage = thread?.language || body.language || profile.targetLanguage;
   const effectiveProfile =
     targetLanguage !== profile.targetLanguage
@@ -418,8 +420,8 @@ app.post("/api/livekit/token", async (c) => {
   }
 
   const instructions = transcript
-    ? `${voiceInstructions(context, effectiveProfile)}\n\nConversation so far (continue naturally from here):\n${transcript}`
-    : voiceInstructions(context, effectiveProfile);
+    ? `${voiceInstructions(context, effectiveProfile, thread?.tutorId)}\n\nConversation so far (continue naturally from here):\n${transcript}`
+    : voiceInstructions(context, effectiveProfile, thread?.tutorId);
 
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
@@ -429,9 +431,10 @@ app.post("/api/livekit/token", async (c) => {
       mode: "conversation",
       conversationKind: context.kind,
       provider: "elevenlabs",
-      voice,
-      tutorId: tutor.id,
-      tutorName: tutor.name,
+      voice: effectiveVoice,
+      tutorId: effectiveTutor.id,
+      tutorName: effectiveTutor.name,
+      speakingPace: effectiveTutor.pace,
       language: targetLanguage,
       targetLanguage,
       targetLanguageName: languageName(targetLanguage),
@@ -441,7 +444,7 @@ app.post("/api/livekit/token", async (c) => {
       accent: effectiveProfile.accent,
       level: effectiveProfile.level,
       teachInTarget: effectiveProfile.teachInTarget,
-      tutorVoice: tutor.voicePreset,
+      tutorVoice: effectiveTutor.voicePreset,
       handsFree: profile.handsFree,
       instructions,
       resume: history.length > 0,

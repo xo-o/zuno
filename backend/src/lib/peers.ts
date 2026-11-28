@@ -278,20 +278,29 @@ export async function getChatsOverview(userId: string) {
   const aiItems = aiConvs
     .filter((row) => row.messages.length > 0 || row.kind === "freetalk")
     .map((row) => {
+      const rowTutor = row.tutorId ? resolveTutor(row.tutorId) : activeTutor;
       const lastMsg = row.messages[0];
       const isVoice = Boolean(lastMsg?.viaVoice);
+      const hasTopicTitle = Boolean(row.title && row.title !== "Free Talk");
       const snippet = lastMsg
         ? lastMsg.kind === "call_summary"
           ? lastMsg.text
-          : `${lastMsg.role === "assistant" ? `${activeTutor.name} · ` : "You · "}${lastMsg.text}`
-        : "Message or call anytime";
+          : hasTopicTitle
+            ? `${row.title} · ${lastMsg.text}`
+            : lastMsg.text
+        : hasTopicTitle
+          ? `${row.title} · Message or call anytime`
+          : "Message or call anytime";
       return {
         id: row.id,
         kind: "ai" as const,
         conversationId: row.id,
         peerConversationId: null as string | null,
         partnerId: null as string | null,
-        title: row.title,
+        tutorId: rowTutor.id,
+        tutorName: rowTutor.name,
+        conversationTitle: row.title,
+        title: rowTutor.name,
         badge: isVoice ? "Voice" : row.kind === "roleplay" ? "Roleplay" : row.kind === "lesson" ? "Lesson" : "Text",
         isVoice,
         openToSpeak: false,
@@ -299,7 +308,7 @@ export async function getChatsOverview(userId: string) {
         unread: row.unreadCount > 0,
         pinned: row.pinnedAt !== null,
         updatedAt: (lastMsg?.createdAt ?? row.updatedAt).toISOString(),
-        avatarInitial: activeTutor.name.slice(0, 1).toUpperCase() || "Z",
+        avatarInitial: rowTutor.name.slice(0, 1).toUpperCase() || "Z",
         avatarUrl: null as string | null,
       };
     });

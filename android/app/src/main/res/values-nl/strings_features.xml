@@ -426,6 +426,8 @@
     <string name="call_voice_label">Spraakoproep</string>
     <string name="voice_speak_anytime_interrupt">Spreek gerust om te onderbreken</string>
     <string name="voice_chip_listen">Luister</string>
+    <string name="voice_audio_only_home_hint">Alleen audio op Start · Video in Chats &amp; Lessen</string>
+    <string name="ongoing_call_tap_to_return">Tik om terug te keren</string>
 
     <!-- Ongoing Call & System -->
     <string name="push_channel_ongoing_call">Lopend gesprek</string>

@@ -142,6 +142,7 @@ class ChatsScreensUiTest {
             sessionsCount = 34,
             interests = listOf("Travel", "Café", "Culture"),
             openToSpeak = true,
+            online = true,
             isPartner = false,
             activeLabel = "Open to speak",
         )
@@ -159,6 +160,7 @@ class ChatsScreensUiTest {
             sessionsCount = 42,
             interests = listOf("Travel", "Daily life", "Tech"),
             openToSpeak = true,
+            online = true,
             isPartner = false,
             activeLabel = "Open to speak",
         )
@@ -176,6 +178,7 @@ class ChatsScreensUiTest {
             sessionsCount = 48,
             interests = listOf("Travel", "Food"),
             openToSpeak = true,
+            online = true,
             isPartner = true,
             activeLabel = "Open to speak",
         )
@@ -195,11 +198,13 @@ class ChatsScreensUiTest {
                     conversationId = "ai-1",
                     peerConversationId = null,
                     partnerId = null,
-                    title = "Pedir un café",
+                    tutorId = "sofia",
+                    conversationTitle = "Pedir un café",
+                    title = "Sofía",
                     badge = "Voice",
                     isVoice = true,
                     openToSpeak = false,
-                    snippet = "Sofía · ¡Claro! Son tres euros. ¿Algo más?",
+                    snippet = "Pedir un café · ¡Claro! Son tres euros.",
                     unread = true,
                     pinned = false,
                     updatedAtMillis = now - 2 * 60_000L,
@@ -221,6 +226,25 @@ class ChatsScreensUiTest {
                     pinned = false,
                     updatedAtMillis = now - 14 * 60_000L,
                     avatarInitial = "L",
+                    avatarUrl = null,
+                ),
+                UnifiedChatItem(
+                    id = "ai-2",
+                    kind = UnifiedChatKind.Ai,
+                    conversationId = "ai-2",
+                    peerConversationId = null,
+                    partnerId = null,
+                    tutorId = "mateo",
+                    conversationTitle = "Weekend plans",
+                    title = "Mateo",
+                    badge = "Text",
+                    isVoice = false,
+                    openToSpeak = false,
+                    snippet = "Weekend plans · ¿Qué vas a hacer el sábado?",
+                    unread = false,
+                    pinned = false,
+                    updatedAtMillis = now - 60 * 60_000L,
+                    avatarInitial = "M",
                     avatarUrl = null,
                 ),
             ),
@@ -258,11 +282,13 @@ class ChatsScreensUiTest {
                     conversationId = "ai-pinned",
                     peerConversationId = null,
                     partnerId = null,
-                    title = "Café en Madrid",
-                    badge = "AI Tutor",
+                    tutorId = "sofia",
+                    conversationTitle = "Café en Madrid",
+                    title = "Sofía",
+                    badge = "Text",
                     isVoice = false,
                     openToSpeak = false,
-                    snippet = "Sofía · ¡Claro! Son tres euros. ¿Algo más?",
+                    snippet = "Café en Madrid · ¡Claro! Son tres euros.",
                     unread = true,
                     pinned = true,
                     updatedAtMillis = now - 10_000L,
@@ -272,7 +298,7 @@ class ChatsScreensUiTest {
             ) + sampleOverview.conversations.drop(1),
         )
         val emptyOverview = ChatsOverview(
-            openToSpeak = false,
+            openToSpeak = true,
             language = "es",
             languageName = "Spanish",
             level = "B1",
@@ -293,15 +319,11 @@ class ChatsScreensUiTest {
                         when (stage) {
                             "chats" -> ChatsScreen(
                                 overview = Loadable((if (hasPinned) pinnedOverview else sampleOverview).copy(openToSpeak = openToSpeak)),
-                                userInitial = "N",
-                                userImageUrl = null,
-                                initialFilter = ChatsFilter.All,
+                                initialFilter = ChatsFilter.Conversations,
                                 onRetry = {},
-                                onToggleOpenToSpeak = { openToSpeak = it },
                                 onOpenAiConversation = { stage = "ai_chat" },
-                                onStartAiChat = { stage = "ai_chat" },
-                                onStartAiVoiceCall = { stage = "ai_call" },
-                                onOpenRoleplays = {},
+                                onStartAiFriendChat = { stage = "ai_chat" },
+                                onStartAiFriendCall = { _, _ -> stage = "ai_call" },
                                 onOpenPeerChat = { stage = "peer_chat" },
                                 onInvitePeerToTalk = { stage = "peer_call" },
                                 onTogglePartner = { _, _ -> },
@@ -311,15 +333,11 @@ class ChatsScreensUiTest {
 
                             "chats_empty" -> ChatsScreen(
                                 overview = Loadable(emptyOverview),
-                                userInitial = "N",
-                                userImageUrl = null,
-                                initialFilter = ChatsFilter.All,
+                                initialFilter = ChatsFilter.Conversations,
                                 onRetry = {},
-                                onToggleOpenToSpeak = {},
                                 onOpenAiConversation = {},
-                                onStartAiChat = {},
-                                onStartAiVoiceCall = {},
-                                onOpenRoleplays = {},
+                                onStartAiFriendChat = {},
+                                onStartAiFriendCall = { _, _ -> },
                                 onOpenPeerChat = {},
                                 onInvitePeerToTalk = {},
                                 onTogglePartner = { _, _ -> },
@@ -490,67 +508,84 @@ class ChatsScreensUiTest {
                 }
             }
 
-            // 1. Unified Chats screen (`Chats · 1 · All Conversations`)
+            // 1. Unified Chats screen (`Chats · 1 · Conversations`)
             waitForText("Chats")
-            waitForText("Open to speak")
-            waitForText("Pedir un café")
+            waitForText("Conversations")
+            waitForText("Sofía")
             waitForText("Lucía M.")
-            saveScreenshot(scenario, "01_chats_all")
+            waitForText("Mateo")
+            saveScreenshot(scenario, "01_chats_conversations")
 
             // 1b. Pinned + Recent (`Chat actions · 5 · Chats · Pinned`)
             hasPinned = true
             waitForText("Pinned")
-            waitForText("Café en Madrid")
+            waitForText("Café en Madrid · ¡Claro! Son tres euros.")
             waitForText("Recent")
             saveScreenshot(scenario, "02_chats_pinned")
             hasPinned = false
-            waitForText("Pedir un café")
+            waitForText("Pedir un café · ¡Claro! Son tres euros.")
 
-            // 2. Switch to AI Tutor filter (`Chats · 2`)
-            tapText("AI Tutor")
-            waitForText("Chat with Sofía")
-            waitForText("Sofía · AI Tutor (1)")
-            saveScreenshot(scenario, "03_chats_ai_filter")
+            // 2. Switch to AI Friends tab (`Chats · 2 · AI Friends`) & open AI Friend Profile Sheet (`Chats · 10`)
+            tapText("AI Friends")
+            waitForText("Pick an AI friend to start a chat")
+            waitForText("Mateo")
+            waitForText("Energetic")
+            saveScreenshot(scenario, "03_chats_ai_friends")
+            tapText("Mateo")
+            waitForText("Start voice call")
+            waitForText("Video call")
+            saveScreenshot(scenario, "04_ai_friend_profile_sheet")
+            // Dismiss AI Friend Profile Sheet & verify back on AI Friends tab
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            Thread.sleep(450)
+            waitForText("People")
 
-            // 3. Switch to People filter (`Chats · 3`)
+            // 2b. Tap + to open New Chat Sheet (`Chats · 9 · New Chat Sheet`)
+            tapText("New chat")
+            waitForText("Search AI friends or people…")
+            waitForText("AI Friends")
+            waitForText("Partners")
+            saveScreenshot(scenario, "04b_new_chat_sheet")
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            Thread.sleep(450)
+            waitForText("People")
+
+            // 3. Switch to People tab (`Chats · 3 · People`) & open Member Profile Sheet (`Chats · 11`)
             tapText("People")
-            waitForText("Lucía M.")
-            saveScreenshot(scenario, "04_chats_people_filter")
-
-            // 4. Switch to Open filter (`Chats · 4`) & open Member Profile Sheet (`Chats · 16`)
-            tapText("Open")
+            waitForText("Partners")
+            waitForText("Open to speak")
             waitForText("Carlos Vega")
-            saveScreenshot(scenario, "05_chats_open_filter")
-            tapText("View")
+            saveScreenshot(scenario, "05_chats_people")
+            tapText("Carlos Vega")
             waitForText("Invite to talk")
-            waitForText("Send message")
+            waitForText("Message")
+            waitForText("Add partner")
             saveScreenshot(scenario, "06_member_profile_sheet")
 
-            // 5. Tap Send message -> Peer 1:1 Chat (`Chats · 12`)
-            tapText("Send message")
+            // 4. Tap Message -> Peer 1:1 Chat (`Chats · 15`)
+            tapText("Message")
             waitForText("Lucía M.")
             waitForText("Decline")
             waitForText("Join")
             saveScreenshot(scenario, "07_peer_chat")
 
-            // 6. Tap Join -> Peer Call Waiting Room (`Chats · 13`) -> Ping -> Active Member Call (`Chats · 14`)
+            // 5. Tap Join -> Peer Call Waiting Room (`Chats · 18`) -> Ping -> Active Member Call (`Chats · 19`)
             tapText("Join")
             assertTrue("Expected Join callback", peerInviteJoined)
             waitForText("Waiting for Lucía M. to join…")
             saveScreenshot(scenario, "08_peer_call_waiting")
 
             tapText("Ping Lucía")
-            waitForText("Lucía M. · Speaking")
+            waitForText("Lucía speaking")
             waitForText("Replay")
             saveScreenshot(scenario, "09_peer_call_active")
 
-            // 7. Empty All (`Chats · 6 · Empty — All`)
+            // 6. Empty Conversations (`Chats · 6 · Empty — Conversations` · T1 5-Avatar Row)
             stage = "chats_empty"
-            waitForText("Start your first conversation")
+            waitForText("Start a conversation")
             waitForText("Start chatting")
-            waitForText("Meet a partner")
-            waitForText("Your availability")
-            saveScreenshot(scenario, "10_chats_empty_all")
+            waitForText("or browse 3 people online")
+            saveScreenshot(scenario, "10_chats_empty_conversations")
 
             // 8. AI Tutor Chat + Returned Call Summary + Chat Actions (`06 · Chat actions`)
             stage = "ai_chat"

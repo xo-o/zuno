@@ -426,6 +426,8 @@
     <string name="call_voice_label">Llamada de voz</string>
     <string name="voice_speak_anytime_interrupt">Habla cuando quieras para interrumpir</string>
     <string name="voice_chip_listen">Escuchar</string>
+    <string name="voice_audio_only_home_hint">Solo audio en Inicio · Vídeo en Chats y Lecciones</string>
+    <string name="ongoing_call_tap_to_return">Toca para volver</string>
 
     <!-- Ongoing Call & System -->
     <string name="push_channel_ongoing_call">Llamada en curso</string>

@@ -497,6 +497,7 @@ data class Conversation(
     val public: Boolean = false,
     val shareUrl: String? = null,
     val levelCheck: Boolean = false,
+    val tutorId: String? = null,
 )
 
 data class ShareResult(val public: Boolean, val shareUrl: String?)
@@ -989,6 +990,7 @@ internal fun JSONObject.toConversation() = Conversation(
     public = optString("visibility") == "public",
     shareUrl = optStringOrNull("shareUrl"),
     levelCheck = optBoolean("levelCheck"),
+    tutorId = optStringOrNull("tutorId"),
 )
 
 internal fun JSONObject.toAttachment() = Attachment(
@@ -1261,7 +1263,7 @@ internal fun LessonEvaluation.toRequestBody(conversationId: String?): JSONObject
 
 // ── Unified Chats, Peer Messaging & 1:1 Call Rooms ──────────────────────────
 
-enum class ChatsFilter { All, AiTutor, People, Open }
+enum class ChatsFilter { Conversations, AiFriends, People }
 
 data class PeerLearner(
     val id: String,
@@ -1291,6 +1293,8 @@ data class UnifiedChatItem(
     val conversationId: String?,
     val peerConversationId: String?,
     val partnerId: String?,
+    val tutorId: String? = null,
+    val conversationTitle: String? = null,
     val title: String,
     val badge: String?,
     val isVoice: Boolean,
@@ -1409,6 +1413,8 @@ internal fun JSONObject.toUnifiedChatItem() = UnifiedChatItem(
     conversationId = optStringOrNull("conversationId"),
     peerConversationId = optStringOrNull("peerConversationId"),
     partnerId = optStringOrNull("partnerId"),
+    tutorId = optStringOrNull("tutorId"),
+    conversationTitle = optStringOrNull("conversationTitle"),
     title = optString("title"),
     badge = optStringOrNull("badge"),
     isVoice = optBoolean("isVoice", false),

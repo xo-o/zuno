@@ -1258,7 +1258,8 @@ fun PostCallSavePhrasesSheet(
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ZunoSpace.s2)) {
                         Text(phrase, style = ZunoType.BodyMediumStrong, color = ZunoColors.TextPrimary)
-                        Text("$meaning · $tag", style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
+                        val subtitle = if (meaning.isNotBlank()) "$meaning · $tag" else tag
+                        Text(subtitle, style = ZunoType.FootnoteRegular, color = ZunoColors.TextTertiary)
                     }
                     Box(
                         modifier = Modifier

@@ -5,7 +5,7 @@ import { t } from "./copy.js";
 import { generateJson, type GeminiFile, type GeminiTurn } from "./gemini.js";
 import { accentLabel, languageInfo, languageName } from "./languages.js";
 import type { LearnerProfile } from "./profile.js";
-import { resolveTutor } from "./voices.js";
+import { aiFriendDirective, resolveTutor } from "./voices.js";
 
 export const MIN_LESSONS_PER_TOPIC = 3;
 export const MAX_LESSONS_PER_TOPIC = 15;
@@ -734,13 +734,22 @@ function contextInstructions(context: ConversationContext, profile: LearnerProfi
   }
 }
 
-function tutorSystem(context: ConversationContext, profile: LearnerProfile) {
+export function tutorSystem(
+  context: ConversationContext,
+  profile: LearnerProfile,
+  tutorIdOverride?: string | null,
+) {
   const { target, native } = names(profile);
-  const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
+  const tutor = tutorIdOverride ? resolveTutor(tutorIdOverride) : resolveTutor(profile.tutorId, profile.tutorVoice);
+  const friendPersona =
+    context.kind === "freetalk" && tutorIdOverride
+      ? aiFriendDirective(tutorIdOverride, profile.level, variety(profile))
+      : null;
   const levelGuide = context.kind === "levelcheck" ? null : cefrGuidelines(profile.level);
   if (isUserLanguageFreeTalk(context, profile)) {
     return [
       `You are ${tutor.name} (Zuno's AI language coach), a warm, knowledgeable personal ${target} coach and conversation partner (${tutor.tagline.toLowerCase()}).`,
+      ...(friendPersona ? [friendPersona] : []),
       learnerLine(profile),
       ...(levelGuide ? [levelGuide] : []),
       contextInstructions(context, profile),
@@ -756,7 +765,10 @@ function tutorSystem(context: ConversationContext, profile: LearnerProfile) {
   }
 
   return [
-    `You are Zuno, a warm, patient ${target} tutor.`,
+    friendPersona
+      ? `You are ${tutor.name}, a ${tutor.tagline.toLowerCase()} ${target} conversation partner.`
+      : `You are Zuno, a warm, patient ${target} tutor.`,
+    ...(friendPersona ? [friendPersona] : []),
     learnerLine(profile),
     ...(levelGuide ? [levelGuide] : []),
     ...styleLines(profile),
@@ -777,9 +789,13 @@ const openingSchema = z.object({
 });
 
 /** First assistant message for roleplays and lessons, so the learner never faces an empty chat. */
-export function generateOpening(context: ConversationContext, profile: LearnerProfile) {
+export function generateOpening(
+  context: ConversationContext,
+  profile: LearnerProfile,
+  tutorIdOverride?: string | null,
+) {
   return generateJson({
-    system: tutorSystem(context, profile),
+    system: tutorSystem(context, profile, tutorIdOverride),
     contents:
       context.kind === "roleplay"
         ? "Start the scene with your first line, in character."
@@ -808,6 +824,8 @@ export function generateReply(options: {
   needsTitle: boolean;
   /** The learner's last message carries attachments. */
   withAttachments?: boolean;
+  /** Optional per-conversation AI Friend persona (Chats only). */
+  tutorId?: string | null;
 }) {
   const { target, native } = names(options.profile);
   const explain = explanationLanguage(options.profile);
@@ -825,7 +843,7 @@ export function generateReply(options: {
 
   return generateJson({
     system: [
-      tutorSystem(options.context, options.profile),
+      tutorSystem(options.context, options.profile, options.tutorId),
       feedbackRule,
       `"objectiveMet": ${
         options.context.kind === "lesson"
@@ -957,16 +975,25 @@ export async function explainGrammar(text: string, profile: LearnerProfile): Pro
 }
 
 /** Instructions for the realtime voice agent, mirroring the text tutor. */
-export function voiceInstructions(context: ConversationContext, profile: LearnerProfile): string {
+export function voiceInstructions(
+  context: ConversationContext,
+  profile: LearnerProfile,
+  tutorIdOverride?: string | null,
+): string {
   const { target, native } = names(profile);
   const nativeCode = profile.nativeLanguage || "en";
   const targetCode = profile.targetLanguage || "es";
-  const tutor = resolveTutor(profile.tutorId, profile.tutorVoice);
+  const tutor = tutorIdOverride ? resolveTutor(tutorIdOverride) : resolveTutor(profile.tutorId, profile.tutorVoice);
+  const friendPersona =
+    context.kind === "freetalk" && tutorIdOverride
+      ? aiFriendDirective(tutorIdOverride, profile.level, variety(profile))
+      : null;
   const levelGuide = context.kind === "levelcheck" ? null : cefrGuidelines(profile.level);
 
   if (isUserLanguageFreeTalk(context, profile)) {
     return [
       `You are ${tutor.name}, a ${tutor.tagline.toLowerCase()} personal ${target} coach and conversation partner speaking live with the learner over a voice call.`,
+      ...(friendPersona ? [friendPersona] : []),
       learnerLine(profile),
       ...(levelGuide ? [levelGuide] : []),
       contextInstructions(context, profile),
@@ -982,7 +1009,10 @@ export function voiceInstructions(context: ConversationContext, profile: Learner
   }
 
   return [
-    `You are Zuno, a warm ${target} tutor speaking live with the learner over a voice call.`,
+    friendPersona
+      ? `You are ${tutor.name}, a ${tutor.tagline.toLowerCase()} ${target} conversation partner speaking live with the learner over a voice call.`
+      : `You are Zuno, a warm ${target} tutor speaking live with the learner over a voice call.`,
+    ...(friendPersona ? [friendPersona] : []),
     learnerLine(profile),
     ...(levelGuide ? [levelGuide] : []),
     ...styleLines(profile),

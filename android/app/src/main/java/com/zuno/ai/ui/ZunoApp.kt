@@ -210,7 +210,7 @@ sealed interface ZunoRoute {
     data class Auth(val mode: AuthMode) : ZunoRoute
     data object Home : ZunoRoute
     data object Notifications : ZunoRoute
-    data class Chats(val initialFilter: ChatsFilter = ChatsFilter.All) : ZunoRoute
+    data class Chats(val initialFilter: ChatsFilter = ChatsFilter.Conversations) : ZunoRoute
     data class PeerChat(val peerConversationId: String, val partnerId: String) : ZunoRoute
     data class PeerCall(val callId: String, val peerConversationId: String, val partnerId: String) : ZunoRoute
     data object Scheduled : ZunoRoute
@@ -233,7 +233,11 @@ sealed interface ZunoRoute {
     data class RoleplaySettings(val id: String) : ZunoRoute
     data class Chat(val conversationId: String) : ZunoRoute
     /** Live voice call for a conversation (voice mode). */
-    data class Voice(val conversationId: String, val initialCaptionsOn: Boolean = false) : ZunoRoute
+    data class Voice(
+        val conversationId: String,
+        val initialCaptionsOn: Boolean = false,
+        val isAudioOnly: Boolean = false,
+    ) : ZunoRoute
     /** 03a–03f interactive 5-stage voice lesson. */
     data class VoiceLesson(
         val topicId: String,
@@ -296,7 +300,7 @@ private fun ZunoRoute.encode(): String = when (this) {
     ZunoRoute.NewRoleplay -> "new-roleplay"
     is ZunoRoute.RoleplaySettings -> "roleplay-settings:$id"
     is ZunoRoute.Chat -> "chat:$conversationId"
-    is ZunoRoute.Voice -> "voice:$conversationId:$initialCaptionsOn"
+    is ZunoRoute.Voice -> "voice:$conversationId:$initialCaptionsOn:$isAudioOnly"
     is ZunoRoute.VoiceLesson -> "voice-lesson:$topicId:$lessonId:$conversationId:$position:$totalLessons"
     is ZunoRoute.LessonEvaluation -> "lesson-eval:$topicId:$lessonId"
     ZunoRoute.Settings -> "settings"
@@ -332,7 +336,12 @@ private fun decodeRoute(value: String): ZunoRoute = when {
     value == "notifications" -> ZunoRoute.Notifications
     value == "chats" -> ZunoRoute.Chats()
     value.startsWith("chats:") -> ZunoRoute.Chats(
-        runCatching { ChatsFilter.valueOf(value.removePrefix("chats:")) }.getOrDefault(ChatsFilter.All),
+        when (val raw = value.removePrefix("chats:")) {
+            "All", "Conversations" -> ChatsFilter.Conversations
+            "AiTutor", "AiFriends" -> ChatsFilter.AiFriends
+            "People", "Open" -> ChatsFilter.People
+            else -> runCatching { ChatsFilter.valueOf(raw) }.getOrDefault(ChatsFilter.Conversations)
+        },
     )
     value.startsWith("peer-chat:") -> {
         val parts = value.removePrefix("peer-chat:").split(':')
@@ -386,6 +395,7 @@ private fun decodeRoute(value: String): ZunoRoute = when {
         ZunoRoute.Voice(
             conversationId = parts[0],
             initialCaptionsOn = parts.getOrNull(1)?.toBooleanStrictOrNull() ?: false,
+            isAudioOnly = parts.getOrNull(2)?.toBooleanStrictOrNull() ?: false,
         )
     }
     value == "settings" -> ZunoRoute.Settings
@@ -728,6 +738,7 @@ fun ZunoApp(
         speakLastReply: Boolean = false,
         enableCamera: Boolean = false,
         initialCaptionsOn: Boolean = false,
+        isAudioOnly: Boolean = false,
     ) {
         runWithVoicePermissions {
             tts.stop()
@@ -744,7 +755,13 @@ fun ZunoApp(
                 targetLanguage = language.code,
                 contextLabel = chats[conversationId]?.conversation?.title,
             )
-            navigate(ZunoRoute.Voice(conversationId, initialCaptionsOn = initialCaptionsOn))
+            navigate(
+                ZunoRoute.Voice(
+                    conversationId = conversationId,
+                    initialCaptionsOn = initialCaptionsOn,
+                    isAudioOnly = isAudioOnly,
+                ),
+            )
             if (viewModel.agentState.value == AgentState.DISCONNECTED) {
                 viewModel.connect(
                     sessionToken = authViewModel.sessionToken,
@@ -781,22 +798,18 @@ fun ZunoApp(
                 if (durationSec > 0) {
                     zunoViewModel.saveCallSummary(conversationId, durationSec, isVideo = wasVideo)
                 }
-                val candidates = spokenTurns
-                    .map { it.text.trim('“', '”', ' ') }
-                    .filter { it.length in 6..64 }
-                    .distinct()
-                    .take(4)
-                    .map { phrase ->
-                        val tag = if (spokenTurns.any { it.speaker == Speaker.USER && it.text.contains(phrase) }) {
-                            "Your reply"
-                        } else {
-                            "Used by ${activeTutor.displayName}"
-                        }
-                        Triple(phrase, "${language.displayName(localizedContext, appLanguage)} phrase", tag)
-                    }
-                if (candidates.isNotEmpty() && durationSec >= 10) {
+                if (spoken.isNotEmpty() && durationSec >= 10) {
                     val durLabel = "%02d:%02d".format(durationSec / 60, durationSec % 60)
-                    postCallCapture = durLabel to candidates
+                    val callTutorName = chats[conversationId]?.conversation?.tutorId
+                        ?.let { TutorAvatarCatalog.resolve(it) }?.displayName ?: activeTutor.displayName
+                    zunoViewModel.extractCallVocab(
+                        turns = spoken,
+                        tutorName = callTutorName,
+                    ) { candidates ->
+                        if (candidates.isNotEmpty()) {
+                            postCallCapture = durLabel to candidates
+                        }
+                    }
                 }
             }
         }
@@ -1170,12 +1183,40 @@ fun ZunoApp(
         zunoViewModel.startFreeTalk(text) { openChat(it.id) }
     }
 
+    /** Starts a new text chat with a specific Chats AI Friend (does not change global Settings tutor). */
+    fun startAiFriendChat(tutorId: String) {
+        if (voiceConversationId != null) endVoice()
+        zunoViewModel.startFreeTalk(tutorId = tutorId) { openChat(it.id) }
+    }
+
+    /** Starts a live voice or video call with a specific Chats AI Friend. */
+    fun startAiFriendCall(tutorId: String, enableCamera: Boolean = false) {
+        val launchCall: (Boolean) -> Unit = { cameraOn ->
+            withMicrophone {
+                if (voiceConversationId != null) endVoice()
+                zunoViewModel.startFreeTalk(viaVoice = true, tutorId = tutorId) { conversation ->
+                    startVoice(conversation.id, enableCamera = cameraOn, initialCaptionsOn = false)
+                }
+            }
+        }
+        if (enableCamera) {
+            withCameraPermission { launchCall(true) }
+        } else {
+            launchCall(false)
+        }
+    }
+
     /** Home orb / drawer New chat: a new Free Talk that opens straight into a live call; the tutor greets first. */
     fun startHomeCall(enableCamera: Boolean = false) {
         if (voiceConversationId != null) endVoice()
         zunoViewModel.startFreeTalk(viaVoice = true) { conversation ->
             voiceFromHome = conversation.id
-            startVoice(conversation.id, enableCamera = enableCamera, initialCaptionsOn = false)
+            startVoice(
+                conversation.id,
+                enableCamera = enableCamera,
+                initialCaptionsOn = false,
+                isAudioOnly = !enableCamera,
+            )
         }
     }
 
@@ -1196,6 +1237,7 @@ fun ZunoApp(
                             speakLastReply = ok,
                             enableCamera = false,
                             initialCaptionsOn = false,
+                            isAudioOnly = true,
                         )
                     }
                 },
@@ -2009,6 +2051,7 @@ fun ZunoApp(
                         if (chatsOverview.items == null) zunoViewModel.loadChatsOverview(silent = true)
                         if (vocabLibrary.items == null) zunoViewModel.loadVocabulary()
                         if (liveRooms.items == null) zunoViewModel.loadLiveRooms()
+                        if (schedules.items == null) zunoViewModel.loadSchedules()
                     }
                     val latestChatSession = recent.firstOrNull {
                         it.kind == RecentKind.FreeTalk || it.conversationId != null
@@ -2074,7 +2117,7 @@ fun ZunoApp(
                         micGranted = ::micGranted,
                         onRequestMicForTalk = { onGranted -> withMicrophone(onGranted) },
                         onStreakClick = { openSection(ZunoRoute.Progress) },
-                        onLanguageClick = { navigate(ZunoRoute.SettingsLearning) },
+                        onLanguageClick = { navigate(ZunoRoute.SettingsLearningLanguage) },
                         onAvatarClick = { navigate(ZunoRoute.Settings) },
                         onNotificationsClick = { navigate(ZunoRoute.Notifications) },
                         onDailyGoalContinue = {
@@ -2114,6 +2157,7 @@ fun ZunoApp(
                         },
                         onUpgrade = { navigate(ZunoRoute.Paywall) },
                         onComingSoon = ::comingSoon,
+                        ongoingCallBanner = null,
                         modifier = screenModifier,
                     )
                     }
@@ -2185,21 +2229,13 @@ fun ZunoApp(
                     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                         zunoViewModel.loadChatsOverview(silent = true)
                     }
-                    val userInitial = profile?.displayName?.take(1)?.uppercase()?.ifBlank { "Z" } ?: "Z"
                     ChatsScreen(
                         overview = chatsOverview,
-                        userInitial = userInitial,
-                        userImageUrl = profile?.imageUrl,
                         initialFilter = screen.initialFilter,
                         onRetry = { zunoViewModel.loadChatsOverview() },
-                        onToggleOpenToSpeak = { enabled ->
-                            if (enabled) requestChatsNotificationsOnce()
-                            zunoViewModel.toggleOpenToSpeak(enabled)
-                        },
                         onOpenAiConversation = ::openChat,
-                        onStartAiChat = { startFreeTalk(null) },
-                        onStartAiVoiceCall = { withMicrophone(::startHomeCall) },
-                        onOpenRoleplays = { openSection(ZunoRoute.Roleplays) },
+                        onStartAiFriendChat = ::startAiFriendChat,
+                        onStartAiFriendCall = ::startAiFriendCall,
                         onOpenPeerChat = { partner ->
                             zunoViewModel.openPeerChat(partner.id) { thread ->
                                 navigate(ZunoRoute.PeerChat(thread.conversation.id, partner.id))
@@ -2747,6 +2783,7 @@ fun ZunoApp(
                         zunoViewModel.restoreDraft(screen.conversationId)
                     }
                     val conversation = chat?.conversation
+                    val chatTutor = conversation?.tutorId?.let { TutorAvatarCatalog.resolve(it) } ?: activeTutor
                     val isBilingualFreeTalk = conversation?.kind == ConversationKind.FreeTalk &&
                         !conversation.levelCheck &&
                         preferences?.teachInTarget != true
@@ -2789,7 +2826,7 @@ fun ZunoApp(
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
                                 defaultLanguage = appLanguage.code.takeIf { isBilingualFreeTalk },
-                                voiceKey = activeTutor.id,
+                                voiceKey = chatTutor.id,
                             )
                         },
                         onExplain = ::explain,
@@ -2799,6 +2836,7 @@ fun ZunoApp(
                         onOpenAttachment = ::openAttachment,
                         showTranslations = preferences?.showTranslations != false,
                         levelLabel = profile?.level ?: "B1",
+                        tutor = chatTutor,
                         modifier = screenModifier,
                     )
                 }
@@ -2815,6 +2853,8 @@ fun ZunoApp(
                     val status = voiceCallStatus(agentState, isMuted)
                     val recentTurns = if (inVoice) voiceMessages.drop(voiceMessageStart) else emptyList()
                     val convKind = chats[screen.conversationId]?.conversation?.kind
+                    val callTutor = chats[screen.conversationId]?.conversation?.tutorId
+                        ?.let { TutorAvatarCatalog.resolve(it) } ?: activeTutor
                     val sessionKindLabel = stringResource(
                         when (convKind) {
                             ConversationKind.Roleplay -> R.string.session_kind_roleplay
@@ -2849,15 +2889,17 @@ fun ZunoApp(
                         languageLevelLabel = langLevelLabel,
                         learnerLevel = profile?.level ?: "B1",
                         initialCaptionsOn = screen.initialCaptionsOn,
+                        isAudioOnly = screen.isAudioOnly || voiceFromHome == screen.conversationId,
                         userName = userName,
                         userInitial = userInitial,
                         isCameraOn = isCameraOn,
                         isSpeakerOn = isSpeakerOn,
                         room = viewModel.activeRoom,
                         localVideoTrack = localVideoTrack,
-                        tutor = activeTutor,
+                        tutor = callTutor,
                         avatarSpeechSink = viewModel.avatarSpeechSink,
                         coachPrompts = coachPrompts,
+                        onMinimize = null,
                         onToggleCamera = {
                             if (isCameraOn) {
                                 viewModel.toggleCamera(false)
@@ -2871,7 +2913,7 @@ fun ZunoApp(
                                 text = phrase,
                                 language = language.code,
                                 nativeLanguage = appLanguage.code,
-                                voiceKey = activeTutor.id,
+                                voiceKey = callTutor.id,
                             )
                         },
                         onTranslate = { line -> viewModel.sendLessonAction("translate", line) },
@@ -2886,7 +2928,7 @@ fun ZunoApp(
                                     language = language.code,
                                     nativeLanguage = appLanguage.code,
                                     defaultLanguage = appLanguage.code.takeIf { isFreeTalkVoice },
-                                    voiceKey = activeTutor.id,
+                                    voiceKey = callTutor.id,
                                     slow = true,
                                 )
                             }
@@ -3148,7 +3190,7 @@ fun ZunoApp(
                                 navigate(ZunoRoute.PeerChat(thread.conversation.id, partner.id))
                             }
                         },
-                        onInviteClick = { openSection(ZunoRoute.Chats(ChatsFilter.Open)) },
+                        onInviteClick = { openSection(ZunoRoute.Chats(ChatsFilter.People)) },
                         onOpenChats = { openSection(ZunoRoute.Chats(ChatsFilter.People)) },
                         onBack = ::pop,
                         modifier = screenModifier,
@@ -3239,7 +3281,9 @@ fun ZunoApp(
             },
             onSaveSelected = { picked ->
                 postCallCapture = null
-                zunoViewModel.captureVocabPhrases(picked.map { (p, m, tag) -> Triple(p, m, tag) }) { saved ->
+                zunoViewModel.captureVocabPhrases(
+                    picked.map { (p, m, tag) -> Triple(p, m.takeIf { it.isNotBlank() }, tag) },
+                ) { saved ->
                     toasts.show(ToastEvent(str(R.string.vocab_capture_saved_toast, saved.size), ToastIcon.Check))
                 }
             },

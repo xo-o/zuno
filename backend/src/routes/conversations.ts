@@ -22,11 +22,14 @@ import { CHAT_REMINDER_JOB, onTopicCompleted } from "../lib/notifications.js";
 import { getProfile } from "../lib/profile.js";
 import { serializeConversation, serializeMessage, serializeMessages, shareUrlOf, topicProgressLabel } from "../lib/serializers.js";
 import { explainGrammar, generateTypingHint } from "../lib/tutor.js";
+import { TUTOR_IDS } from "../lib/voices.js";
 
 const createSchema = z.object({
   kind: z.literal("freetalk").default("freetalk"),
   /** "Find my level": the tutor runs a short level check and sets the learner's level. */
   levelCheck: z.boolean().default(false),
+  /** Optional Chats AI Friend persona id (scoped to this conversation; null uses profile.tutorId). */
+  tutorId: z.enum(TUTOR_IDS).optional(),
 });
 const messageSchema = z
   .object({
@@ -187,6 +190,7 @@ export const conversationRoutes = new Hono<AuthEnv>()
         titleEdited: body.levelCheck,
         levelCheck: body.levelCheck,
         language: profile.targetLanguage,
+        tutorId: body.tutorId ?? null,
       },
       profile,
       { withOpening: false },

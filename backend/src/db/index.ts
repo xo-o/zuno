@@ -83,6 +83,7 @@ export async function ensureRuntimeSchema(): Promise<void> {
     await pool.query(`ALTER TABLE "live_room_member" ADD COLUMN IF NOT EXISTS "last_seen_at" timestamp NOT NULL DEFAULT now();`);
     await pool.query(`ALTER TABLE "conversation" ADD COLUMN IF NOT EXISTS "unread_count" integer NOT NULL DEFAULT 0;`);
     await pool.query(`ALTER TABLE "conversation" ADD COLUMN IF NOT EXISTS "last_read_at" timestamp NOT NULL DEFAULT now();`);
+    await pool.query(`ALTER TABLE "conversation" ADD COLUMN IF NOT EXISTS "tutor_id" text;`);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "user_profile_presence_idx"
       ON "user_profile" ("target_language", "open_to_speak", "last_seen_at" DESC);

@@ -11,8 +11,10 @@ import {
   parseOnboardingTurn,
   topicBuilderTurnSchema,
   topicSchema,
+  tutorSystem,
   voiceInstructions,
 } from "./tutor.js";
+import { aiFriendDirective, CHATS_FRIEND_ORDER, TUTOR_CATALOG } from "./voices.js";
 
 function makeLessons(count: number) {
   return Array.from({ length: count }, (_, idx) => ({
@@ -152,4 +154,48 @@ test("tutor: onboarding turn schemas support correctedName and empty inputs retu
   const emptyGoalsEs = await parseOnboardingTurn({ step: "goals", answer: "", chips: [], targetLanguage: "en", nativeLanguage: "es" });
   assert.equal(emptyGoalsEs.valid, false);
   assert.match(emptyGoalsEs.retryPrompt, /aprendiendo/i);
+});
+
+test("tutor: AI Friend personas adapt across CEFR levels and any target language (Chinese, Italian, Spanish)", () => {
+  assert.deepEqual([...CHATS_FRIEND_ORDER], ["sofia", "mateo", "valeria", "claire", "lucas", "ethan"]);
+
+  // Chinese A1 with Ethan: relaxed without obscure slang + automatic romanization
+  const zhA1 = makeProfile({ targetLanguage: "zh", accent: "zh-CN", level: "A1", tutorId: "sofia" });
+  const ethanZhA1 = tutorSystem({ kind: "freetalk" }, zhA1, "ethan");
+  assert.match(ethanZhA1, /You are Ethan/i);
+  assert.match(ethanZhA1, /Persona \(Ethan · Relaxed\)/);
+  assert.match(ethanZhA1, /zero obscure slang/i);
+  assert.match(ethanZhA1, /Chinese/i);
+  assert.match(ethanZhA1, /romanisation/i);
+  assert.doesNotMatch(ethanZhA1, /Madrid|Spanish/i);
+
+  // Italian C1 with Ethan: authentic colloquialisms + C1 calibration
+  const itC1 = makeProfile({ targetLanguage: "it", accent: "it-IT", level: "C1", tutorId: "sofia" });
+  const ethanItC1 = voiceInstructions({ kind: "freetalk" }, itC1, "ethan");
+  assert.match(ethanItC1, /You are Ethan/i);
+  assert.match(ethanItC1, /Persona \(Ethan · Relaxed\)/);
+  assert.match(ethanItC1, /colloquialisms/i);
+  assert.match(ethanItC1, /Italian/i);
+  assert.match(ethanItC1, /CEFR C1/);
+
+  // Italian B2 with Mateo: language-agnostic banter without hardcoded Madrid/Spanish
+  const itB2 = makeProfile({ targetLanguage: "it", accent: "it-IT", level: "B2", tutorId: "sofia" });
+  const mateoItB2 = tutorSystem({ kind: "freetalk" }, itB2, "mateo");
+  assert.match(mateoItB2, /You are Mateo/i);
+  assert.match(mateoItB2, /Persona \(Mateo · Energetic\)/);
+  assert.match(mateoItB2, /Italian/i);
+  assert.doesNotMatch(mateoItB2, /Madrid/i);
+
+  // Strict scoping: without tutorIdOverride (Home Free Talk / Topics / Roleplays), user's default Sofía stays active with no Chats Persona override
+  const defaultFreeTalk = tutorSystem({ kind: "freetalk" }, itB2);
+  assert.match(defaultFreeTalk, /You are Sofía/i);
+  assert.doesNotMatch(defaultFreeTalk, /Persona \(/);
+
+  // Valeria slow pace metadata & compact prompt length across all 6 personas
+  assert.equal(TUTOR_CATALOG.valeria.pace, "slow");
+  assert.equal(TUTOR_CATALOG.mateo.pace, "normal");
+  for (const id of CHATS_FRIEND_ORDER) {
+    const dir = aiFriendDirective(id, "B1", "Italian");
+    assert.ok(dir && dir.length < 260, `directive for ${id} should stay compact for zero latency overhead`);
+  }
 });

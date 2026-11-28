@@ -1321,14 +1321,15 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
     fun startFreeTalk(
         firstMessage: String? = null,
         viaVoice: Boolean = false,
+        tutorId: String? = null,
         onReplied: ((Boolean) -> Unit)? = null,
         onOpened: (Conversation) -> Unit,
     ) = runBusy {
-        val thread = api.createFreeTalk()
+        val thread = api.createFreeTalk(tutorId = tutorId)
         val id = thread.conversation.id
         cacheThread(thread)
         // Attachments added on Home travel with the first message.
-        val homeDrafts = if (viaVoice) emptyList() else _drafts.value[HOME_DRAFT_KEY].orEmpty()
+        val homeDrafts = if (viaVoice || tutorId != null) emptyList() else _drafts.value[HOME_DRAFT_KEY].orEmpty()
         if (homeDrafts.isNotEmpty()) _drafts.update { it - HOME_DRAFT_KEY + (id to homeDrafts) }
         onOpened(thread.conversation)
         if (!firstMessage.isNullOrBlank() || homeDrafts.isNotEmpty()) send(id, firstMessage.orEmpty(), viaVoice, onReplied)
@@ -1369,16 +1370,39 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         restoredDrafts.remove(id)
         _chats.update { it - id }
         _recent.update { list -> list.filterNot { it.id == id || it.conversationId == id } }
+        _chatsOverview.update { state ->
+            val current = state.items ?: return@update state
+            val updated = current.conversations.filterNot { it.conversationId == id || it.id == id }
+            state.copy(items = current.copy(conversations = updated, unreadCount = updated.count { it.unread }))
+        }
         refreshRecent()
         onDeleted()
     }
 
-    /** Optimistic rename of the chat title and its drawer row; rolls back on failure. */
+    /** Optimistic rename of the chat title and its drawer & chats rows; rolls back on failure. */
     fun renameConversation(id: String, title: String, onRenamed: () -> Unit) {
         val previous = _chats.value[id]?.conversation ?: return
         val recentBefore = _recent.value
+        val overviewBefore = _chatsOverview.value
         updateChat(id) { it.copy(conversation = it.conversation.copy(title = title)) }
         _recent.update { list -> list.map { if (it.id == id) it.copy(title = title) else it } }
+        _chatsOverview.update { state ->
+            val current = state.items ?: return@update state
+            val updated = current.conversations.map { item ->
+                if (item.conversationId == id) {
+                    val oldTitle = item.conversationTitle ?: previous.title
+                    val newSnippet = when {
+                        oldTitle.isNotBlank() && item.snippet.startsWith("$oldTitle · ") ->
+                            "$title · ${item.snippet.removePrefix("$oldTitle · ")}"
+                        else -> item.snippet
+                    }
+                    item.copy(conversationTitle = title, snippet = newSnippet)
+                } else {
+                    item
+                }
+            }
+            state.copy(items = current.copy(conversations = updated))
+        }
         viewModelScope.launch {
             try {
                 val updated = api.renameConversation(id, title)
@@ -1388,15 +1412,24 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
                 handleAuth(e)
                 updateChat(id) { it.copy(conversation = previous) }
                 _recent.value = recentBefore
+                _chatsOverview.value = overviewBefore
                 if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
             }
         }
     }
 
-    /** Pins (or unpins) the chat to the top of the drawer. */
+    /** Pins (or unpins) the chat to the top of the drawer & chats list. */
     fun setPinned(id: String, pinned: Boolean, onDone: (Boolean) -> Unit) {
         val previous = _chats.value[id]?.conversation ?: return
+        val overviewBefore = _chatsOverview.value
         updateChat(id) { it.copy(conversation = it.conversation.copy(pinned = pinned)) }
+        _chatsOverview.update { state ->
+            val current = state.items ?: return@update state
+            val updated = current.conversations.map { item ->
+                if (item.conversationId == id) item.copy(pinned = pinned) else item
+            }
+            state.copy(items = current.copy(conversations = updated))
+        }
         viewModelScope.launch {
             try {
                 val updated = api.setPinned(id, pinned)
@@ -1406,6 +1439,7 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: ApiException) {
                 handleAuth(e)
                 updateChat(id) { it.copy(conversation = previous) }
+                _chatsOverview.value = overviewBefore
                 if (!e.unauthorized) e.message?.let { _messages.tryEmit(it) }
             }
         }
@@ -2151,6 +2185,25 @@ class ZunoViewModel(application: Application) : AndroidViewModel(application) {
         _savedVocabPhrases.update { it + saved.map { p -> p.phrase } }
         loadVocabulary(silent = true)
         onDone(saved)
+    }
+
+    fun extractCallVocab(
+        turns: List<Pair<Boolean, String>>,
+        tutorName: String,
+        onResult: (List<Triple<String, String, String>>) -> Unit,
+    ) {
+        if (turns.isEmpty()) {
+            onResult(emptyList())
+            return
+        }
+        viewModelScope.launch {
+            val extracted = try {
+                api.extractCallVocab(turns, tutorName)
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            onResult(extracted.take(4))
+        }
     }
 
     fun deleteVocabPhrase(id: String, onDone: () -> Unit = {}) = runBusy {

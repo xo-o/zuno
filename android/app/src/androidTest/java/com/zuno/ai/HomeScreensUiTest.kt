@@ -35,6 +35,7 @@ import com.zuno.ai.data.LiveRoom
 import com.zuno.ai.data.LiveRoomMember
 import com.zuno.ai.data.LiveRoomsBrowse
 import com.zuno.ai.data.Message
+import com.zuno.ai.data.NotificationFilter
 import com.zuno.ai.data.Profile
 import com.zuno.ai.data.ProgressDailyGoal
 import com.zuno.ai.data.ProgressOverview
@@ -43,9 +44,13 @@ import com.zuno.ai.data.RecentSession
 import com.zuno.ai.data.Schedule
 import com.zuno.ai.data.ScheduleRepeat
 import com.zuno.ai.data.SkillBreakdown
+import com.zuno.ai.data.SystemNotificationItem
+import com.zuno.ai.data.SystemNotificationKind
 import com.zuno.ai.data.UnifiedChatItem
 import com.zuno.ai.data.UnifiedChatKind
 import com.zuno.ai.data.WeeklyBarDay
+import com.zuno.ai.model.ChatMessage
+import com.zuno.ai.model.Speaker
 import com.zuno.ai.ui.components.ContinueSessionUi
 import com.zuno.ai.ui.components.ZunoDialog
 import com.zuno.ai.ui.screens.ChatScreen
@@ -54,6 +59,7 @@ import com.zuno.ai.ui.screens.CommunityScreen
 import com.zuno.ai.ui.screens.HomeCopy
 import com.zuno.ai.ui.screens.HomeScreen
 import com.zuno.ai.ui.screens.LiveRoomsScreen
+import com.zuno.ai.ui.screens.NotificationsScreen
 import com.zuno.ai.ui.screens.PaywallScreen
 import com.zuno.ai.ui.screens.ProgressScreen
 import com.zuno.ai.ui.screens.ScheduledScreen
@@ -472,9 +478,29 @@ class HomeScreensUiTest {
                                     startedAtMillis = if (voiceStatus == VoiceCallStatus.Connecting) null else System.currentTimeMillis() - 42_000L,
                                     tutorLine = "Imagina que estás en un café en Madrid. ¿Qué vas a pedir? ¿Con leche o solo?",
                                     userLine = null,
+                                    turns = if (stage == "voice") {
+                                        listOf(
+                                            ChatMessage(
+                                                id = "u1",
+                                                speaker = Speaker.USER,
+                                                text = "Quiero practicar cómo pedir comida en un café en Madrid.",
+                                                isFinal = true,
+                                            ),
+                                            ChatMessage(
+                                                id = "a1",
+                                                speaker = Speaker.AGENT,
+                                                text = "Imagina que estás en un café en Madrid. ¿Qué vas a pedir?",
+                                                isFinal = true,
+                                                translation = "Imagine you’re at a café in Madrid. What will you order?",
+                                            ),
+                                        )
+                                    } else {
+                                        emptyList()
+                                    },
                                     isMuted = false,
                                     menu = emptyList(),
                                     initialCaptionsOn = false,
+                                    isAudioOnly = true,
                                     sessionKindLabel = "Free talk",
                                     languageLevelLabel = "Spanish B1",
                                     coachPrompts = CoachPrompts(
@@ -496,6 +522,49 @@ class HomeScreensUiTest {
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
+
+                            "notifications" -> NotificationsScreen(
+                                items = listOf(
+                                    SystemNotificationItem(
+                                        id = "upd-1",
+                                        kind = SystemNotificationKind.AppUpdate,
+                                        filter = NotificationFilter.Updates,
+                                        title = "ZunoAI 2.5 is ready to update.",
+                                        preview = "Faster voice replies with Sofía, 4 new Spanish roleplays, and audio recovery.",
+                                        meta = "App update · v2.5.0 · Today",
+                                        isToday = true,
+                                        unread = true,
+                                        badgeText = "ZunoAI 2.5",
+                                        pillText = "What's new in v2.5",
+                                        actionLabel = "Update",
+                                    ),
+                                    SystemNotificationItem(
+                                        id = "msg-1",
+                                        kind = SystemNotificationKind.UserMessage,
+                                        filter = NotificationFilter.Messages,
+                                        title = "Elena sent you a message",
+                                        preview = "¿Practicamos español hoy a las 7?",
+                                        meta = "Message · 14m ago",
+                                        isToday = true,
+                                        unread = true,
+                                        avatarInitial = "E",
+                                    ),
+                                    SystemNotificationItem(
+                                        id = "streak-1",
+                                        kind = SystemNotificationKind.StreakMilestone,
+                                        filter = NotificationFilter.Updates,
+                                        title = "22-day streak milestone",
+                                        preview = "Keep your Spanish B1 streak going tonight.",
+                                        meta = "Progress · Nov 16, 2026",
+                                        isToday = false,
+                                        unread = false,
+                                    ),
+                                ),
+                                onBack = {},
+                                onOpenNotificationSettings = {},
+                                onItemClick = {},
+                                modifier = Modifier.fillMaxSize(),
+                            )
 
                             "free_talk" -> {
                                 ChatScreen(
@@ -617,6 +686,11 @@ class HomeScreensUiTest {
             Thread.sleep(950) // allow smooth Horizon transition to complete
             saveScreenshot(scenario, "05_voice_no_captions")
 
+            // 5c. Home · 6c · Tap Video → Audio-only Hint
+            tapText("Toggle camera")
+            waitForText("Audio-only on Home · Video in Chats & Lessons")
+            saveScreenshot(scenario, "05c_voice_audio_only_hint")
+
             // 6. Home · 7 · Speaking — Captions
             tapText("Show captions")
             waitForText("Sofía · Free talk")
@@ -643,6 +717,17 @@ class HomeScreensUiTest {
             waitForText("¡Claro! Son tres euros. ¿Algo más?")
             waitForText("Responde en español…")
             saveScreenshot(scenario, "07_free_talk_chat")
+
+            // 7b. Home · 5a & 5b · Notifications
+            stage = "notifications"
+            waitForText("Notifications")
+            waitForText("ZunoAI 2.5 is ready to update.")
+            waitForText("Elena sent you a message")
+            saveScreenshot(scenario, "07b_notifications")
+            tapText("Announcements")
+            waitForText("You’re all caught up")
+            waitForText("Notification settings")
+            saveScreenshot(scenario, "07c_notifications_empty")
 
             // 8. Paywall · 1 · Plans
             stage = "paywall"
@@ -776,15 +861,11 @@ class HomeScreensUiTest {
                         when (destination) {
                             "chats" -> ChatsScreen(
                                 overview = Loadable(overview),
-                                userInitial = "N",
-                                userImageUrl = null,
-                                initialFilter = ChatsFilter.All,
+                                initialFilter = ChatsFilter.Conversations,
                                 onRetry = {},
-                                onToggleOpenToSpeak = {},
                                 onOpenAiConversation = {},
-                                onStartAiChat = {},
-                                onStartAiVoiceCall = {},
-                                onOpenRoleplays = {},
+                                onStartAiFriendChat = {},
+                                onStartAiFriendCall = { _, _ -> },
                                 onOpenPeerChat = {},
                                 onInvitePeerToTalk = {},
                                 onTogglePartner = { _, _ -> },
@@ -858,7 +939,7 @@ class HomeScreensUiTest {
             tapText("Open navigation menu")
             waitForText("Chats")
             tapText("Chats")
-            waitForText("Open to speak")
+            waitForText("Conversations")
             waitForText("Pedir un café")
             waitForText("Lucía M.")
             assertTrue("Expected navigation to ChatsScreen", destination == "chats")
@@ -876,14 +957,15 @@ class HomeScreensUiTest {
             tapText("End call")
             waitForText("Hola Noah, ¿qué practicamos hoy?")
 
-            // 4. Re-open drawer, tap recent session -> resumes directly in VoiceModeScreen
+            // 4. Re-open drawer, tap recent session -> resumes directly in VoiceModeScreen -> Back arrow ends call
             tapText("Open navigation menu")
             waitForText("Café en Madrid")
             tapText("Café en Madrid")
             waitForText("End call")
             assertTrue("Expected Resume from sidebar to open voice/video mode", destination == "voice_resume")
-            tapText("End call")
+            tapText("Back")
             waitForText("Hola Noah, ¿qué practicamos hoy?")
+            assertTrue("Expected Back arrow in VoiceModeScreen to end call and return to Home", destination == "home")
         }
     }
 }

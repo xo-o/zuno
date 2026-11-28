@@ -255,6 +255,8 @@ export const conversation = pgTable(
     kind: text("kind", { enum: ["freetalk", "roleplay", "lesson"] }).notNull(),
     title: text("title").notNull(),
     language: text("language").notNull(),
+    /** Optional per-conversation AI Friend persona (scoped to Chats; null uses profile.tutorId). */
+    tutorId: text("tutor_id"),
     roleplayId: text("roleplay_id").references(() => roleplay.id, { onDelete: "cascade" }),
     topicId: text("topic_id").references(() => topic.id, { onDelete: "cascade" }),
     lessonId: text("lesson_id").references(() => topicLesson.id, { onDelete: "cascade" }),

@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -291,6 +292,7 @@ fun ZunoCallControlsBar(
     onToggleCaptions: () -> Unit,
     modifier: Modifier = Modifier,
     endCallLabel: String = stringResource(R.string.voice_end_call),
+    cameraAvailable: Boolean = true,
 ) {
     Row(
         modifier = modifier
@@ -307,9 +309,10 @@ fun ZunoCallControlsBar(
                 contentDescription = stringResource(if (isMuted) R.string.voice_unmute else R.string.voice_mute),
             )
             RoundCallControlButton(
-                icon = if (isCameraOn) R.drawable.zuno_ic_t_video else R.drawable.zuno_ic_t_video_off,
-                active = isCameraOn,
+                icon = if (cameraAvailable && isCameraOn) R.drawable.zuno_ic_t_video else R.drawable.zuno_ic_t_video_off,
+                active = cameraAvailable && isCameraOn,
                 activeSubtle = true,
+                disabled = !cameraAvailable,
                 onClick = onToggleCamera,
                 contentDescription = stringResource(R.string.call_toggle_camera),
             )
@@ -347,16 +350,19 @@ private fun RoundCallControlButton(
     onClick: () -> Unit,
     contentDescription: String,
     activeSubtle: Boolean = false,
+    disabled: Boolean = false,
 ) {
     val surfaceModifier = when {
+        disabled -> Modifier.clip(CircleShape).background(ZunoColors.SurfaceDefault)
         active && activeSubtle -> Modifier.zunoGlassElevated(CircleShape)
         active -> Modifier.clip(CircleShape).background(ZunoColors.SurfaceInverse)
         else -> Modifier.zunoGlassSubtle(CircleShape)
     }
-    val tint = if (active && !activeSubtle) ZunoColors.IconOnInverse else ZunoColors.IconPrimary
+    val tint = if (active && !activeSubtle && !disabled) ZunoColors.IconOnInverse else ZunoColors.IconPrimary
     Box(
         modifier = Modifier
             .size(44.dp)
+            .alpha(if (disabled) 0.35f else 1f)
             .then(surfaceModifier)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },

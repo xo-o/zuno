@@ -85,7 +85,7 @@ export async function createConversation(
 ) {
   const [row] = await db.insert(conversation).values({ id: randomUUID(), ...values }).returning();
   if (options.withOpening) {
-    const opening = await generateOpening(await contextFor(row), profile);
+    const opening = await generateOpening(await contextFor(row), profile, row.tutorId);
     await db.insert(message).values({
       id: randomUUID(),
       conversationId: row.id,
@@ -142,6 +142,7 @@ export async function sendUserMessage(
     history: turns,
     needsTitle,
     withAttachments: attachments.length > 0,
+    tutorId: row.tutorId,
   });
 
   const { userMessage, assistantMessage, linked } = await db.transaction(async (tx) => {

@@ -42,6 +42,42 @@ const captureSchema = z.object({
     .max(20),
 });
 
+const extractSchema = z.object({
+  turns: z
+    .array(
+      z.object({
+        isUser: z.boolean(),
+        text: z.string().trim().min(1).max(600),
+      }),
+    )
+    .min(1)
+    .max(60),
+  tutorName: z.string().trim().max(80).optional(),
+});
+
+const extractResponseSchema = z.object({
+  phrases: z
+    .array(
+      z.object({
+        phrase: z.string().trim().min(1).max(120),
+        translation: z.string().trim().min(1).max(160),
+        source: z.enum(["user", "tutor"]),
+      }),
+    )
+    .max(4),
+});
+
+/**
+ * Language-agnostic structural sanitization: strips surrounding whitespace/quotes and ensures
+ * the candidate contains at least one Unicode letter in any script and stays within flashcard bounds.
+ */
+export function sanitizeExtractedPhrase(raw: string): string | null {
+  const text = raw.replace(/^[\s“”"«»'‘’`]+|[\s“”"«»'‘’`]+$/g, "").trim();
+  if (text.length < 1 || text.length > 120) return null;
+  if (!/\p{L}/u.test(text)) return null;
+  return text;
+}
+
 const translateSchema = z.object({
   translation: z.string(),
   exampleSentence: z.string(),
@@ -124,6 +160,60 @@ export const vocabularyRoutes = new Hono<AuthEnv>()
     const body = await parseBody(c, z.object({ phrase: z.string().trim().min(1).max(200), contextNote: z.string().trim().max(240).optional() }));
     const enriched = await enrichPhrase(body.phrase, profile.targetLanguage, profile.nativeLanguage, body.contextNote);
     return c.json(enriched);
+  })
+  .post("/extract", async (c) => {
+    const userId = c.get("user").id;
+    const profile = await getProfile(userId);
+    const body = await parseBody(c, extractSchema);
+    const targetName = languageName(profile.targetLanguage);
+    const nativeName = languageName(profile.nativeLanguage);
+    const tutorLabel = body.tutorName?.trim() || "Tutor";
+    const transcript = body.turns
+      .map((t) => `${t.isUser ? "Learner" : tutorLabel}: ${t.text}`)
+      .join("\n");
+
+    const existingRows = await db
+      .select({ phrase: vocabPhrase.phrase })
+      .from(vocabPhrase)
+      .where(and(eq(vocabPhrase.userId, userId), eq(vocabPhrase.language, profile.targetLanguage)));
+    const seen = new Set(existingRows.map((row) => row.phrase.trim().toLowerCase()));
+
+    try {
+      const result = await generateJson({
+        system: [
+          `You extract clean, genuinely useful vocabulary words, idioms, and short everyday expressions from a spoken voice call transcript for a ${nativeName} speaker learning ${targetName} (CEFR ${profile.level}).`,
+          `Return up to 4 complete, self-contained ${targetName} lexical items or expressions that appeared in the conversation and are worth saving as flashcards.`,
+          `Exclude speech disfluencies and vocal fillers, hesitation or stalling remarks, incomplete or cut-off speech-to-text fragments, meta-conversation about the call itself, and utterances purely in ${nativeName} (unless ${targetName} is ${nativeName}, in which case still exclude all disfluencies, hesitations, fragments, and meta-talk).`,
+          `Strip any leading speech fillers or conversational framing so each returned phrase is clean, natural, and self-contained.`,
+          `For each item set "translation" to a crisp ${nativeName} meaning and "source" to "user" or "tutor".`,
+          `If the transcript contains no clean, worthwhile ${targetName} vocabulary items, return {"phrases": []}.`,
+        ].join(" "),
+        contents: `Transcript:\n${transcript}`,
+        schema: extractResponseSchema,
+        thinking: "low",
+        temperature: 0.2,
+        timeoutMs: 6_000,
+      });
+
+      const cleaned = [];
+      for (const item of result.phrases) {
+        const phrase = sanitizeExtractedPhrase(item.phrase);
+        if (!phrase) continue;
+        const translation = item.translation.trim();
+        if (!translation) continue;
+        const key = phrase.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cleaned.push({
+          phrase,
+          translation,
+          tag: item.source === "user" ? "Your reply" : `Used by ${tutorLabel}`,
+        });
+      }
+      return c.json({ phrases: cleaned.slice(0, 4) });
+    } catch {
+      return c.json({ phrases: [] });
+    }
   })
   .post("/", async (c) => {
     const userId = c.get("user").id;

@@ -380,53 +380,86 @@
     <string name="chats_open_to_speak_on_sub">%1$s %2$s · Visible to learners</string>
     <string name="chats_open_to_speak_off_sub">Let learners invite you to practice</string>
     <string name="chats_search_placeholder">Search conversations or people…</string>
-    <string name="chats_new_sheet_search_placeholder">Search added partners or learners…</string>
+    <string name="chats_new_sheet_search_placeholder">Search AI friends or people…</string>
     <string name="chats_filter_all">All</string>
     <string name="chats_filter_ai_tutor">AI Tutor</string>
+    <string name="chats_filter_conversations">Conversations</string>
+    <string name="chats_filter_ai_friends">AI Friends</string>
     <string name="chats_filter_people">People</string>
-    <string name="chats_filter_open">Open</string>
-    <string name="chats_open_now_header">Open to speak now</string>
-    <string name="chats_open_right_now_header">Open to speak right now</string>
+    <string name="chats_ai_friends_header">Pick an AI friend to start a chat</string>
+    <string name="chats_partners_header">Partners</string>
+    <string name="chats_partners_saved">Saved</string>
     <string name="chats_online_count">%1$d online</string>
-    <string name="chats_all_conversations">All conversations</string>
-    <string name="chats_ai_conversations_count">Sofía · AI Tutor (%1$d)</string>
-    <string name="chats_people_conversations_count">1:1 Conversations (%1$d)</string>
-    <string name="chats_added_partners">Added partners</string>
-    <string name="chats_start_ai_title">Chat with Sofía</string>
-    <string name="chats_start_ai_sub">Chat, voice call, or video call</string>
-    <string name="chats_sofia_ai_tutor">Sofía · AI Tutor</string>
-    <string name="chats_sofia_call_or_chat">Chat or call anytime</string>
+    <string name="chats_matches_in_conversations">Matches in Conversations</string>
+    <string name="chats_matches_in_ai_friends">Matches in AI Friends</string>
+    <string name="chats_matches_in_people">Matches in People</string>
     <string name="chats_action_chat">Chat</string>
     <string name="chats_action_talk">Talk</string>
     <string name="chats_action_message">Message</string>
     <string name="chats_action_view">View</string>
-    <string name="chats_empty_all_title">Start your first conversation</string>
-    <string name="chats_empty_all_body">Practice anytime with %1$s or connect with learners open to speak.</string>
-    <string name="chats_empty_all_tutor_sub">AI Tutor · Voice or text anytime</string>
-    <string name="chats_empty_all_start_chatting">Start chatting</string>
-    <string name="chats_empty_all_meet_partner">Meet a partner</string>
-    <string name="chats_empty_all_learners_online">%1$d learners online · %2$s</string>
-    <string name="chats_empty_all_browse">Browse</string>
-    <string name="chats_empty_all_availability">Your availability</string>
-    <string name="chats_empty_all_availability_sub">Let learners invite you to 1:1 practice</string>
-    <string name="chats_empty_ai_title">No AI tutor chats yet</string>
-    <string name="chats_empty_ai_body">Practice free talk, roleplays, or grammar anytime with Sofía.</string>
-    <string name="chats_empty_people_title">No 1:1 chats yet</string>
-    <string name="chats_empty_people_body">Message added partners or start a voice chat with learners open now.</string>
-    <string name="chats_empty_people_cta">Find speakers</string>
-    <string name="chats_empty_open_title">No learners open right now</string>
-    <string name="chats_empty_open_body">Turn on Open to speak above to be visible, or practice with Sofía anytime.</string>
-    <string name="chats_empty_open_cta">Go open to speak</string>
+    <string name="chats_empty_conversations_title">Start a conversation</string>
+    <string name="chats_empty_conversations_body">AI friends and learners are ready to talk.</string>
+    <string name="chats_empty_conversations_cta">Start chatting</string>
+    <string name="chats_empty_conversations_browse_online">or browse %1$d people online</string>
+    <string name="chats_empty_conversations_browse_people">or browse People</string>
+    <string name="chats_empty_people_title">No people available yet</string>
+    <string name="chats_empty_people_body">Add practice partners or talk with an AI friend while learners come online.</string>
+    <string name="chats_empty_people_cta">Browse AI Friends</string>
     <string name="chats_recent_header">Recent</string>
     <string name="chats_empty_search_title">No results for “%1$s”</string>
     <string name="chats_empty_search_body">Try a different name, topic, or switch filter tabs.</string>
     <string name="chats_empty_search_cta">Clear search</string>
-    <string name="chats_ways_to_start">Ways to start</string>
-    <string name="chats_while_you_wait">While you wait</string>
-    <string name="chats_turn_on_open_title">Turn on Open to speak</string>
-    <string name="chats_turn_on_open_sub">Let %1$s learners message or call you</string>
-    <string name="chats_off">Off</string>
     <string name="chats_open_to_speak_badge">Open to speak</string>
+
+    <!-- AI Friend personas (Chats) -->
+    <string name="ai_friend_badge">AI Friend · %1$s</string>
+    <string name="ai_friend_pace_natural">Natural pace</string>
+    <string name="ai_friend_pace_slow">Slow pace</string>
+    <string name="ai_friend_start_voice_call">Start voice call</string>
+    <string name="ai_friend_message">Message</string>
+    <string name="ai_friend_video_call">Video call</string>
+
+    <string name="ai_friend_sofia_trait">Warm</string>
+    <string name="ai_friend_sofia_sub">Everyday chat &amp; travel</string>
+    <string name="ai_friend_sofia_bio">Warm and approachable. Loves travel stories, everyday chat, and natural phrasing.</string>
+    <string name="ai_friend_sofia_chip_1">Travel</string>
+    <string name="ai_friend_sofia_chip_2">Daily life</string>
+    <string name="ai_friend_sofia_chip_3">Small talk</string>
+
+    <string name="ai_friend_mateo_trait">Energetic</string>
+    <string name="ai_friend_mateo_sub">Sports, banter &amp; city life</string>
+    <string name="ai_friend_mateo_bio">Upbeat city vibe. Loves sports, weekend plans, and quick everyday banter.</string>
+    <string name="ai_friend_mateo_chip_1">Banter</string>
+    <string name="ai_friend_mateo_chip_2">Sports</string>
+    <string name="ai_friend_mateo_chip_3">City life</string>
+
+    <string name="ai_friend_valeria_trait">Patient</string>
+    <string name="ai_friend_valeria_sub">Slow pace &amp; gentle tips</string>
+    <string name="ai_friend_valeria_bio">Calm and reassuring. Keeps an unhurried pace with gentle phrasing tips.</string>
+    <string name="ai_friend_valeria_chip_1">Slow pace</string>
+    <string name="ai_friend_valeria_chip_2">Gentle tips</string>
+    <string name="ai_friend_valeria_chip_3">Confidence</string>
+
+    <string name="ai_friend_claire_trait">Crisp</string>
+    <string name="ai_friend_claire_sub">Work, tech &amp; interviews</string>
+    <string name="ai_friend_claire_bio">Sharp and structured. Great for workplace updates, tech talk, and interview prep.</string>
+    <string name="ai_friend_claire_chip_1">Work</string>
+    <string name="ai_friend_claire_chip_2">Tech</string>
+    <string name="ai_friend_claire_chip_3">Interviews</string>
+
+    <string name="ai_friend_lucas_trait">Thoughtful</string>
+    <string name="ai_friend_lucas_sub">News, culture &amp; stories</string>
+    <string name="ai_friend_lucas_bio">Curious and articulate. Enjoys current events, culture, and deeper conversations.</string>
+    <string name="ai_friend_lucas_chip_1">News</string>
+    <string name="ai_friend_lucas_chip_2">Culture</string>
+    <string name="ai_friend_lucas_chip_3">Stories</string>
+
+    <string name="ai_friend_ethan_trait">Relaxed</string>
+    <string name="ai_friend_ethan_sub">Casual slang &amp; daily life</string>
+    <string name="ai_friend_ethan_bio">Easygoing and conversational. Great for relaxed daily chat and natural casual phrasing.</string>
+    <string name="ai_friend_ethan_chip_1">Slang</string>
+    <string name="ai_friend_ethan_chip_2">Daily life</string>
+    <string name="ai_friend_ethan_chip_3">Casual</string>
 
     <!-- Member profile sheet & 1:1 Peer Chat -->
     <string name="member_invite_to_talk">Invite to talk</string>
@@ -690,6 +723,8 @@
     <string name="call_voice_label">Voice call</string>
     <string name="voice_speak_anytime_interrupt">Speak anytime to interrupt</string>
     <string name="voice_chip_listen">Listen</string>
+    <string name="voice_audio_only_home_hint">Audio-only on Home · Video in Chats &amp; Lessons</string>
+    <string name="ongoing_call_tap_to_return">Tap to return</string>
 
     <!-- Ongoing Call & System -->
     <string name="push_channel_ongoing_call">Ongoing call</string>

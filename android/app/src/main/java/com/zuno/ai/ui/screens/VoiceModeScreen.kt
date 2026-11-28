@@ -3,6 +3,7 @@ package com.zuno.ai.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -175,6 +176,7 @@ fun VoiceModeScreen(
     sessionKindLabel: String = "Free talk",
     languageLevelLabel: String = "Spanish $learnerLevel",
     initialCaptionsOn: Boolean? = null,
+    isAudioOnly: Boolean = false,
     userName: String = "You",
     userInitial: String = "Y",
     isCameraOn: Boolean = false,
@@ -184,6 +186,7 @@ fun VoiceModeScreen(
     tutor: TutorAvatarProfile = TutorAvatarCatalog.DEFAULT_TUTOR,
     avatarSpeechSink: AvatarSpeechSink? = null,
     coachPrompts: CoachPrompts = CoachPrompts(),
+    onMinimize: (() -> Unit)? = null,
     onToggleCamera: () -> Unit = {},
     onToggleSpeaker: () -> Unit = {},
     onSpeakCoachPhrase: (String) -> Unit = {},
@@ -200,10 +203,10 @@ fun VoiceModeScreen(
     var confirmExitLesson by rememberSaveable { mutableStateOf(false) }
 
     val handleExitRequest = {
-        if (isLessonMode) {
-            confirmExitLesson = true
-        } else {
-            onEnd()
+        when {
+            isLessonMode -> confirmExitLesson = true
+            onMinimize != null -> onMinimize()
+            else -> onEnd()
         }
     }
     BackHandler(onBack = handleExitRequest)
@@ -304,8 +307,9 @@ fun VoiceModeScreen(
                 turns = turns,
                 rescuePayload = rescuePayload,
                 captionsOn = captionsOn,
+                isAudioOnly = isAudioOnly,
                 isMuted = isMuted,
-                isCameraOn = isCameraOn,
+                isCameraOn = isCameraOn && !isAudioOnly,
                 isSpeakerOn = isSpeakerOn,
                 sessionKindLabel = sessionKindLabel,
                 learnerLevel = learnerLevel,
@@ -321,7 +325,7 @@ fun VoiceModeScreen(
                 onToggleMute = onToggleMute,
                 onToggleCamera = onToggleCamera,
                 onToggleSpeaker = onToggleSpeaker,
-                onEnd = handleExitRequest,
+                onEnd = onEnd,
                 onToggleCaptions = { captionsOn = !captionsOn },
                 onSpeakCoachPhrase = onSpeakCoachPhrase,
                 onTranslate = onTranslate,
@@ -360,6 +364,7 @@ private fun PortraitVoiceCallBody(
     turns: List<ChatMessage>,
     rescuePayload: RescuePayloadUi?,
     captionsOn: Boolean,
+    isAudioOnly: Boolean,
     isMuted: Boolean,
     isCameraOn: Boolean,
     isSpeakerOn: Boolean,
@@ -411,6 +416,14 @@ private fun PortraitVoiceCallBody(
     val listState = rememberLazyListState()
     val lastTurnText = displayTurns.lastOrNull()?.text.orEmpty()
 
+    var showAudioOnlyHint by rememberSaveable(isAudioOnly) { mutableStateOf(false) }
+    LaunchedEffect(showAudioOnlyHint) {
+        if (showAudioOnlyHint) {
+            delay(3_500L)
+            showAudioOnlyHint = false
+        }
+    }
+
     LaunchedEffect(captionsOn, displayTurns.size, lastTurnText, rescuePayload) {
         if (!captionsOn) return@LaunchedEffect
         val total = displayTurns.size + if (rescuePayload != null && rescuePayload.text.isNotBlank()) 1 else 0
@@ -421,15 +434,18 @@ private fun PortraitVoiceCallBody(
     }
 
     Column(modifier = modifier) {
-        AnimatedContent(
-            targetState = Triple(isCameraOn, captionsOn, true),
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "voiceCallCameraMode",
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(bottom = ZunoSpace.s4),
-        ) { (cameraActive, showCaptions, _) ->
+        ) {
+            AnimatedContent(
+                targetState = Triple(isCameraOn, captionsOn, true),
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "voiceCallCameraMode",
+                modifier = Modifier.fillMaxSize(),
+            ) { (cameraActive, showCaptions, _) ->
             when {
                 // `Chats · 19 · AI Tutor — Video Call (No Captions, Cameras Only)` (`7353:15475`)
                 cameraActive && !showCaptions -> {
@@ -477,6 +493,7 @@ private fun PortraitVoiceCallBody(
                                         val liveLabel = if (turn.isFinal) baseLabel else "$baseLabel · ${stringResource(R.string.voice_status_dot_speaking)}"
                                         ZunoAssistantBubble(
                                             message = turn.text,
+                                            translation = turn.translation,
                                             senderLabel = liveLabel,
                                             onListen = { onTranslate?.invoke(turn.text) },
                                             listenLabel = stringResource(R.string.voice_chip_translate),
@@ -599,6 +616,16 @@ private fun PortraitVoiceCallBody(
                     }
                 }
             }
+            }
+
+            // `Home · 6c · Tap Video → Audio-only Hint` (`11068:13557`)
+            AudioOnlyHintPill(
+                visible = isAudioOnly && showAudioOnlyHint,
+                onDismiss = { showAudioOnlyHint = false },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = zunoLayout.screenPaddingH, vertical = ZunoSpace.s12),
+            )
         }
 
         ZunoCallControlsBar(
@@ -606,12 +633,51 @@ private fun PortraitVoiceCallBody(
             isCameraOn = isCameraOn,
             isSpeakerOn = isSpeakerOn,
             isCaptionsOn = captionsOn,
+            cameraAvailable = !isAudioOnly,
             onToggleMute = onToggleMute,
-            onToggleCamera = onToggleCamera,
+            onToggleCamera = {
+                if (isAudioOnly) {
+                    showAudioOnlyHint = true
+                } else {
+                    onToggleCamera()
+                }
+            },
             onEndCall = onEnd,
             onToggleSpeaker = onToggleSpeaker,
             onToggleCaptions = onToggleCaptions,
         )
+    }
+}
+
+@Composable
+private fun AudioOnlyHintPill(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier,
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(ZunoColors.BgElevated.copy(alpha = 0.88f), CircleShape)
+                .border(1.dp, ZunoColors.BorderSubtle, CircleShape)
+                .clickable(role = Role.Button, onClick = onDismiss)
+                .padding(horizontal = ZunoSpace.s12, vertical = 5.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.voice_audio_only_home_hint),
+                style = ZunoType.Micro.copy(fontWeight = FontWeight.Normal),
+                color = ZunoColors.TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -1495,7 +1561,7 @@ private fun mapTurnAction(
 }
 
 @Composable
-private fun rememberElapsed(startedAtMillis: Long?): String {
+internal fun rememberElapsed(startedAtMillis: Long?): String {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(startedAtMillis) {
         while (startedAtMillis != null) {

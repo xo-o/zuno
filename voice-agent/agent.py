@@ -223,7 +223,9 @@ class ConversationalAgent(Agent):
         conversation_kind: str = "freetalk",
         teach_in_target: bool = False,
         multi_stt_active: bool = True,
+        tutor_id: str = "sofia",
         tutor_name: str = "Sofía",
+        speaking_pace: str = "normal",
         tutor_instructions: str | None = None,
         resume: bool = False,
         opening: str | None = None,
@@ -235,14 +237,16 @@ class ConversationalAgent(Agent):
         self.accent = accent
         self.native_language = native_language
         self.native_language_name = native_language_name
-        self.level = level
+        self.level = (level or "B1").strip().upper()
         self.conversation_kind = conversation_kind
         self.teach_in_target = teach_in_target
         self.multi_stt_active = multi_stt_active
         self._stt_engine = stt
         self.synthesizer = synthesizer or ElevenLabsSynthesizer()
         self.broadcast = broadcast
+        self.tutor_id = (tutor_id or "sofia").strip().lower()
         self.tutor_name = tutor_name or "Sofía"
+        self.speaking_pace = (speaking_pace or "normal").strip().lower()
         self.tutor_instructions = tutor_instructions
         self.resume = resume
         self.opening = opening
@@ -285,9 +289,21 @@ class ConversationalAgent(Agent):
 
     @property
     def base_speed(self) -> float:
-        if self.is_free_talk:
-            return 1.0
-        return 0.94 if self.level in ("A1", "A2") else 1.0
+        is_slow_persona = self.speaking_pace == "slow" or self.tutor_id == "valeria"
+        if self.level == "A1":
+            speed = 0.90
+        elif self.level == "A2":
+            speed = 0.94
+        else:
+            speed = 1.0
+        if is_slow_persona:
+            if self.level in ("A1", "A2", "B1"):
+                speed = min(speed, 0.92 if self.level != "A1" else 0.90)
+            else:
+                speed = min(speed, 0.95)
+        elif self.is_free_talk and self.level not in ("A1", "A2"):
+            speed = 1.0
+        return speed
 
     @function_tool
     async def set_listening_language(self, language_code: str) -> str:
@@ -826,6 +842,7 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         initial_endpointing = 0.65
     else:
+        speaking_pace = str(meta.get("speakingPace") or ("slow" if (tutor_id or "").lower() == "valeria" else "normal"))
         conversational_agent = ConversationalAgent(
             tts=tts,
             stt=stt,
@@ -841,7 +858,9 @@ async def entrypoint(ctx: JobContext) -> None:
             conversation_kind=conversation_kind,
             teach_in_target=teach_in_target,
             multi_stt_active=(use_multilingual_stt and multi_stt_supported),
+            tutor_id=tutor_id or "sofia",
             tutor_name=tutor_name,
+            speaking_pace=speaking_pace,
             tutor_instructions=tutor_instructions,
             resume=resume,
             opening=opening,

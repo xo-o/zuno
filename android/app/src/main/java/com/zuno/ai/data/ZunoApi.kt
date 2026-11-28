@@ -389,8 +389,11 @@ class ZunoApi(
 
     // Conversations
 
-    suspend fun createFreeTalk(levelCheck: Boolean = false): ConversationThread =
-        send("POST", "/conversations", JSONObject().put("levelCheck", levelCheck)).toThread()
+    suspend fun createFreeTalk(levelCheck: Boolean = false, tutorId: String? = null): ConversationThread {
+        val body = JSONObject().put("levelCheck", levelCheck)
+        if (!tutorId.isNullOrBlank()) body.put("tutorId", tutorId)
+        return send("POST", "/conversations", body).toThread()
+    }
 
     suspend fun renameConversation(id: String, title: String): Conversation =
         send("PATCH", "/conversations/$id", JSONObject().put("title", title)).getJSONObject("conversation").toConversation()
@@ -720,6 +723,28 @@ class ZunoApi(
         return send("POST", "/vocabulary/capture", JSONObject().put("phrases", array))
             .listOf("phrases")
             .map { it.toVocabPhrase() }
+    }
+
+    suspend fun extractCallVocab(
+        turns: List<Pair<Boolean, String>>,
+        tutorName: String? = null,
+    ): List<Triple<String, String, String>> {
+        val array = JSONArray().apply {
+            turns.forEach { (isUser, text) ->
+                put(JSONObject().put("isUser", isUser).put("text", text.trim()))
+            }
+        }
+        val body = JSONObject().put("turns", array)
+        tutorName?.takeIf { it.isNotBlank() }?.let { body.put("tutorName", it.trim()) }
+        return send("POST", "/vocabulary/extract", body)
+            .listOf("phrases")
+            .mapNotNull { item ->
+                val phrase = item.optString("phrase").trim()
+                if (phrase.isBlank()) return@mapNotNull null
+                val translation = item.optString("translation").trim()
+                val tag = item.optString("tag").trim().ifBlank { "From this call" }
+                Triple(phrase, translation, tag)
+            }
     }
 
     suspend fun deleteVocabPhrase(id: String) {

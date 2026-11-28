@@ -145,6 +145,7 @@ export function serializeConversation(row: typeof conversation.$inferSelect) {
     kind: row.kind,
     title: row.title,
     language: row.language,
+    tutorId: row.tutorId ?? null,
     roleplayId: row.roleplayId,
     topicId: row.topicId,
     lessonId: row.lessonId,

@@ -255,4 +255,51 @@ class UpdatedDesignsModelsTest {
         assertEquals(0, peer.sessionsCount)
         assertFalse(peer.online)
     }
+
+    @Test
+    fun parseConversationAndUnifiedChatItem_readsPerConversationTutorId() {
+        val convJson = JSONObject(
+            """
+            {
+              "id": "conv-mateo-1",
+              "kind": "freetalk",
+              "title": "Weekend plans",
+              "tutorId": "mateo",
+              "pinned": true,
+              "visibility": "private",
+              "createdAt": "2026-11-27T10:00:00.000Z"
+            }
+            """.trimIndent(),
+        )
+        val conv = convJson.toConversation()
+        assertEquals("mateo", conv.tutorId)
+        assertTrue(conv.pinned)
+
+        val itemJson = JSONObject(
+            """
+            {
+              "id": "conv-mateo-1",
+              "kind": "ai",
+              "conversationId": "conv-mateo-1",
+              "tutorId": "mateo",
+              "conversationTitle": "Weekend plans",
+              "title": "Mateo",
+              "badge": "Text",
+              "isVoice": false,
+              "openToSpeak": false,
+              "snippet": "Weekend plans · ¿Qué vas a hacer el sábado?",
+              "unread": false,
+              "pinned": true,
+              "updatedAt": "2026-11-27T10:05:00.000Z",
+              "avatarInitial": "M",
+              "avatarUrl": null
+            }
+            """.trimIndent(),
+        )
+        val item = itemJson.toUnifiedChatItem()
+        assertEquals("mateo", item.tutorId)
+        assertEquals("Weekend plans", item.conversationTitle)
+        assertEquals("Mateo", item.title)
+        assertEquals(listOf(ChatsFilter.Conversations, ChatsFilter.AiFriends, ChatsFilter.People), ChatsFilter.entries)
+    }
 }

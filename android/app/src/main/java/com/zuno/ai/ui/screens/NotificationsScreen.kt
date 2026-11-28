@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +59,7 @@ import com.zuno.ai.ui.theme.ZunoRadius
 import com.zuno.ai.ui.theme.ZunoSpace
 import com.zuno.ai.ui.theme.ZunoType
 import com.zuno.ai.ui.theme.zunoCanvasBackground
+import com.zuno.ai.ui.theme.zunoGlassElevated
 import com.zuno.ai.ui.theme.zunoGlassMediaPill
 import com.zuno.ai.ui.theme.zunoGlassSubtle
 import com.zuno.ai.ui.theme.zunoLayout
@@ -201,26 +203,29 @@ private fun NotificationFilterPill(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val modifier = if (selected) {
-        Modifier
-            .clip(CircleShape)
-            .background(ZunoColors.SurfaceInverse)
+    val pillModifier = if (selected) {
+        Modifier.zunoGlassElevated(
+            shape = CircleShape,
+            fillColor = ZunoColors.SurfaceControlActive,
+            borderBrush = SolidColor(ZunoColors.BorderControlActive),
+        )
     } else {
         Modifier.zunoGlassSubtle(
             shape = CircleShape,
-            fillColor = ZunoColors.SurfaceDefault,
+            fillColor = ZunoColors.SurfaceControlTrack,
         )
     }
     Box(
-        modifier = modifier
+        modifier = pillModifier
+            .height(34.dp)
             .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = ZunoSpace.s14, vertical = 7.dp),
+            .padding(horizontal = zunoLayout.chipPaddingH),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = ZunoType.LabelSmall,
-            color = if (selected) ZunoColors.TextOnInverse else ZunoColors.TextPrimary,
+            color = if (selected) ZunoColors.TextPrimary else ZunoColors.TextTertiary,
             maxLines = 1,
         )
     }

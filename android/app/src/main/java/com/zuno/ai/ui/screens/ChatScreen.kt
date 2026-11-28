@@ -45,6 +45,7 @@ import com.zuno.ai.R
 import com.zuno.ai.data.Attachment
 import com.zuno.ai.data.Message
 import com.zuno.ai.avatar.catalog.LocalActiveTutor
+import com.zuno.ai.avatar.model.TutorAvatarProfile
 import com.zuno.ai.ui.components.ZunoAiTutorAvatar
 import com.zuno.ai.ui.components.ZunoAssistantBubble
 import com.zuno.ai.ui.components.ZunoChip
@@ -105,6 +106,8 @@ fun ChatScreen(
     /** Preferences · Show translations. */
     showTranslations: Boolean = true,
     levelLabel: String = "B1",
+    /** AI persona for this thread (defaults to user's active tutor; overridden for Chats AI Friends). */
+    tutor: TutorAvatarProfile = LocalActiveTutor.current,
 ) {
     val listState = rememberLazyListState()
     // Re-scroll whenever content at the bottom changes — including the typing bubble being replaced by the reply.
@@ -125,6 +128,7 @@ fun ChatScreen(
                 .imePadding(),
         ) {
             AiTutorTopBar(
+                tutor = tutor,
                 subtitle = if (title.isNotBlank()) "$title · $levelLabel" else levelLabel,
                 onBack = onBack,
                 onStartCall = onStartVoice,
@@ -159,7 +163,7 @@ fun ChatScreen(
                                 message = message.text,
                                 translation = message.translation.takeIf { showTranslations },
                                 glossary = message.glossary,
-                                senderLabel = LocalActiveTutor.current.displayName,
+                                senderLabel = tutor.displayName,
                                 onListen = { onListen(message.text) },
                                 onExplain = { onExplain(message) },
                                 contextNote = message.contextNote,
@@ -209,6 +213,7 @@ fun ChatScreen(
 
 @Composable
 private fun AiTutorTopBar(
+    tutor: TutorAvatarProfile,
     subtitle: String,
     onBack: () -> Unit,
     onStartCall: () -> Unit,
@@ -234,7 +239,6 @@ private fun AiTutorTopBar(
             horizontalArrangement = Arrangement.spacedBy(ZunoSpace.s10),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val tutor = LocalActiveTutor.current
             ZunoAiTutorAvatar(size = 36.dp, tutor = tutor)
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
